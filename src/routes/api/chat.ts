@@ -117,11 +117,12 @@ export const Route = createFileRoute("/api/chat")({
 
         const messages: ChatMessage[] = [
           { role: "system", content: SYSTEM_PROMPT },
-          ...(history ?? []).map((m) => {
-            const base: ChatMessage = { role: m.role as ChatMessage["role"], content: m.content };
-            if (m.tool_calls) base.tool_calls = m.tool_calls;
-            return base;
-          }),
+          ...(history ?? [])
+            .filter((m) => m.role === "user" || m.role === "assistant")
+            .map((m) => ({
+              role: m.role as "user" | "assistant",
+              content: m.content || "",
+            })),
         ];
 
         const apiKey = process.env.LOVABLE_API_KEY;
