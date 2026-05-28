@@ -65,6 +65,8 @@ export type Database = {
           apollo_id: string | null
           avatar: string
           company: string
+          contact_channel: string | null
+          contacted_at: string | null
           conversation_id: string
           created_at: string
           education: Json
@@ -95,6 +97,8 @@ export type Database = {
           apollo_id?: string | null
           avatar?: string
           company?: string
+          contact_channel?: string | null
+          contacted_at?: string | null
           conversation_id: string
           created_at?: string
           education?: Json
@@ -125,6 +129,8 @@ export type Database = {
           apollo_id?: string | null
           avatar?: string
           company?: string
+          contact_channel?: string | null
+          contacted_at?: string | null
           conversation_id?: string
           created_at?: string
           education?: Json
@@ -314,6 +320,60 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      outreach_drafts: {
+        Row: {
+          channel: string
+          conversation_id: string
+          created_at: string
+          email_body: string
+          email_subject: string
+          followups: Json
+          id: string
+          linkedin_template: string
+          local_time_send: boolean
+          pause_if_reply: boolean
+          personalize_ai: boolean
+          skip_if_recent: boolean
+          tone: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          channel?: string
+          conversation_id: string
+          created_at?: string
+          email_body?: string
+          email_subject?: string
+          followups?: Json
+          id?: string
+          linkedin_template?: string
+          local_time_send?: boolean
+          pause_if_reply?: boolean
+          personalize_ai?: boolean
+          skip_if_recent?: boolean
+          tone?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          channel?: string
+          conversation_id?: string
+          created_at?: string
+          email_body?: string
+          email_subject?: string
+          followups?: Json
+          id?: string
+          linkedin_template?: string
+          local_time_send?: boolean
+          pause_if_reply?: boolean
+          personalize_ai?: boolean
+          skip_if_recent?: boolean
+          tone?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       profiles: {
         Row: {
