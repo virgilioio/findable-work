@@ -303,14 +303,21 @@ export const Route = createFileRoute("/api/chat")({
               const allTaskIds: string[] = [];
               let candidatesAddedTotal = 0;
               let jobCreatedRow: any = null;
-              let combinedText = "";
+              let preText = "";
+              let postText = "";
+              let toolsRanAny = false;
+              let markerSent = false;
               let firstToolCalls: StreamedToolCall[] = [];
               const convo: ChatMessage[] = [...baseMessages];
 
               for (let iter = 0; iter < MAX_ITERS; iter++) {
                 const pass = await streamCompletion(convo);
                 if (iter === 0) firstToolCalls = pass.toolCalls;
-                combinedText += (combinedText && pass.text ? "\n\n" : "") + pass.text;
+                if (!toolsRanAny) {
+                  preText += (preText && pass.text ? "\n\n" : "") + pass.text;
+                } else {
+                  postText += (postText && pass.text ? "\n\n" : "") + pass.text;
+                }
 
                 if (pass.toolCalls.length === 0) break;
 
@@ -475,8 +482,16 @@ export const Route = createFileRoute("/api/chat")({
                   })),
                 };
                 convo.push(assistantToolCallMsg, ...toolResults);
-                // Visual separator before the next streamed pass
-                send("delta", { content: "\n\n" });
+                // Tools just executed in this pass. Emit the splitter marker
+                // once so the UI can render the "after tasks" text below the
+                // task cards rather than above them.
+                toolsRanAny = true;
+                if (!markerSent) {
+                  send("delta", { content: AFTER_TASKS_MARKER });
+                  markerSent = true;
+                } else {
+                  send("delta", { content: "\n\n" });
+                }
               }
 
               // Persist assistant message
@@ -487,6 +502,9 @@ export const Route = createFileRoute("/api/chat")({
                     function: { name: c.name, arguments: c.args },
                   }))
                 : null;
+              const combinedText = postText
+                ? `${preText}${AFTER_TASKS_MARKER}${postText}`
+                : preText;
               const { data: assistantMsg } = await supabaseAdmin
                 .from("messages")
                 .insert({
