@@ -342,6 +342,8 @@ function ChatPanel({
   persistedTasks,
   liveTasks,
   onOpenTab,
+  clarifyAnswers,
+  onSubmitClarify,
 }: {
   messages: Message[];
   streaming: string;
@@ -352,6 +354,8 @@ function ChatPanel({
   persistedTasks: ChatTask[];
   liveTasks: ChatTask[];
   onOpenTab: (t: "job" | "candidates") => void;
+  clarifyAnswers: Record<string, Record<string, string[]>>;
+  onSubmitClarify: (taskId: string, formatted: string, answers: Record<string, string[]>) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -422,7 +426,13 @@ function ChatPanel({
                 {msgTasks.length > 0 && m.role === "assistant" &&
                   msgTasks.map((t) => (
                     <TimelineRow key={t.id}>
-                      <TaskCard task={t} onOpenTab={onOpenTab} />
+                      <TaskCard
+                        task={t}
+                        onOpenTab={onOpenTab}
+                        onSubmitClarify={onSubmitClarify}
+                        clarifyAnswered={Boolean(clarifyAnswers[t.id])}
+                        clarifyAnswers={clarifyAnswers[t.id]}
+                      />
                     </TimelineRow>
                   ))}
               </div>
@@ -433,7 +443,13 @@ function ChatPanel({
               {streaming && <MessageRow role="assistant" content={streaming} streaming />}
               {liveTasks.map((t) => (
                 <TimelineRow key={t.id}>
-                  <TaskCard task={t} onOpenTab={onOpenTab} />
+                  <TaskCard
+                    task={t}
+                    onOpenTab={onOpenTab}
+                    onSubmitClarify={onSubmitClarify}
+                    clarifyAnswered={Boolean(clarifyAnswers[t.id])}
+                    clarifyAnswers={clarifyAnswers[t.id]}
+                  />
                 </TimelineRow>
               ))}
             </div>
