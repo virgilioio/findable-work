@@ -483,6 +483,7 @@ function Composer({
   return (
     <div className="flex flex-col gap-2 rounded-[14px] border border-border bg-bg-elev p-2.5 shadow-[var(--shadow-sm)] focus-within:border-border-strong">
       <textarea
+        autoFocus
         value={text}
         onChange={(e) => setText(e.target.value)}
         placeholder="Message findable…"
