@@ -332,7 +332,7 @@ function HomePage() {
       {/* Top bar */}
       <header className="flex h-14 items-center justify-between border-b border-border px-5">
         <div className="flex items-center gap-2">
-          <Wordmark height={22} />
+          <Wordmark height={36} />
           <span className="ml-2 rounded-full border border-border bg-bg-elev px-2 py-0.5 text-[10.5px] uppercase tracking-[0.06em] text-text-mute">
             Guest preview
           </span>
