@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Select,
   SelectTrigger,
@@ -18,7 +17,17 @@ import {
   SelectItem,
   SelectValue,
 } from "@/components/ui/select";
-import { Send, Briefcase, MessageSquare, Loader2 } from "lucide-react";
+import {
+  Logo,
+  Chat as ChatIcon,
+  Briefcase,
+  Send as SendIcon,
+  Attach,
+  Sparkle,
+  Dots,
+  XSm,
+} from "@/components/gio-icons";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/app/c/$id")({
   component: ConversationPage,
@@ -52,20 +61,18 @@ function ConversationPage() {
   const [streaming, setStreaming] = useState<string>("");
   const [sending, setSending] = useState(false);
   const [tab, setTab] = useState<"chat" | "job">("chat");
+  const [pulse, setPulse] = useState(false);
 
   const messages: Message[] = data?.messages ?? [];
   const job: Job | null = (data?.job as Job | null) ?? null;
-
-  useEffect(() => {
-    if (job && tab === "chat" && messages.length > 0 && !streaming) {
-      // Auto-switch to Job tab the first time it appears
-    }
-  }, [job, tab, messages.length, streaming]);
+  const title: string = data?.conversation?.title ?? "Untitled project";
 
   if (isLoading) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      <div className="flex h-full items-center justify-center text-text-faint">
+        <span className="thinking-dot" />
+        <span className="thinking-dot" />
+        <span className="thinking-dot" />
       </div>
     );
   }
@@ -74,7 +81,6 @@ function ConversationPage() {
   async function sendMessage(text: string) {
     setSending(true);
     setStreaming("");
-    // optimistic
     qc.setQueryData(["conversation", id], (prev: any) => ({
       ...prev,
       messages: [
@@ -144,35 +150,107 @@ function ConversationPage() {
       setStreaming("");
       await qc.invalidateQueries({ queryKey: ["conversation", id] });
       qc.invalidateQueries({ queryKey: ["conversations"] });
-      if (jobCreated) setTab("job");
+      if (jobCreated) {
+        setPulse(true);
+        setTab("job");
+        setTimeout(() => setPulse(false), 3500);
+      }
     } finally {
       setSending(false);
     }
   }
 
   return (
-    <Tabs value={tab} onValueChange={(v) => setTab(v as "chat" | "job")} className="flex h-full flex-col">
-      <div className="border-b px-4">
-        <TabsList className="h-11 bg-transparent p-0">
-          <TabsTrigger value="chat" className="gap-1.5">
-            <MessageSquare className="h-4 w-4" /> Chat
-          </TabsTrigger>
+    <div className="flex h-full flex-col">
+      {/* Browser-style tab bar */}
+      <div
+        className="flex items-center justify-between border-b border-border bg-bg-side px-3"
+        style={{ height: "var(--tabbar-h)" }}
+      >
+        <div className="flex items-end gap-1">
+          <TabButton
+            active={tab === "chat"}
+            onClick={() => setTab("chat")}
+            icon={<ChatIcon size={14} />}
+            label="Chat"
+          />
           {job && (
-            <TabsTrigger value="job" className="gap-1.5">
-              <Briefcase className="h-4 w-4" /> Job
-            </TabsTrigger>
+            <TabButton
+              active={tab === "job"}
+              onClick={() => setTab("job")}
+              icon={<Briefcase size={14} />}
+              label="Job"
+              pulse={pulse && tab !== "job"}
+              closable
+            />
           )}
-        </TabsList>
+        </div>
+        <div className="flex items-center gap-3 pr-1">
+          <span className="max-w-[280px] truncate text-[12.5px] font-medium text-text">{title}</span>
+          <button
+            aria-label="Share"
+            className="rounded-md px-2 py-1 text-[12px] text-text-mute transition hover:bg-bg-hover hover:text-text"
+          >
+            Share
+          </button>
+          <button
+            aria-label="More"
+            className="rounded-md p-1.5 text-text-mute transition hover:bg-bg-hover hover:text-text"
+          >
+            <Dots size={14} />
+          </button>
+        </div>
       </div>
-      <TabsContent value="chat" className="m-0 flex flex-1 flex-col overflow-hidden">
-        <ChatPanel messages={messages} streaming={streaming} sending={sending} onSend={sendMessage} />
-      </TabsContent>
-      {job && (
-        <TabsContent value="job" className="m-0 flex-1 overflow-y-auto">
-          <JobPanel job={job} conversationId={id} />
-        </TabsContent>
+
+      {/* Tab content */}
+      <div className="flex flex-1 flex-col overflow-hidden">
+        {tab === "chat" ? (
+          <ChatPanel messages={messages} streaming={streaming} sending={sending} onSend={sendMessage} />
+        ) : job ? (
+          <div className="flex-1 overflow-y-auto">
+            <JobPanel job={job} conversationId={id} />
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function TabButton({
+  active,
+  onClick,
+  icon,
+  label,
+  pulse,
+  closable,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+  pulse?: boolean;
+  closable?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "relative -mb-px flex items-center gap-1.5 rounded-t-[8px] border border-transparent px-3 py-1.5 text-[12.5px] transition",
+        active
+          ? "border-border border-b-bg bg-bg text-text"
+          : "text-text-mute hover:bg-bg-hover hover:text-text",
+        pulse && "tab-pulse",
       )}
-    </Tabs>
+      style={{ marginBottom: "-1px" }}
+    >
+      <span className="opacity-80">{icon}</span>
+      <span>{label}</span>
+      {closable && (
+        <span className="ml-1 rounded p-0.5 text-text-faint hover:bg-bg-hover hover:text-text">
+          <XSm />
+        </span>
+      )}
+    </button>
   );
 }
 
@@ -204,70 +282,151 @@ function ChatPanel({
 
   const empty = messages.length === 0 && !streaming;
 
+  const suggestions = [
+    "Senior backend engineer, Berlin, Go + Postgres",
+    "Product designer, remote EU, fintech",
+    "Sales lead, NYC, SaaS",
+  ];
+
+  if (empty) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center px-6">
+        <div className="w-full max-w-[640px] text-center">
+          <div className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-bg-bubble text-text">
+            <Logo size={26} />
+          </div>
+          <h1 className="text-[24px] font-semibold tracking-tight text-text">
+            What hire can I help with?
+          </h1>
+          <p className="mt-2 text-[13px] text-text-mute">
+            Describe the role. I'll ask the right questions, then draft a Job in a new tab.
+          </p>
+
+          <form onSubmit={submit} className="mt-7">
+            <Composer text={text} setText={setText} sending={sending} onSubmit={submit} />
+          </form>
+
+          <div className="mt-5 flex flex-wrap justify-center gap-2">
+            {suggestions.map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => onSend(s)}
+                className="rounded-full border border-border bg-bg px-3 py-1.5 text-[12px] text-text-mute transition hover:bg-bg-hover hover:text-text"
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-3xl space-y-6 px-4 py-6">
-          {empty && (
-            <div className="rounded-lg border bg-muted/30 p-6 text-sm text-muted-foreground">
-              <p className="font-medium text-foreground">Describe the role you're hiring for.</p>
-              <p className="mt-1">
-                e.g. <em>"I need a senior backend engineer in Berlin, Go + Postgres, €90–110k."</em>
-                {" "}The AI will ask follow-ups, then draft a Job in a new tab.
-              </p>
-            </div>
-          )}
+        <div className="mx-auto max-w-[720px] space-y-5 px-4 py-8">
           {messages.map((m) => (
             <MessageBubble key={m.id} role={m.role} content={m.content} />
           ))}
-          {streaming && <MessageBubble role="assistant" content={streaming} />}
+          {streaming && <MessageBubble role="assistant" content={streaming} streaming />}
           {sending && !streaming && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Thinking…
+            <div className="flex items-center gap-1.5 pl-1 text-text-mute">
+              <span className="thinking-dot" />
+              <span className="thinking-dot" />
+              <span className="thinking-dot" />
             </div>
           )}
         </div>
       </div>
-      <form onSubmit={submit} className="border-t bg-background p-3">
-        <div className="mx-auto flex max-w-3xl gap-2">
-          <Textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder="Message the recruiting agent…"
-            rows={1}
-            className="min-h-[44px] resize-none"
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                submit(e as any);
-              }
-            }}
-          />
-          <Button type="submit" disabled={sending || !text.trim()} size="icon">
-            <Send className="h-4 w-4" />
-          </Button>
+      <form onSubmit={submit} className="border-t border-border bg-bg px-4 py-3">
+        <div className="mx-auto max-w-[720px]">
+          <Composer text={text} setText={setText} sending={sending} onSubmit={submit} />
         </div>
       </form>
     </div>
   );
 }
 
-function MessageBubble({ role, content }: { role: string; content: string }) {
+function Composer({
+  text,
+  setText,
+  sending,
+  onSubmit,
+}: {
+  text: string;
+  setText: (v: string) => void;
+  sending: boolean;
+  onSubmit: (e: React.FormEvent) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2 rounded-[14px] border border-border bg-bg-elev p-2.5 shadow-[var(--shadow-sm)] focus-within:border-border-strong">
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder="Message Gio…"
+        rows={1}
+        className="min-h-[28px] w-full resize-none bg-transparent px-2 py-1 text-[14px] outline-none placeholder:text-text-faint"
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            onSubmit(e as any);
+          }
+        }}
+      />
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            className="flex items-center gap-1 rounded-md px-2 py-1 text-[12px] text-text-mute transition hover:bg-bg-hover hover:text-text"
+          >
+            <Attach size={14} /> Attach
+          </button>
+          <button
+            type="button"
+            className="flex items-center gap-1 rounded-full border border-border bg-bg px-2.5 py-1 text-[12px] text-text-mute transition hover:bg-bg-hover hover:text-text"
+          >
+            <Sparkle size={12} /> Hiring mode
+          </button>
+        </div>
+        <button
+          type="submit"
+          disabled={sending || !text.trim()}
+          className="flex h-8 w-8 items-center justify-center rounded-full bg-text text-text-invert transition hover:opacity-90 disabled:opacity-30"
+        >
+          <SendIcon size={14} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function MessageBubble({
+  role,
+  content,
+  streaming,
+}: {
+  role: string;
+  content: string;
+  streaming?: boolean;
+}) {
   const isUser = role === "user";
   return (
-    <div className={isUser ? "flex justify-end" : ""}>
+    <div className={cn("fade-up", isUser ? "flex justify-end" : "")}>
       <div
-        className={
+        className={cn(
           isUser
-            ? "max-w-[80%] rounded-2xl bg-primary px-4 py-2 text-primary-foreground"
-            : "max-w-[90%] text-sm"
-        }
+            ? "max-w-[78%] rounded-2xl bg-bg-bubble px-4 py-2.5 text-[14px] text-text"
+            : "max-w-[92%] text-[14px] text-text",
+        )}
       >
         {isUser ? (
-          <p className="whitespace-pre-wrap text-sm">{content}</p>
+          <p className="whitespace-pre-wrap">{content}</p>
         ) : (
-          <div className="prose prose-sm max-w-none dark:prose-invert prose-p:my-2 prose-headings:mb-2 prose-headings:mt-4">
+          <div className="prose prose-sm max-w-none text-text dark:prose-invert prose-p:my-2 prose-headings:mb-2 prose-headings:mt-4 prose-code:text-text">
             <ReactMarkdown>{content || "…"}</ReactMarkdown>
+            {streaming && <span className="caret" />}
           </div>
         )}
       </div>
@@ -311,130 +470,194 @@ function JobPanel({ job, conversationId }: { job: Job; conversationId: string })
   }
 
   const reqText = useMemo(() => form.requirements.join("\n"), [form.requirements]);
+  const statusLabel = form.status.charAt(0).toUpperCase() + form.status.slice(1);
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-semibold">Job</h2>
-          <p className="text-xs text-muted-foreground">
-            {saving ? "Saving…" : savedAt ? `Saved at ${savedAt}` : "Edits autosave on blur."}
-          </p>
+    <div className="mx-auto w-full max-w-[1200px] px-8 py-7">
+      {/* Sub-header */}
+      <div className="flex items-center justify-between border-b border-border pb-4">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-bg-bubble text-text">
+            <Briefcase size={18} />
+          </div>
+          <div>
+            <input
+              value={form.title}
+              onChange={(e) => setForm({ ...form, title: e.target.value })}
+              onBlur={(e) => e.target.value !== job.title && save({ title: e.target.value })}
+              className="bg-transparent text-[18px] font-semibold tracking-tight text-text outline-none focus:border-b focus:border-border-strong"
+            />
+            <p className="text-[12px] text-text-mute">
+              <span className="inline-flex items-center gap-1.5">
+                <span
+                  className={cn(
+                    "inline-block h-1.5 w-1.5 rounded-full",
+                    form.status === "open" ? "bg-emerald-500" : "bg-text-faint",
+                  )}
+                />
+                {statusLabel}
+              </span>
+              {form.location && <span className="ml-3">{form.location}</span>}
+            </p>
+          </div>
         </div>
+        <p className="text-[11px] text-text-faint">
+          {saving ? "Saving…" : savedAt ? `Saved ${savedAt}` : "Edits autosave on blur"}
+        </p>
       </div>
 
-      <div className="space-y-2">
-        <Label>Title</Label>
-        <Input
-          value={form.title}
-          onChange={(e) => setForm({ ...form, title: e.target.value })}
-          onBlur={(e) => e.target.value !== job.title && save({ title: e.target.value })}
-        />
-      </div>
+      {/* Two columns */}
+      <div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-[1fr_320px]">
+        {/* Main */}
+        <div className="space-y-7">
+          <section>
+            <h3 className="mb-2 text-[11px] font-medium uppercase tracking-wide text-text-faint">
+              Summary
+            </h3>
+            <Textarea
+              rows={6}
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              onBlur={(e) => e.target.value !== job.description && save({ description: e.target.value })}
+              className="border-border bg-bg-elev text-[14px] leading-relaxed"
+            />
+          </section>
 
-      <div className="space-y-2">
-        <Label>Description</Label>
-        <Textarea
-          rows={10}
-          value={form.description}
-          onChange={(e) => setForm({ ...form, description: e.target.value })}
-          onBlur={(e) => e.target.value !== job.description && save({ description: e.target.value })}
-        />
-      </div>
+          <section>
+            <h3 className="mb-2 text-[11px] font-medium uppercase tracking-wide text-text-faint">
+              Requirements
+            </h3>
+            <Textarea
+              rows={8}
+              value={reqText}
+              onChange={(e) =>
+                setForm({ ...form, requirements: e.target.value.split("\n").filter(Boolean) })
+              }
+              onBlur={(e) => {
+                const next = e.target.value.split("\n").map((s) => s.trim()).filter(Boolean);
+                if (JSON.stringify(next) !== JSON.stringify(job.requirements)) {
+                  save({ requirements: next });
+                }
+              }}
+              placeholder="One per line"
+              className="border-border bg-bg-elev text-[14px] leading-relaxed"
+            />
+          </section>
+        </div>
 
-      <div className="space-y-2">
-        <Label>Requirements (one per line)</Label>
-        <Textarea
-          rows={6}
-          value={reqText}
-          onChange={(e) =>
-            setForm({ ...form, requirements: e.target.value.split("\n").filter(Boolean) })
-          }
-          onBlur={(e) => {
-            const next = e.target.value.split("\n").map((s) => s.trim()).filter(Boolean);
-            if (JSON.stringify(next) !== JSON.stringify(job.requirements)) {
-              save({ requirements: next });
-            }
-          }}
-        />
-      </div>
+        {/* Side */}
+        <aside className="space-y-4">
+          <div className="rounded-[14px] border border-border bg-bg-elev p-4">
+            <h3 className="mb-3 text-[11px] font-medium uppercase tracking-wide text-text-faint">
+              Details
+            </h3>
+            <div className="space-y-3">
+              <Field label="Location">
+                <Input
+                  value={form.location}
+                  onChange={(e) => setForm({ ...form, location: e.target.value })}
+                  onBlur={(e) => e.target.value !== job.location && save({ location: e.target.value })}
+                  className="h-8 border-border bg-bg"
+                />
+              </Field>
+              <Field label="Employment">
+                <Select
+                  value={form.employment_type}
+                  onValueChange={(v) => save({ employment_type: v })}
+                >
+                  <SelectTrigger className="h-8 border-border bg-bg text-[13px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="full_time">Full-time</SelectItem>
+                    <SelectItem value="part_time">Part-time</SelectItem>
+                    <SelectItem value="contract">Contract</SelectItem>
+                    <SelectItem value="internship">Internship</SelectItem>
+                    <SelectItem value="temporary">Temporary</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="Salary min">
+                  <Input
+                    type="number"
+                    value={form.salary_min ?? ""}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        salary_min: e.target.value === "" ? null : Number(e.target.value),
+                      })
+                    }
+                    onBlur={() => save({ salary_min: form.salary_min })}
+                    className="h-8 border-border bg-bg"
+                  />
+                </Field>
+                <Field label="Salary max">
+                  <Input
+                    type="number"
+                    value={form.salary_max ?? ""}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        salary_max: e.target.value === "" ? null : Number(e.target.value),
+                      })
+                    }
+                    onBlur={() => save({ salary_max: form.salary_max })}
+                    className="h-8 border-border bg-bg"
+                  />
+                </Field>
+              </div>
+              <Field label="Currency">
+                <Input
+                  value={form.currency}
+                  onChange={(e) => setForm({ ...form, currency: e.target.value.toUpperCase() })}
+                  onBlur={(e) => e.target.value !== job.currency && save({ currency: e.target.value })}
+                  className="h-8 border-border bg-bg"
+                />
+              </Field>
+              <Field label="Status">
+                <Select value={form.status} onValueChange={(v) => save({ status: v })}>
+                  <SelectTrigger className="h-8 border-border bg-bg text-[13px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="draft">Draft</SelectItem>
+                    <SelectItem value="open">Open</SelectItem>
+                    <SelectItem value="closed">Closed</SelectItem>
+                    <SelectItem value="archived">Archived</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+            </div>
+          </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label>Location</Label>
-          <Input
-            value={form.location}
-            onChange={(e) => setForm({ ...form, location: e.target.value })}
-            onBlur={(e) => e.target.value !== job.location && save({ location: e.target.value })}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label>Employment type</Label>
-          <Select
-            value={form.employment_type}
-            onValueChange={(v) => save({ employment_type: v })}
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="full_time">Full-time</SelectItem>
-              <SelectItem value="part_time">Part-time</SelectItem>
-              <SelectItem value="contract">Contract</SelectItem>
-              <SelectItem value="internship">Internship</SelectItem>
-              <SelectItem value="temporary">Temporary</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+          <div className="rounded-[14px] border border-border bg-bg-side p-4">
+            <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-text-faint">
+              <Sparkle size={12} /> Suggested by Gio
+            </div>
+            <p className="text-[12.5px] leading-relaxed text-text-mute">
+              Once you fill in the summary and requirements, I can suggest a salary band, a sourcing
+              plan, and an interview loop.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-3 h-8 w-full border-border bg-bg text-[12.5px]"
+            >
+              Ask Gio to revise
+            </Button>
+          </div>
+        </aside>
       </div>
+    </div>
+  );
+}
 
-      <div className="grid grid-cols-3 gap-4">
-        <div className="space-y-2">
-          <Label>Salary min</Label>
-          <Input
-            type="number"
-            value={form.salary_min ?? ""}
-            onChange={(e) =>
-              setForm({ ...form, salary_min: e.target.value === "" ? null : Number(e.target.value) })
-            }
-            onBlur={() => save({ salary_min: form.salary_min })}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label>Salary max</Label>
-          <Input
-            type="number"
-            value={form.salary_max ?? ""}
-            onChange={(e) =>
-              setForm({ ...form, salary_max: e.target.value === "" ? null : Number(e.target.value) })
-            }
-            onBlur={() => save({ salary_max: form.salary_max })}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label>Currency</Label>
-          <Input
-            value={form.currency}
-            onChange={(e) => setForm({ ...form, currency: e.target.value.toUpperCase() })}
-            onBlur={(e) => e.target.value !== job.currency && save({ currency: e.target.value })}
-          />
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <Label>Status</Label>
-        <Select value={form.status} onValueChange={(v) => save({ status: v })}>
-          <SelectTrigger className="w-48">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="draft">Draft</SelectItem>
-            <SelectItem value="open">Open</SelectItem>
-            <SelectItem value="closed">Closed</SelectItem>
-            <SelectItem value="archived">Archived</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1">
+      <Label className="text-[11px] font-medium text-text-mute">{label}</Label>
+      {children}
     </div>
   );
 }
