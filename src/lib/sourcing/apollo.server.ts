@@ -27,7 +27,7 @@ export type ApolloPreview = {
   has_city: boolean;
   has_state: boolean;
   has_country: boolean;
-  keyword_score: number;
+  keyword_score?: number;
 };
 
 async function apolloFetch(path: string, body: unknown): Promise<any> {
