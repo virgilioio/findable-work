@@ -292,6 +292,11 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
   // Dedupe against already-collected rows
   const apolloIds = topApollo.map((c: any) => c.external_id).filter(Boolean);
   const pdlIds = topPdl.map((c: any) => c.external_id).filter(Boolean);
+  // Map Apollo preview external_id → has_direct_phone, so we can persist the flag
+  // on the candidate row without a follow-up reveal call (which would cost credits).
+  const apolloPhoneFlag = new Map<string, boolean>(
+    topApollo.map((c: any) => [c.external_id, Boolean(c.has_direct_phone)]),
+  );
   const [{ data: aRows }, { data: pRows }] = await Promise.all([
     supabaseAdmin.from("candidates").select("apollo_id").eq("user_id", userId)
       .in("apollo_id", apolloIds.length ? apolloIds : ["__none__"]),
