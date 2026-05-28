@@ -397,6 +397,7 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
       match_breakdown: [] as any,
       pdl_id: c.external_id,
       linkedin_slug: slug,
+      has_direct_phone: Boolean(raw.mobile_phone || raw.phone_numbers?.length),
     });
     if (insErr) {
       console.error("pdl candidate insert failed:", insErr.message);
