@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { Check, Sparkle, Users, Search, Briefcase } from "@/components/findable-icons";
+import { Briefcase, Users, ArrowRight } from "@/components/findable-icons";
 
 export type ChatTask = {
   id: string;
@@ -11,60 +11,65 @@ export type ChatTask = {
   data?: Record<string, unknown>;
 };
 
-const KIND_ICON: Record<string, React.ReactNode> = {
-  normalize: <Sparkle size={12} />,
-  research: <Search size={12} />,
-  search: <Search size={12} />,
-  collect: <Users size={12} />,
-  create_job: <Briefcase size={12} />,
+const ARTIFACT_BY_KIND: Record<string, { tab: "job" | "candidates"; icon: React.ReactNode; subtitle: string }> = {
+  create_job: { tab: "job", icon: <Briefcase size={14} />, subtitle: "Open Job tab to review" },
+  collect: { tab: "candidates", icon: <Users size={14} />, subtitle: "Open Candidates tab to review" },
 };
 
-export function TaskCard({ task }: { task: ChatTask }) {
+export function TaskCard({
+  task,
+  onOpenTab,
+}: {
+  task: ChatTask;
+  onOpenTab?: (tab: "job" | "candidates") => void;
+}) {
   const running = task.status === "running";
   const failed = task.status === "failed";
   const done = task.status === "done";
 
-  return (
-    <div
-      className={cn(
-        "animate-fade-in flex items-start gap-2.5 rounded-lg border border-border bg-bg-elev px-3 py-2 text-[12.5px] transition",
-        running && "border-border-strong",
-        failed && "border-red-500/30 bg-red-500/5",
-      )}
-    >
+  const artifact = done ? ARTIFACT_BY_KIND[task.kind] : undefined;
+
+  // Inline (non-artifact) task: just a single text line, no card chrome.
+  if (!artifact) {
+    return (
       <div
         className={cn(
-          "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md",
-          done && "bg-emerald-500/15 text-emerald-500",
-          running && "bg-bg-bubble text-text-mute",
-          failed && "bg-red-500/15 text-red-500",
+          "animate-fade-in flex items-center gap-2 text-[13px]",
+          failed ? "text-red-500/90" : running ? "text-text-mute" : "text-text-mute",
         )}
       >
-        {done ? (
-          <Check size={12} />
-        ) : failed ? (
-          <span className="text-[11px] font-bold">!</span>
-        ) : (
-          KIND_ICON[task.kind] ?? <Sparkle size={12} />
+        <span className={cn(failed ? "text-red-500" : "text-text")}>{task.label}</span>
+        {running && (
+          <span className="inline-flex items-center gap-0.5">
+            <span className="thinking-dot" />
+            <span className="thinking-dot" />
+            <span className="thinking-dot" />
+          </span>
+        )}
+        {task.summary && !running && (
+          <span className="text-text-faint">· {task.summary}</span>
         )}
       </div>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className={cn("font-medium text-text", failed && "text-red-500")}>{task.label}</span>
-          {running && (
-            <span className="inline-flex items-center gap-0.5 text-text-faint">
-              <span className="thinking-dot" />
-              <span className="thinking-dot" />
-              <span className="thinking-dot" />
-            </span>
-          )}
-        </div>
-        {task.summary && (
-          <div className={cn("mt-0.5 truncate text-[11.5px]", failed ? "text-red-500/80" : "text-text-mute")}>
-            {task.summary}
-          </div>
-        )}
-      </div>
-    </div>
+    );
+  }
+
+  // Artifact card — clickable, switches workspace tab.
+  return (
+    <button
+      type="button"
+      onClick={() => onOpenTab?.(artifact.tab)}
+      className="animate-fade-in group flex w-full items-center gap-3 rounded-xl border border-border bg-bg-elev px-3.5 py-3 text-left transition hover:border-border-strong hover:bg-bg-hover"
+    >
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-bg-bubble text-text-mute">
+        {artifact.icon}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[13.5px] font-medium text-text">{task.label}</span>
+        <span className="block truncate text-[12px] text-text-mute">{artifact.subtitle}</span>
+      </span>
+      <span className="text-text-faint transition group-hover:translate-x-0.5 group-hover:text-text">
+        <ArrowRight size={14} />
+      </span>
+    </button>
   );
 }
