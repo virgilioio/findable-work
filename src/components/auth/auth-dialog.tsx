@@ -84,7 +84,7 @@ export function AuthDialog({
       }}
     >
       <DialogContent
-        className="w-full max-w-[380px] gap-0 rounded-[14px] border border-[var(--border)] bg-[var(--bg-elev)] p-0 px-8 py-9 shadow-lg sm:rounded-[14px]"
+        className="w-full max-w-[440px] gap-0 rounded-[14px] border border-[var(--border)] bg-[var(--bg-elev)] p-0 px-10 py-10 shadow-lg sm:rounded-[14px]"
         onPointerDownOutside={(e) => {
           if (!dismissible) e.preventDefault();
         }}
