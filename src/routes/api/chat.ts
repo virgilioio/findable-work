@@ -4,6 +4,12 @@ import { z } from "zod";
 import { runSourcingAgent, type TaskEvent } from "@/lib/sourcing/agent.server";
 import { buildJobPostArtifact } from "@/lib/job-posts/builder.server";
 import { getPrompt } from "@/lib/prompts/registry.server";
+import {
+  DEFAULT_LINKEDIN,
+  DEFAULT_EMAIL_SUBJECT,
+  DEFAULT_EMAIL_BODY,
+  DEFAULT_FOLLOWUPS,
+} from "@/lib/outreach/outreach.functions";
 
 const bodySchema = z.object({
   conversationId: z.string().uuid(),
@@ -128,6 +134,22 @@ const draftJobPostsTool = {
   },
 };
 
+const draftOutreachTool = {
+  type: "function" as const,
+  function: {
+    name: "draft_outreach",
+    description:
+      "Draft outreach templates (LinkedIn under 200 chars + email subject/body + 3-step follow-up sequence) for contacting sourced candidates. Call once a Job exists and candidates have been sourced.",
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        tone: { type: "string", enum: ["Warm", "Direct", "Casual"] },
+      },
+    },
+  },
+};
+
 async function getUserFromRequest(request: Request): Promise<string | null> {
   const auth = request.headers.get("authorization");
   if (!auth?.startsWith("Bearer ")) return null;
@@ -147,7 +169,7 @@ async function callGateway(messages: ChatMessage[], apiKey: string): Promise<Res
       model: "openai/gpt-5-mini",
       stream: true,
       messages,
-      tools: [createJobTool, sourceCandidatesTool, askClarifyingQuestionsTool, draftJobPostsTool],
+      tools: [createJobTool, sourceCandidatesTool, askClarifyingQuestionsTool, draftJobPostsTool, draftOutreachTool],
     }),
   });
 }
