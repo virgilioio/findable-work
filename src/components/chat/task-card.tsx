@@ -1,10 +1,11 @@
 import { cn } from "@/lib/utils";
 import { Briefcase, Users, ArrowRight } from "@/components/findable-icons";
+import { ClarifyCard, type ClarifyData } from "./clarify-card";
 
 export type ChatTask = {
   id: string;
   message_id: string | null;
-  kind: "normalize" | "research" | "search" | "collect" | "create_job" | string;
+  kind: "normalize" | "research" | "search" | "collect" | "create_job" | "clarify" | string;
   label: string;
   status: "running" | "done" | "failed";
   summary: string | null;
@@ -19,13 +20,32 @@ const ARTIFACT_BY_KIND: Record<string, { tab: "job" | "candidates"; icon: React.
 export function TaskCard({
   task,
   onOpenTab,
+  onSubmitClarify,
+  clarifyAnswered,
+  clarifyAnswers,
 }: {
   task: ChatTask;
   onOpenTab?: (tab: "job" | "candidates") => void;
+  onSubmitClarify?: (taskId: string, formatted: string, answers: Record<string, string[]>) => void;
+  clarifyAnswered?: boolean;
+  clarifyAnswers?: Record<string, string[]>;
 }) {
   const running = task.status === "running";
   const failed = task.status === "failed";
   const done = task.status === "done";
+
+  if (task.kind === "clarify") {
+    const data = (task.data ?? {}) as ClarifyData;
+    if (!Array.isArray(data.questions) || data.questions.length === 0) return null;
+    return (
+      <ClarifyCard
+        data={data}
+        answered={clarifyAnswered}
+        answers={clarifyAnswers}
+        onSubmit={(formatted, answers) => onSubmitClarify?.(task.id, formatted, answers)}
+      />
+    );
+  }
 
   const artifact = done ? ARTIFACT_BY_KIND[task.kind] : undefined;
 
