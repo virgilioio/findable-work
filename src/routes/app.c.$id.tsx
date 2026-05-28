@@ -75,6 +75,7 @@ function ConversationPage() {
   const [candidatesPulse, setCandidatesPulse] = useState(false);
   const [composerText, setComposerText] = useState("");
   const [liveTasks, setLiveTasks] = useState<ChatTask[]>([]);
+  const [clarifyAnswers, setClarifyAnswers] = useState<Record<string, Record<string, string[]>>>({});
 
   const messages: Message[] = data?.messages ?? [];
   const job: Job | null = (data?.job as Job | null) ?? null;
@@ -264,6 +265,11 @@ function ConversationPage() {
             persistedTasks={persistedTasks}
             liveTasks={liveTasks}
             onOpenTab={(t) => setTab(t)}
+            clarifyAnswers={clarifyAnswers}
+            onSubmitClarify={(taskId, formatted, answers) => {
+              setClarifyAnswers((prev) => ({ ...prev, [taskId]: answers }));
+              sendMessage(formatted);
+            }}
           />
         ) : tab === "job" && job ? (
           <div className="flex-1 overflow-y-auto">
@@ -336,6 +342,8 @@ function ChatPanel({
   persistedTasks,
   liveTasks,
   onOpenTab,
+  clarifyAnswers,
+  onSubmitClarify,
 }: {
   messages: Message[];
   streaming: string;
@@ -346,6 +354,8 @@ function ChatPanel({
   persistedTasks: ChatTask[];
   liveTasks: ChatTask[];
   onOpenTab: (t: "job" | "candidates") => void;
+  clarifyAnswers: Record<string, Record<string, string[]>>;
+  onSubmitClarify: (taskId: string, formatted: string, answers: Record<string, string[]>) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -416,7 +426,13 @@ function ChatPanel({
                 {msgTasks.length > 0 && m.role === "assistant" &&
                   msgTasks.map((t) => (
                     <TimelineRow key={t.id}>
-                      <TaskCard task={t} onOpenTab={onOpenTab} />
+                      <TaskCard
+                        task={t}
+                        onOpenTab={onOpenTab}
+                        onSubmitClarify={onSubmitClarify}
+                        clarifyAnswered={Boolean(clarifyAnswers[t.id])}
+                        clarifyAnswers={clarifyAnswers[t.id]}
+                      />
                     </TimelineRow>
                   ))}
               </div>
@@ -427,7 +443,13 @@ function ChatPanel({
               {streaming && <MessageRow role="assistant" content={streaming} streaming />}
               {liveTasks.map((t) => (
                 <TimelineRow key={t.id}>
-                  <TaskCard task={t} onOpenTab={onOpenTab} />
+                  <TaskCard
+                    task={t}
+                    onOpenTab={onOpenTab}
+                    onSubmitClarify={onSubmitClarify}
+                    clarifyAnswered={Boolean(clarifyAnswers[t.id])}
+                    clarifyAnswers={clarifyAnswers[t.id]}
+                  />
                 </TimelineRow>
               ))}
             </div>

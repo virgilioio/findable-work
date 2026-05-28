@@ -13,8 +13,15 @@ const SYSTEM_PROMPT = `You are findable, a senior recruiting agent embedded in a
 You progressively build a recruiting project by calling tools that produce real artifacts: a Job draft, a candidate pipeline, etc. The user can see each tool you call as a live "task" card in the chat.
 
 Tools available:
+- ask_clarifying_questions: surface up to 4 structured questions to the user as pill-shaped options. Use whenever you need information to guarantee good results (especially before sourcing, or after an empty/limited search to broaden the brief). Prefer this over asking in prose.
 - create_job: draft (or update) the Job artifact for this conversation. Call once you have at minimum a title + a basic description. Don't wait for perfection — the user can edit afterward.
 - source_candidates: search our candidate pool, find matches, and add the top N to the Candidates tab. Call this whenever the user asks to source / find / pull / get candidates. Don't ask 10 clarifying questions first — call it with what you know (title, location, seniority) and refine afterward. Default limit is 20.
+
+Mandatory flow:
+1. Before sourcing, you MUST have at least: a role title, a location (or "remote"), and a seniority hint. If ANY of those three are missing from the conversation so far, call ask_clarifying_questions and STOP — do not call source_candidates in the same turn.
+2. Once those three are present, call create_job FIRST (so the Job tab appears), then call source_candidates in the same turn.
+3. If source_candidates returns 0 matches or pool_limited=true, call ask_clarifying_questions with BROADENING suggestions (e.g. "Open to LATAM-remote?", "Other seniority levels OK?", "Adjacent titles to consider?"). Never silently retry.
+4. After the user answers clarifying questions, proceed with create_job + source_candidates.
 
 Style:
 - Concise, recruiter-grade, no fluff.
@@ -78,6 +85,48 @@ const sourceCandidatesTool = {
   },
 };
 
+const askClarifyingQuestionsTool = {
+  type: "function" as const,
+  function: {
+    name: "ask_clarifying_questions",
+    description:
+      "Surface structured clarifying questions to the user as pill-shaped multi/single-select options (with optional free-text). Use to gather info needed for great sourcing, or to broaden the brief after empty results.",
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        intro: {
+          type: "string",
+          description: "One short sentence shown above the questions. E.g. 'A couple quick details to sharpen the search:'",
+        },
+        questions: {
+          type: "array",
+          minItems: 1,
+          maxItems: 4,
+          items: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              id: { type: "string", description: "Stable snake_case key, e.g. 'seniority'." },
+              label: { type: "string", description: "The question text shown to the user." },
+              type: { type: "string", enum: ["single", "multi", "text"] },
+              options: {
+                type: "array",
+                items: { type: "string" },
+                description: "Pill labels for single/multi. Omit for text-only.",
+              },
+              placeholder: { type: "string", description: "Placeholder for the free-text input." },
+              allow_other: { type: "boolean", description: "If true, reveal a free-text input alongside pills." },
+            },
+            required: ["id", "label", "type"],
+          },
+        },
+      },
+      required: ["questions"],
+    },
+  },
+};
+
 async function getUserFromRequest(request: Request): Promise<string | null> {
   const auth = request.headers.get("authorization");
   if (!auth?.startsWith("Bearer ")) return null;
@@ -97,7 +146,7 @@ async function callGateway(messages: ChatMessage[], apiKey: string): Promise<Res
       model: "google/gemini-3-flash-preview",
       stream: true,
       messages,
-      tools: [createJobTool, sourceCandidatesTool],
+      tools: [createJobTool, sourceCandidatesTool, askClarifyingQuestionsTool],
     }),
   });
 }
@@ -348,6 +397,41 @@ export const Route = createFileRoute("/api/chat")({
                       content: JSON.stringify({ ok: false, error: err?.message ?? "Sourcing failed" }),
                     });
                   }
+                } else if (call.name === "ask_clarifying_questions") {
+                  const questions = Array.isArray(args.questions) ? args.questions.slice(0, 4) : [];
+                  const intro = typeof args.intro === "string" ? args.intro.slice(0, 240) : "";
+                  const normalized = questions.map((q: any, i: number) => ({
+                    id: String(q?.id ?? `q${i}`).slice(0, 64),
+                    label: String(q?.label ?? "").slice(0, 240),
+                    type: ["single", "multi", "text"].includes(q?.type) ? q.type : "single",
+                    options: Array.isArray(q?.options) ? q.options.map((o: unknown) => String(o)).slice(0, 12) : [],
+                    placeholder: typeof q?.placeholder === "string" ? q.placeholder.slice(0, 120) : "",
+                    allow_other: Boolean(q?.allow_other),
+                  }));
+                  const { data: clarifyTask } = await supabaseAdmin
+                    .from("agent_tasks")
+                    .insert({
+                      user_id: userId,
+                      conversation_id: conversationId,
+                      kind: "clarify",
+                      label: intro || "A couple quick details to sharpen the search:",
+                      status: "done",
+                      summary: null,
+                      data: { intro, questions: normalized },
+                      finished_at: new Date().toISOString(),
+                    })
+                    .select("*")
+                    .single();
+                  if (clarifyTask) {
+                    allTaskIds.push(clarifyTask.id);
+                    send("task", clarifyTask);
+                  }
+                  toolResults.push({
+                    role: "tool",
+                    tool_call_id: call.id ?? "",
+                    name: "ask_clarifying_questions",
+                    content: JSON.stringify({ ok: true, asked: normalized.length }),
+                  });
                 }
               }
 
