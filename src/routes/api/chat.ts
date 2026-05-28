@@ -397,6 +397,41 @@ export const Route = createFileRoute("/api/chat")({
                       content: JSON.stringify({ ok: false, error: err?.message ?? "Sourcing failed" }),
                     });
                   }
+                } else if (call.name === "ask_clarifying_questions") {
+                  const questions = Array.isArray(args.questions) ? args.questions.slice(0, 4) : [];
+                  const intro = typeof args.intro === "string" ? args.intro.slice(0, 240) : "";
+                  const normalized = questions.map((q: any, i: number) => ({
+                    id: String(q?.id ?? `q${i}`).slice(0, 64),
+                    label: String(q?.label ?? "").slice(0, 240),
+                    type: ["single", "multi", "text"].includes(q?.type) ? q.type : "single",
+                    options: Array.isArray(q?.options) ? q.options.map((o: unknown) => String(o)).slice(0, 12) : [],
+                    placeholder: typeof q?.placeholder === "string" ? q.placeholder.slice(0, 120) : "",
+                    allow_other: Boolean(q?.allow_other),
+                  }));
+                  const { data: clarifyTask } = await supabaseAdmin
+                    .from("agent_tasks")
+                    .insert({
+                      user_id: userId,
+                      conversation_id: conversationId,
+                      kind: "clarify",
+                      label: intro || "A couple quick details to sharpen the search:",
+                      status: "done",
+                      summary: null,
+                      data: { intro, questions: normalized },
+                      finished_at: new Date().toISOString(),
+                    })
+                    .select("*")
+                    .single();
+                  if (clarifyTask) {
+                    allTaskIds.push(clarifyTask.id);
+                    send("task", clarifyTask);
+                  }
+                  toolResults.push({
+                    role: "tool",
+                    tool_call_id: call.id ?? "",
+                    name: "ask_clarifying_questions",
+                    content: JSON.stringify({ ok: true, asked: normalized.length }),
+                  });
                 }
               }
 
