@@ -35,6 +35,7 @@ import {
 } from "@/components/gio-icons";
 import { cn } from "@/lib/utils";
 import { CandidatesPanel } from "@/components/candidates/candidates-panel";
+import { TaskCard, type ChatTask } from "@/components/chat/task-card";
 
 export const Route = createFileRoute("/app/c/$id")({
   component: ConversationPage,
@@ -70,11 +71,14 @@ function ConversationPage() {
   const [sending, setSending] = useState(false);
   const [tab, setTab] = useState<"chat" | "job" | "candidates">("chat");
   const [pulse, setPulse] = useState(false);
+  const [candidatesPulse, setCandidatesPulse] = useState(false);
   const [composerText, setComposerText] = useState("");
+  const [liveTasks, setLiveTasks] = useState<ChatTask[]>([]);
 
   const messages: Message[] = data?.messages ?? [];
   const job: Job | null = (data?.job as Job | null) ?? null;
   const title: string = data?.conversation?.title ?? "Untitled project";
+  const persistedTasks: ChatTask[] = (data?.tasks as ChatTask[] | undefined) ?? [];
 
   if (isLoading) {
     return (
@@ -90,6 +94,7 @@ function ConversationPage() {
   async function sendMessage(text: string) {
     setSending(true);
     setStreaming("");
+    setLiveTasks([]);
     qc.setQueryData(["conversation", id], (prev: any) => ({
       ...prev,
       messages: [
@@ -122,6 +127,7 @@ function ConversationPage() {
       let buf = "";
       let acc = "";
       let jobCreated = false;
+      let candidatesAdded = 0;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -150,6 +156,17 @@ function ConversationPage() {
             setStreaming(acc);
           } else if (event === "job") {
             jobCreated = true;
+          } else if (event === "task") {
+            const t = payload as ChatTask;
+            setLiveTasks((prev) => {
+              const idx = prev.findIndex((x) => x.id === t.id);
+              if (idx === -1) return [...prev, t];
+              const next = [...prev];
+              next[idx] = t;
+              return next;
+            });
+          } else if (event === "candidates_added") {
+            candidatesAdded += payload.count ?? 0;
           } else if (event === "error") {
             alert(payload.message ?? "Stream error");
           }
@@ -157,8 +174,16 @@ function ConversationPage() {
       }
 
       setStreaming("");
+      setLiveTasks([]);
       await qc.invalidateQueries({ queryKey: ["conversation", id] });
       qc.invalidateQueries({ queryKey: ["conversations"] });
+      if (candidatesAdded > 0) {
+        qc.invalidateQueries({ queryKey: ["candidates", id] });
+        if (tab !== "candidates") {
+          setCandidatesPulse(true);
+          setTimeout(() => setCandidatesPulse(false), 3500);
+        }
+      }
       if (jobCreated) {
         setPulse(true);
         setTab("job");
@@ -204,6 +229,7 @@ function ConversationPage() {
               onClick={() => setTab("candidates")}
               icon={<Users size={14} />}
               label="Candidates"
+              pulse={candidatesPulse && tab !== "candidates"}
             />
           )}
         </div>
@@ -234,6 +260,8 @@ function ConversationPage() {
             onSend={sendMessage}
             text={composerText}
             setText={setComposerText}
+            persistedTasks={persistedTasks}
+            liveTasks={liveTasks}
           />
         ) : tab === "job" && job ? (
           <div className="flex-1 overflow-y-auto">
