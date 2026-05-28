@@ -98,7 +98,7 @@ export function AuthDialog({
         </VisuallyHidden>
 
         <div className="mb-5 flex items-center">
-          <Wordmark height={22} />
+          <Wordmark height={28} />
         </div>
         <h1 className="text-[22px] font-semibold tracking-[-0.015em] text-[var(--text)]">
           {mode === "signin" ? "Welcome back" : "Create your account"}
