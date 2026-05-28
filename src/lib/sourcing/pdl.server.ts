@@ -30,7 +30,7 @@ export type PdlPreview = {
   has_city: boolean;
   has_state: boolean;
   has_country: boolean;
-  keyword_score: number;
+  keyword_score?: number;
   // Full record kept server-side so the collect step can hydrate candidates
   // without a second API round-trip. Never sent to the browser.
   raw?: any;
