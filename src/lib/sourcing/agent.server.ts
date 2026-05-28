@@ -5,8 +5,8 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { openaiChat } from "./openai.server";
 import { budgetSearchCriteria, currentPeriod, linkedinSlug, type SearchCriteria } from "./budget";
-import { searchApollo, enrichApolloProfiles } from "./apollo.server";
-import { searchPdl } from "./pdl.server";
+import { searchApolloWithFallback, enrichApolloProfiles } from "./apollo.server";
+import { searchPdl, PdlQuotaError } from "./pdl.server";
 
 export type AgentTask = {
   id: string;
@@ -210,11 +210,17 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
   // ── 3. Search Apollo + PDL ─────────────────────────────────────
   const tSearch = await insertTask(userId, conversationId, "search", "Searching candidate pool");
   onTask(tSearch);
-  const [apolloRes, pdlRes] = await Promise.allSettled([searchApollo(criteria), searchPdl(criteria)]);
-  const apollo = apolloRes.status === "fulfilled" ? apolloRes.value : [];
+  const [apolloRes, pdlRes] = await Promise.allSettled([
+    searchApolloWithFallback(criteria),
+    searchPdl(criteria),
+  ]);
+  const apolloOut = apolloRes.status === "fulfilled" ? apolloRes.value : { rows: [], broadened_to: 0, broadening_steps: [] };
+  const apollo = apolloOut.rows;
   const pdl = pdlRes.status === "fulfilled" ? pdlRes.value : [];
   const apolloErr = apolloRes.status === "rejected" ? String(apolloRes.reason).slice(0, 300) : null;
-  const pdlErr = pdlRes.status === "rejected" ? String(pdlRes.reason).slice(0, 300) : null;
+  const poolLimited = pdlRes.status === "rejected" && pdlRes.reason instanceof PdlQuotaError;
+  const pdlErr = pdlRes.status === "rejected" && !poolLimited ? String(pdlRes.reason).slice(0, 300) : null;
+  const broadened = apolloOut.broadened_to > 0 && apollo.length > 0;
 
   const apolloSlugs = new Set(apollo.map((a) => a.linkedin_slug).filter(Boolean));
   const pdlDedup = pdl.filter((p) => !p.linkedin_slug || !apolloSlugs.has(p.linkedin_slug));
@@ -222,16 +228,27 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
 
   const searchSummary =
     combined.length > 0
-      ? `${combined.length} matches found`
-      : apolloErr && pdlErr
-        ? "Search failed — try broadening the brief"
+      ? broadened
+        ? `${combined.length} matches found (broadened search)`
+        : `${combined.length} matches found`
+      : poolLimited
+        ? "Candidate pool partially limited — try broadening the brief"
         : "No matches — try broadening the brief";
   onTask(
     await finishTask(
       tSearch,
       combined.length > 0 ? "done" : "failed",
       searchSummary,
-      { apollo: apollo.length, pdl: pdl.length, deduped: combined.length, apollo_error: apolloErr, pdl_error: pdlErr },
+      {
+        apollo: apollo.length,
+        pdl: pdl.length,
+        deduped: combined.length,
+        apollo_error: apolloErr,
+        pdl_error: pdlErr,
+        pool_limited: poolLimited,
+        broadened_to: apolloOut.broadened_to,
+        broadening_steps: apolloOut.broadening_steps,
+      },
     ),
   );
 
