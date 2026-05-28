@@ -113,6 +113,9 @@ export async function searchApolloWithFallback(criteria: SearchCriteria): Promis
   const locationsArr = (c.locations ?? []).flatMap(normalizeLocationForApollo);
   // De-dupe while preserving order
   const locations = [...new Set(locationsArr)];
+  // Country-only variants are the entries with no comma. `normalizeLocationForApollo`
+  // always appends a bare country at the end of its output when one is resolved,
+  // so this filter still reliably yields the country fallback.
   const countryOnly = [...new Set(
     locations.filter((l) => !l.includes(",")),
   )];

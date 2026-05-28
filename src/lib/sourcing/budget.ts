@@ -165,19 +165,25 @@ function aliasCity(raw: string): string {
 
 /**
  * Normalize a raw location string into Apollo-compatible variants.
- * Returns the city-level expression AND a country-only fallback so a single
- * `person_locations[]` array gives Apollo room to find matches.
+ * Returns progressively-broader variants so a single `person_locations[]`
+ * array gives Apollo room to find matches:
+ *   ["City, Region, Country", "City, Country", "Region, Country", "Country"]
  *
  * Accepts:
  *  - "Mexico City, Mexico"
  *  - "Mexico City, MX"
  *  - "San Francisco, CA, US"
  *  - "California, US"
+ *  - "Austin, Texas, United States"
+ *  - "Berlin, , Germany"   (empty middle part = unknown state)
  *  - "Mexico"
  *  - "CDMX"
  */
 export function normalizeLocationForApollo(raw: string): string[] {
-  const parts = raw.split(",").map((s) => s.trim()).filter(Boolean);
+  // Preserve empty middle parts ("Berlin, , Germany") so we can detect
+  // missing region without losing the country.
+  const rawParts = raw.split(",").map((s) => s.trim());
+  const parts = rawParts.filter(Boolean);
   if (parts.length === 0) return [];
 
   // Single token: could be city alias, country code, country name, or city
@@ -193,7 +199,9 @@ export function normalizeLocationForApollo(raw: string): string[] {
   }
 
   // 2 parts: "City, Country" | "State, Country"
-  if (parts.length === 2) {
+  // (Only when the original string actually had 2 parts — a 3-part string
+  // with an empty middle, like "Berlin, , Germany", is handled below.)
+  if (parts.length === 2 && rawParts.length === 2) {
     const [first, second] = parts;
     const countryName = resolveCountry(second);
     const cityOrState = US_STATE_ABBR_TO_NAME[first.toUpperCase()] ?? aliasCity(first);
@@ -201,11 +209,23 @@ export function normalizeLocationForApollo(raw: string): string[] {
     return [`${cityOrState}, ${second}`];
   }
 
-  // 3+ parts: "City, State, Country"
-  const city = aliasCity(parts[0]);
-  const countryName = resolveCountry(parts[parts.length - 1]);
-  if (countryName) return [`${city}, ${countryName}`, countryName];
-  return [`${city}, ${parts[parts.length - 1]}`];
+  // 3+ parts: "City, Region, Country" (with possibly-empty City or Region).
+  const cityRaw = rawParts[0] ?? "";
+  const regionRaw = rawParts[1] ?? "";
+  const countryRaw = rawParts[rawParts.length - 1] ?? "";
+  const city = cityRaw ? aliasCity(cityRaw) : "";
+  const region = regionRaw
+    ? US_STATE_ABBR_TO_NAME[regionRaw.toUpperCase()] ?? regionRaw
+    : "";
+  const countryName = countryRaw ? resolveCountry(countryRaw) : null;
+  const countryDisplay = countryName ?? countryRaw;
+  const out: string[] = [];
+  if (city && region && countryDisplay) out.push(`${city}, ${region}, ${countryDisplay}`);
+  if (city && countryDisplay) out.push(`${city}, ${countryDisplay}`);
+  if (region && countryDisplay) out.push(`${region}, ${countryDisplay}`);
+  if (countryDisplay) out.push(countryDisplay);
+  if (out.length === 0 && city) out.push(city);
+  return [...new Set(out)];
 }
 
 function resolveCountry(tok: string): string | null {
@@ -220,26 +240,60 @@ function resolveCountry(tok: string): string | null {
 }
 
 /**
- * Split a location into PDL `location_locality` and `location_country` (both lowercased).
+ * Split a location into PDL `location_locality`, `location_region`, and
+ * `location_country` (all lowercased). Any field may be `null` when not
+ * present in the input.
  */
-export function splitLocationForPdl(raw: string): { locality: string | null; country: string | null } {
-  const parts = raw.split(",").map((s) => s.trim()).filter(Boolean);
-  if (parts.length === 0) return { locality: null, country: null };
+export function splitLocationForPdl(raw: string): {
+  locality: string | null;
+  region: string | null;
+  country: string | null;
+} {
+  const rawParts = raw.split(",").map((s) => s.trim());
+  const parts = rawParts.filter(Boolean);
+  if (parts.length === 0) return { locality: null, region: null, country: null };
+
+  // Single token: country code/name or city alias.
   if (parts.length === 1) {
     const upper = parts[0].toUpperCase();
     if (COUNTRY_CODE_TO_NAME[upper]) {
-      return { locality: null, country: COUNTRY_CODE_TO_NAME[upper].toLowerCase() };
+      return { locality: null, region: null, country: COUNTRY_CODE_TO_NAME[upper].toLowerCase() };
     }
     const lower = parts[0].toLowerCase();
     if (COUNTRY_NAME_TO_CODE[lower]) {
-      return { locality: null, country: COUNTRY_CODE_TO_NAME[COUNTRY_NAME_TO_CODE[lower]].toLowerCase() };
+      return {
+        locality: null,
+        region: null,
+        country: COUNTRY_CODE_TO_NAME[COUNTRY_NAME_TO_CODE[lower]].toLowerCase(),
+      };
     }
-    return { locality: aliasCity(parts[0]).toLowerCase(), country: null };
+    return { locality: aliasCity(parts[0]).toLowerCase(), region: null, country: null };
   }
-  const last = parts[parts.length - 1];
-  const country = resolveCountry(last);
-  const locality = aliasCity(parts[0]).toLowerCase();
-  return { locality, country: country ? country.toLowerCase() : null };
+
+  // 2 parts (and original had only 2): "City, Country" or "Region, Country".
+  // We can't reliably tell city from region with 2 tokens; treat first as locality.
+  if (parts.length === 2 && rawParts.length === 2) {
+    const country = resolveCountry(parts[1]);
+    return {
+      locality: aliasCity(parts[0]).toLowerCase(),
+      region: null,
+      country: country ? country.toLowerCase() : null,
+    };
+  }
+
+  // 3+ parts (possibly with empty middle): "City, Region, Country".
+  const cityRaw = rawParts[0] ?? "";
+  const regionRaw = rawParts[1] ?? "";
+  const countryRaw = rawParts[rawParts.length - 1] ?? "";
+  const country = countryRaw ? resolveCountry(countryRaw) : null;
+  const regionExpanded = regionRaw
+    ? US_STATE_ABBR_TO_NAME[regionRaw.toUpperCase()] ?? regionRaw
+    : "";
+  return {
+    locality: cityRaw ? aliasCity(cityRaw).toLowerCase() : null,
+    region: regionExpanded ? regionExpanded.toLowerCase() : null,
+    country: country ? country.toLowerCase() : null,
+  };
 }
 
 /**

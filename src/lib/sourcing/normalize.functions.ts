@@ -20,12 +20,16 @@ Return strict JSON with shape:
 {
   "title": "<single canonical job title>",
   "skills": ["<skill1>", "<skill2>"],
-  "location": "<City, Country or empty string>",
+  "location": "<City, State/Region, Country — use full names, empty parts allowed, or empty string>",
   "ai_variations": {
     "titles": ["3 to 5 alternative titles or synonyms"],
     "skills": ["3 to 5 skill abbreviations or synonyms"]
   }
 }
+Location rules:
+- Always use the full "City, State/Region, Country" form when any are known. Leave a part empty (e.g. "Berlin, , Germany") if unknown, but never drop the commas.
+- Expand abbreviations to full names: "TX" → "Texas", "SP" → "São Paulo", "USA"/"US" → "United States", "UK" → "United Kingdom".
+- Examples: "Austin, Texas, United States", "São Paulo, São Paulo, Brazil", "Berlin, , Germany", "Mexico City, , Mexico", "remote EU" → "" (use empty when no concrete geography).
 Do not include any prose. Output JSON only.`;
 
 export const normalizeJobSpecs = createServerFn({ method: "POST" })

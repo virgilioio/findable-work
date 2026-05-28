@@ -60,13 +60,15 @@ function buildEsQuery(c: SearchCriteria): Record<string, unknown> {
   }
   if (c.locations?.length) {
     const localityShoulds: any[] = [];
+    const regionShoulds: any[] = [];
     const countryShoulds: any[] = [];
     for (const loc of c.locations) {
-      const { locality, country } = splitLocationForPdl(loc);
+      const { locality, region, country } = splitLocationForPdl(loc);
       if (locality) localityShoulds.push({ term: { location_locality: locality } });
+      if (region) regionShoulds.push({ term: { location_region: region } });
       if (country) countryShoulds.push({ term: { location_country: country } });
     }
-    const shoulds = [...localityShoulds, ...countryShoulds];
+    const shoulds = [...localityShoulds, ...regionShoulds, ...countryShoulds];
     if (shoulds.length) {
       must.push({ bool: { should: shoulds, minimum_should_match: 1 } });
     }
