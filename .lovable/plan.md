@@ -1,83 +1,100 @@
-# Agentic chat + working sourcing pipeline
+# Fix sourcing + redesign chat to a clickable agent timeline
 
-## Goals
+Two problems to solve in one pass:
 
-1. **Agentic UI**: When findable works, the chat shows live "task cards" inline (one per step) that animate from `running → done` (or `failed`), with a short label, optional sub-status, and a result summary. Multiple tasks can run/queue in a single assistant turn. This matches the recording feel.
-2. **Sourcing actually works**: From a normal chat ("find me 20 SDRs in Mexico City"), the agent runs the full Apollo+PDL pipeline and lands real rows in the Candidates tab — no new buttons or panels required (golden rule: no UI redesign).
+1. **Sourcing is broken**: PDL credits get burned, but 0 candidates land in the Candidates tab.
+2. **Chat looks crowded** vs. the airy "magnifying-glass timeline" in your reference, and task cards aren't clickable.
 
-## How a turn flows after this change
+---
+
+## Part 1 — Sourcing: collect from BOTH providers + hide source names
+
+### Root cause of "0 candidates"
+
+In `src/lib/sourcing/agent.server.ts`, the collect step only enriches **Apollo** results:
 
 ```text
-User: "Find 20 SDRs for the HR-Tech SDR role, Mexico, remote"
-findable: (streams text) "On it — scoping and sourcing now."
-  [task] Normalize the brief                ✓
-  [task] Research titles + companies        ✓  (12 titles, 8 companies)
-  [task] Search Apollo + PDL                ✓  (847 candidates, 312 after dedupe)
-  [task] Collect top 20 into Candidates     ✓  (20 added, 0 skipped)
-findable: "Added 20 candidates to the Candidates tab. Want me to filter for SaaS background?"
+const apolloTop = sorted.filter((c) => c.source === "apollo").slice(0, limit);
+const apolloIds = apolloTop.map((c) => c.external_id);
+// ...enrichApolloProfiles(toEnrich)
 ```
 
-The Candidates tab pulse-highlights (same pattern as the Job tab today) when new rows arrive.
+If Apollo returns 0 (key missing, 401, rate-limited) but PDL returns 80, we burn PDL credits during search, then insert nothing because PDL rows are filtered out. That's exactly what you saw.
 
-## What we build
+### Fixes (in `agent.server.ts`)
 
-### 1. Task records (backend + stream)
+- **Insert PDL candidates directly** from the search payload (no enrichment endpoint — PDL `person/search` already returns full profile JSON we can map to `candidates`). Add a `pdl_id` column (migration below) and dedupe against it.
+- Keep Apollo enrichment path as-is for Apollo rows.
+- Merge top-N across both sources by `keyword_score` so we always fill the quota even when one provider is down.
+- If both providers return 0 or both error, mark the `collect` task `failed` with a clean message ("No matches found — try broadening the brief"). Never silently return 0.
 
-New table `agent_tasks` (RLS by `user_id`):
-- `id`, `user_id`, `conversation_id`, `message_id` (parent assistant msg), `kind` (enum: `normalize | research | search | collect | create_job`), `label`, `status` (`running | done | failed`), `summary` (short result text), `data` jsonb (counts, ids), `started_at`, `finished_at`.
-- Server emits SSE `event: task` payloads on create/update so the UI can render and animate without a refetch.
-- On reconnect / page refresh, tasks are reloaded from the table next to messages.
+### Hide provider names from users
 
-### 2. Agent tools wired into `/api/chat`
+Speak in product terms, not vendor names. Affects:
 
-Add three tools (the model can call them in any order, in parallel with `create_job`):
+- `agent.server.ts` task labels: `"Searching Apollo + PDL"` → `"Searching candidate pool"`; summary `"12 Apollo · 80 PDL · 90 after dedupe"` → `"90 matches found"`.
+- `source` / `display_source` column values stored on `candidates`: `"Apollo"` / `"pdl"` → `"Sourced"` (or keep raw provider in a private `provider` field, surface `"Sourced"` in UI).
+- System prompt in `src/routes/api/chat.ts`: drop "Apollo + PDL" → `"search our candidate pool"`.
+- Tool description for `source_candidates`: same wording change.
+- Any toast / error strings.
 
-- `source_candidates({ brief?: string, refine?: string, limit?: number })` — creates/reuses a `sourcing_projects` row for this conversation, runs normalize → research → `runSourcingSearch` → auto-`collectCandidates` for top N (default 20, cap 50). Streams one task per stage. Returns `{ added, skipped, preview_total }`.
-- `refine_search({ add_titles?: [], add_companies?: [], add_keywords?: [], locations?: [] })` — updates `search_criteria`, reruns search, re-collects new top-N delta. (Same task pattern.)
-- Keep `create_job` as-is.
+### Migration
 
-The model's system prompt is updated so it knows: "When the user asks to source / find / pull candidates, call `source_candidates`. Don't ask 10 questions first — call it with what you have, then refine."
+```sql
+ALTER TABLE public.candidates ADD COLUMN IF NOT EXISTS pdl_id text;
+CREATE INDEX IF NOT EXISTS candidates_pdl_id_idx ON public.candidates(user_id, pdl_id);
+```
 
-### 3. Stream protocol additions
+---
 
-The existing SSE stream already emits `delta`, `job`, `error`, `done`. We add:
-- `event: task` with `{ id, kind, label, status, summary, data }` — sent on insert and on every status change. UI upserts by `id`.
-- `event: candidates_added` with `{ count }` — triggers the Candidates tab pulse + query invalidation, same way `job` triggers the Job tab pulse today.
+## Part 2 — Chat redesign: timeline with clickable task cards
 
-### 4. UI: inline task cards
+### What changes visually
 
-In `app.c.$id.tsx` `ChatPanel`:
-- Group tasks under the assistant message they belong to (by `message_id`; live tasks during streaming attach to the in-flight assistant bubble).
-- New `<TaskCard>` component (small, dense, monospace counters): icon + label on the left, status pill on the right, animated shimmer while `running`, check on `done`, subtle red on `failed`. `summary` shown when present.
-- Tasks fade-in (`animate-fade-in`) and the status pill scale-pulses on transition. No external animation libs — uses the existing tailwind keyframes (`fade-in`, `scale-in`, `pulse`).
-- Persisted tasks are loaded by `getConversation` and rendered the same way for history.
+Match the reference exactly:
 
-### 5. Candidates pulse
+- **No bubbles** for assistant messages. Assistant text renders as plain prose on the page background, left-aligned, with a small magnifying-glass glyph in a left gutter (~32px). User messages stay as the soft grey rounded bubble, right-aligned.
+- **Each agent step is its own row** in the same transcript flow (not nested inside the message), with the same gutter icon. Steps appear in chronological order interleaved with prose.
+- Generous vertical rhythm (`space-y-6`), max width ~`720px`, no card borders on assistant prose.
+- The thinking dots become a single faint pulsing magnifying glass while a step is running.
 
-When the stream emits `candidates_added`, the conversation page invalidates `["candidates", id]` and briefly pulses the Candidates tab — mirrors the existing `jobCreated` flow for the Job tab. Zero changes to `CandidatesPanel` internals.
+### Task cards become artifact links
+
+A completed task is a card with: icon · title (e.g. "Job description drafted") · subtitle ("Open Job tab to review") · right-side arrow. Clicking it switches the workspace tab.
+
+Mapping:
+
+| Task kind        | Card title                  | onClick action              |
+| ---------------- | --------------------------- | --------------------------- |
+| `create_job`     | "Job description drafted"   | switch tab → `job`          |
+| `collect` (done) | "N candidates sourced"      | switch tab → `candidates`   |
+| `normalize`      | "Brief normalized"          | no-op (or expand inline)    |
+| `research`       | "Researched titles & co."   | no-op                       |
+| `search`         | "Search complete"           | no-op                       |
+
+Running / failed states keep the existing shimmer / red border but are not clickable.
+
+### Wiring
+
+- `TaskCard` gains an `onOpenTab?: (tab: "job" | "candidates") => void` prop. Pure presentation, parent decides routing.
+- `ChatPanel` already receives `messages`, `persistedTasks`, `liveTasks`. It flattens both into a single ordered timeline of `{kind: "message" | "task", ...}` sorted by `created_at`, then renders rows. Drops the current "tasks nested under message" grouping.
+- The page passes `setTab` down so cards can switch tabs.
+- Add a `create_job` task emission in `api/chat.ts` so the "Job description drafted" card actually exists in the timeline (today only the sourcing pipeline emits tasks; `create_job` does not). One row inserted into `agent_tasks` with `kind='create_job'`, `status='done'`, label `"Job description drafted"`.
+
+### Out of scope (not changing)
+
+- No changes to the Job / Candidates panels themselves.
+- No changes to auth, conversations list, or composer behaviour.
+- No model/provider swap (still using the gateway already wired).
+- No new icons beyond what `findable-icons.tsx` already exports.
+
+---
 
 ## Files touched
 
-- **DB migration** (new): `agent_tasks` table + RLS + grants.
-- `src/lib/conversations.functions.ts`: include `agent_tasks` in `getConversation`.
-- `src/routes/api/chat.ts`: add `source_candidates` + `refine_search` tools, task insert/update helpers, stream `event: task` and `event: candidates_added`, updated system prompt.
-- `src/lib/sourcing/agent.server.ts` (new): orchestrator that ties `normalize → research → runSourcingSearch → collectCandidates` together and emits task callbacks. Reuses every existing file in `src/lib/sourcing/`.
-- `src/routes/app.c.$id.tsx`: parse `task` + `candidates_added` SSE events, group tasks by assistant message, render `<TaskCard>` inside the assistant bubble, pulse Candidates tab.
-- `src/components/chat/task-card.tsx` (new): small presentational component.
-
-## Explicitly NOT in scope
-
-- No redesign of Chat / Job / Candidates panels — only inline task cards inside existing assistant bubbles + a tab pulse.
-- No new top-level routes, no sidebar changes, no "Sourcing" page.
-- No credit limits (still no enforcement, per earlier decision).
-- No phone webhook, no standard lookup tables.
-
-## Order of work
-
-1. Migration: `agent_tasks` + grants + RLS.
-2. `src/lib/sourcing/agent.server.ts` orchestrator with task callbacks.
-3. `/api/chat`: register `source_candidates` + `refine_search`, emit `task` / `candidates_added` events, update system prompt.
-4. `getConversation`: include tasks.
-5. `app.c.$id.tsx`: parse new events, render task cards, pulse Candidates tab.
-6. `TaskCard` component + animations.
-7. Smoke test: send "find 5 SDRs in Mexico City"; verify tasks appear, complete, and Candidates tab fills.
+- `supabase/migrations/<new>.sql` — add `pdl_id` column + index.
+- `src/lib/sourcing/agent.server.ts` — insert PDL directly, merge providers in collect, rename labels.
+- `src/lib/sourcing/pdl.server.ts` — return the extra fields we need to map into `candidates` (email/phone/location/experience if available in `person/search`).
+- `src/routes/api/chat.ts` — system prompt wording; emit `create_job` task into `agent_tasks` + SSE.
+- `src/components/chat/task-card.tsx` — clickable variant, refined typography, no bubble.
+- `src/routes/app.c.$id.tsx` — flatten messages+tasks into one timeline, render gutter-icon rows, pass `setTab` to cards, restyle user/assistant rows.
