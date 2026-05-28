@@ -14,6 +14,8 @@ import {
   listConversations,
   createConversation,
   deleteConversation,
+  renameConversation,
+  setConversationPinned,
 } from "@/lib/conversations.functions";
 import { useTheme } from "@/hooks/use-theme";
 import {
@@ -25,8 +27,17 @@ import {
   Sun,
   Moon,
   LogOut,
-  XSm,
+  Pencil,
+  Pin,
 } from "@/components/findable-icons";
+import { Trash2, PinOff } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/app")({
@@ -42,7 +53,13 @@ export const Route = createFileRoute("/app")({
   component: AppLayout,
 });
 
-type Conv = { id: string; title: string; updated_at?: string; created_at?: string };
+type Conv = {
+  id: string;
+  title: string;
+  updated_at?: string;
+  created_at?: string;
+  pinned_at?: string | null;
+};
 
 function AppLayout() {
   const navigate = useNavigate();
@@ -50,6 +67,8 @@ function AppLayout() {
   const list = useServerFn(listConversations);
   const create = useServerFn(createConversation);
   const del = useServerFn(deleteConversation);
+  const rename = useServerFn(renameConversation);
+  const setPinned = useServerFn(setConversationPinned);
 
   const { data: conversations = [] } = useQuery({
     queryKey: ["conversations"],
@@ -68,6 +87,24 @@ function AppLayout() {
     mutationFn: (id: string) => del({ data: { id } }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["conversations"] }),
   });
+
+  const renameMut = useMutation({
+    mutationFn: (vars: { id: string; title: string }) =>
+      rename({ data: vars }),
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["conversations"] });
+      qc.invalidateQueries({ queryKey: ["conversation", vars.id] });
+    },
+  });
+
+  const pinMut = useMutation({
+    mutationFn: (vars: { id: string; pinned: boolean }) =>
+      setPinned({ data: vars }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["conversations"] }),
+  });
+
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
 
   useEffect(() => {
     const {
@@ -104,7 +141,7 @@ function AppLayout() {
     return (conversations as Conv[]).filter((c) => c.title.toLowerCase().includes(q));
   }, [conversations, query]);
 
-  const groups = useMemo(() => groupByDate(filtered), [filtered]);
+  const groups = useMemo(() => groupConversations(filtered), [filtered]);
 
   async function onSignOut() {
     console.info("[auth] sign-out requested");
@@ -164,30 +201,32 @@ function AppLayout() {
               </div>
               <div className="space-y-0.5">
                 {g.items.map((c) => (
-                  <Link
+                  <ConversationRow
                     key={c.id}
-                    to="/app/c/$id"
-                    params={{ id: c.id }}
-                    className={cn(
-                      "group flex items-center gap-2 rounded-[8px] px-2.5 py-1.5 text-[13px] text-text/90 transition hover:bg-bg-hover",
-                      activeId === c.id && "bg-bg-active text-text",
-                    )}
-                  >
-                    <ChatIcon size={14} className="shrink-0 text-text-faint" />
-                    <span className="flex-1 truncate">{c.title || "Untitled"}</span>
-                    <button
-                      type="button"
-                      aria-label="Delete conversation"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        if (confirm("Delete this conversation?")) delMut.mutate(c.id);
-                      }}
-                      className="rounded p-0.5 text-text-faint opacity-0 transition hover:bg-bg-active hover:text-text group-hover:opacity-100"
-                    >
-                      <XSm />
-                    </button>
-                  </Link>
+                    conv={c}
+                    active={activeId === c.id}
+                    renaming={renamingId === c.id}
+                    renameDraft={renameDraft}
+                    setRenameDraft={setRenameDraft}
+                    onStartRename={() => {
+                      setRenamingId(c.id);
+                      setRenameDraft(c.title || "");
+                    }}
+                    onCancelRename={() => setRenamingId(null)}
+                    onCommitRename={() => {
+                      const t = renameDraft.trim();
+                      if (t && t !== c.title) {
+                        renameMut.mutate({ id: c.id, title: t });
+                      }
+                      setRenamingId(null);
+                    }}
+                    onTogglePin={() =>
+                      pinMut.mutate({ id: c.id, pinned: !c.pinned_at })
+                    }
+                    onDelete={() => {
+                      if (confirm("Delete this conversation?")) delMut.mutate(c.id);
+                    }}
+                  />
                 ))}
               </div>
             </div>
@@ -268,4 +307,142 @@ function groupByDate(items: Conv[]): { label: string; items: Conv[] }[] {
   return Object.entries(buckets)
     .filter(([, arr]) => arr.length > 0)
     .map(([label, items]) => ({ label, items }));
+}
+
+function groupConversations(items: Conv[]): { label: string; items: Conv[] }[] {
+  const pinned = items.filter((c) => c.pinned_at);
+  const rest = items.filter((c) => !c.pinned_at);
+  const groups = groupByDate(rest);
+  if (pinned.length > 0) {
+    pinned.sort(
+      (a, b) =>
+        new Date(b.pinned_at ?? 0).getTime() -
+        new Date(a.pinned_at ?? 0).getTime(),
+    );
+    return [{ label: "Pinned", items: pinned }, ...groups];
+  }
+  return groups;
+}
+
+function ConversationRow({
+  conv,
+  active,
+  renaming,
+  renameDraft,
+  setRenameDraft,
+  onStartRename,
+  onCancelRename,
+  onCommitRename,
+  onTogglePin,
+  onDelete,
+}: {
+  conv: Conv;
+  active: boolean;
+  renaming: boolean;
+  renameDraft: string;
+  setRenameDraft: (v: string) => void;
+  onStartRename: () => void;
+  onCancelRename: () => void;
+  onCommitRename: () => void;
+  onTogglePin: () => void;
+  onDelete: () => void;
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const pinned = Boolean(conv.pinned_at);
+
+  return (
+    <Link
+      to="/app/c/$id"
+      params={{ id: conv.id }}
+      className={cn(
+        "group flex items-center gap-2 rounded-[8px] px-2.5 py-1.5 text-[13px] text-text/90 transition hover:bg-bg-hover",
+        active && "bg-bg-active text-text",
+      )}
+      onClick={(e) => {
+        if (renaming) e.preventDefault();
+      }}
+    >
+      {pinned ? (
+        <Pin size={14} className="shrink-0 text-text-faint" />
+      ) : (
+        <ChatIcon size={14} className="shrink-0 text-text-faint" />
+      )}
+      {renaming ? (
+        <input
+          autoFocus
+          value={renameDraft}
+          onChange={(e) => setRenameDraft(e.target.value)}
+          onClick={(e) => e.preventDefault()}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              onCommitRename();
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              onCancelRename();
+            }
+          }}
+          onBlur={onCommitRename}
+          className="flex-1 min-w-0 rounded bg-bg-input px-1.5 py-0.5 text-[13px] text-text outline-none ring-1 ring-border-strong"
+        />
+      ) : (
+        <span className="flex-1 truncate">{conv.title || "Untitled"}</span>
+      )}
+      <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            aria-label="Conversation options"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            className={cn(
+              "rounded p-0.5 text-text-faint transition hover:bg-bg-active hover:text-text",
+              menuOpen || active
+                ? "opacity-100"
+                : "opacity-0 group-hover:opacity-100",
+            )}
+          >
+            <Dots size={14} />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="end"
+          className="w-44"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <DropdownMenuItem
+            onSelect={(e) => {
+              e.preventDefault();
+              onStartRename();
+            }}
+          >
+            <Pencil size={14} />
+            <span>Rename</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onSelect={(e) => {
+              e.preventDefault();
+              onTogglePin();
+            }}
+          >
+            {pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin size={14} />}
+            <span>{pinned ? "Unpin conversation" : "Pin conversation"}</span>
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onSelect={(e) => {
+              e.preventDefault();
+              onDelete();
+            }}
+            className="text-destructive focus:text-destructive"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            <span>Delete</span>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </Link>
+  );
 }
