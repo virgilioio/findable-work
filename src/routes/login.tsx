@@ -133,7 +133,10 @@ function LoginPage() {
 
           {mode === "signin" && (
             <div className="-mt-1 mb-1 text-right">
-              <a href="#" className="text-[12.5px] text-[var(--text-mute)] hover:text-[var(--text)]">
+              <a
+                href="#"
+                className="text-[12.5px] text-[var(--text-mute)] hover:text-[var(--text)]"
+              >
                 Forgot password?
               </a>
             </div>
@@ -150,11 +153,7 @@ function LoginPage() {
             disabled={loading}
             className="mt-1.5 h-10 rounded-[10px] bg-[var(--text)] text-[14px] font-medium text-[var(--text-invert)] disabled:opacity-70"
           >
-            {loading
-              ? "Signing in…"
-              : mode === "signin"
-                ? "Sign in"
-                : "Create account"}
+            {loading ? "Signing in…" : mode === "signin" ? "Sign in" : "Create account"}
           </button>
         </form>
 
@@ -176,8 +175,12 @@ function LoginPage() {
       <div className="absolute bottom-5 flex items-center gap-3.5 text-[12px] text-[var(--text-faint)]">
         <span>© 2026 findable</span>
         <span>·</span>
-        <a href="#" className="hover:text-[var(--text-mute)]">Terms</a>
-        <a href="#" className="hover:text-[var(--text-mute)]">Privacy</a>
+        <a href="#" className="hover:text-[var(--text-mute)]">
+          Terms
+        </a>
+        <a href="#" className="hover:text-[var(--text-mute)]">
+          Privacy
+        </a>
       </div>
     </div>
   );
