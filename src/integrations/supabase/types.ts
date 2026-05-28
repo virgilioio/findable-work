@@ -14,6 +14,51 @@ export type Database = {
   }
   public: {
     Tables: {
+      agent_tasks: {
+        Row: {
+          conversation_id: string
+          created_at: string
+          data: Json
+          finished_at: string | null
+          id: string
+          kind: string
+          label: string
+          message_id: string | null
+          started_at: string
+          status: string
+          summary: string | null
+          user_id: string
+        }
+        Insert: {
+          conversation_id: string
+          created_at?: string
+          data?: Json
+          finished_at?: string | null
+          id?: string
+          kind: string
+          label?: string
+          message_id?: string | null
+          started_at?: string
+          status?: string
+          summary?: string | null
+          user_id: string
+        }
+        Update: {
+          conversation_id?: string
+          created_at?: string
+          data?: Json
+          finished_at?: string | null
+          id?: string
+          kind?: string
+          label?: string
+          message_id?: string | null
+          started_at?: string
+          status?: string
+          summary?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       candidates: {
         Row: {
           activity: Json

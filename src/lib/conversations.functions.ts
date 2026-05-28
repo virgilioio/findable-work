@@ -60,8 +60,12 @@ export const getConversation = createServerFn({ method: "POST" })
   .inputValidator((input) => z.object({ id: z.string().uuid() }).parse(input))
   .handler(async ({ context, data }) => {
     const { supabase } = context;
-    const [{ data: conv, error: e1 }, { data: messages, error: e2 }, { data: job, error: e3 }] =
-      await Promise.all([
+    const [
+      { data: conv, error: e1 },
+      { data: messages, error: e2 },
+      { data: job, error: e3 },
+      { data: tasks, error: e4 },
+    ] = await Promise.all([
         supabase.from("conversations").select("id,title,updated_at,created_at").eq("id", data.id).maybeSingle(),
         supabase
           .from("messages")
@@ -69,10 +73,16 @@ export const getConversation = createServerFn({ method: "POST" })
           .eq("conversation_id", data.id)
           .order("created_at", { ascending: true }),
         supabase.from("jobs").select("*").eq("conversation_id", data.id).maybeSingle(),
+        supabase
+          .from("agent_tasks")
+          .select("id,message_id,kind,label,status,summary,data,started_at,finished_at,created_at")
+          .eq("conversation_id", data.id)
+          .order("created_at", { ascending: true }),
       ]);
     if (e1) throw new Error(e1.message);
     if (e2) throw new Error(e2.message);
     if (e3) throw new Error(e3.message);
+    if (e4) throw new Error(e4.message);
     if (!conv) throw new Error("Conversation not found");
-    return { conversation: conv, messages: messages ?? [], job: job ?? null };
+    return { conversation: conv, messages: messages ?? [], job: job ?? null, tasks: tasks ?? [] };
   });
