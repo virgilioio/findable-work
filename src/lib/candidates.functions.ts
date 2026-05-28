@@ -131,7 +131,7 @@ export const updateCandidate = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const { supabase } = context;
     const { id, ...patch } = data;
-    const update: Record<string, unknown> = { ...patch };
+    const update: { stage?: typeof STAGES[number]; starred?: boolean; stage_changed_at?: string } = { ...patch };
     if (patch.stage) update.stage_changed_at = new Date().toISOString();
     const { data: row, error } = await supabase
       .from("candidates")
