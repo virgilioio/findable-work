@@ -17,6 +17,9 @@ export type PdlPreview = {
   has_state: boolean;
   has_country: boolean;
   keyword_score: number;
+  // Full record kept server-side so the collect step can hydrate candidates
+  // without a second API round-trip. Never sent to the browser.
+  raw?: any;
 };
 
 function buildEsQuery(c: SearchCriteria): Record<string, unknown> {
@@ -83,6 +86,7 @@ export async function searchPdl(criteria: SearchCriteria, size = 100): Promise<P
       has_city: Boolean(p.location_locality),
       has_state: Boolean(p.location_region),
       has_country: Boolean(p.location_country),
+      raw: p,
     };
   });
   return scoreKeywordsLocally(rows, criteria.keywords ?? []);
