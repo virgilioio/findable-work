@@ -101,3 +101,18 @@ export const Bell = (p: IconProps) => (
 export const LogOut = (p: IconProps) => (
   <Stroke {...p} d="M8 3H3v14h5 M13 6 L17 10 L13 14 M7 10h10" />
 );
+export const Star = ({ fill = "none", ...p }: IconProps) => (
+  <Stroke fill={fill} {...p} d="M10 2.5 L12.2 7.4 L17.5 8 L13.5 11.6 L14.7 17 L10 14.3 L5.3 17 L6.5 11.6 L2.5 8 L7.8 7.4 Z" />
+);
+export const Linkedin = (p: IconProps) => (
+  <Stroke {...p} d="M3 4.5h2.5v12H3z M4.25 2.5a1.25 1.25 0 1 1 0 2.5 1.25 1.25 0 0 1 0-2.5Z M8 7.5h2.4v1.6c.4-.8 1.4-1.8 3-1.8 2.4 0 3.1 1.5 3.1 3.6v5.6H14V11.3c0-1 -.4-1.7-1.4-1.7-1 0-1.6.7-1.6 1.7v5.2H8.6Z" />
+);
+export const Doc = (p: IconProps) => (
+  <Stroke {...p} d="M5 3h7l3 3v11H5z M12 3v3h3 M7 10h6 M7 13h6" />
+);
+export const Pencil = (p: IconProps) => (
+  <Stroke {...p} d="M3 17l3-1 9-9-2-2-9 9-1 3Z M12 5l3 3" />
+);
+export const Upload = (p: IconProps) => (
+  <Stroke {...p} d="M10 3v10 M5 8 L10 3 L15 8 M4 16h12" />
+);
