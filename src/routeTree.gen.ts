@@ -16,6 +16,7 @@ import { Route as ApiChatRouteImport } from './routes/api/chat'
 import { Route as AuthenticatedAppRouteImport } from './routes/_authenticated/app'
 import { Route as AuthenticatedAppIndexRouteImport } from './routes/_authenticated/app.index'
 import { Route as ApiPublicGuestChatRouteImport } from './routes/api/public/guest-chat'
+import { Route as AuthenticatedAdminPromptsRouteImport } from './routes/_authenticated/admin.prompts'
 import { Route as AuthenticatedAppCIdRouteImport } from './routes/_authenticated/app.c.$id'
 
 const LoginRoute = LoginRouteImport.update({
@@ -52,6 +53,12 @@ const ApiPublicGuestChatRoute = ApiPublicGuestChatRouteImport.update({
   path: '/api/public/guest-chat',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedAdminPromptsRoute =
+  AuthenticatedAdminPromptsRouteImport.update({
+    id: '/admin/prompts',
+    path: '/admin/prompts',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedAppCIdRoute = AuthenticatedAppCIdRouteImport.update({
   id: '/c/$id',
   path: '/c/$id',
@@ -63,6 +70,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/app': typeof AuthenticatedAppRouteWithChildren
   '/api/chat': typeof ApiChatRoute
+  '/admin/prompts': typeof AuthenticatedAdminPromptsRoute
   '/api/public/guest-chat': typeof ApiPublicGuestChatRoute
   '/app/': typeof AuthenticatedAppIndexRoute
   '/app/c/$id': typeof AuthenticatedAppCIdRoute
@@ -71,6 +79,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/api/chat': typeof ApiChatRoute
+  '/admin/prompts': typeof AuthenticatedAdminPromptsRoute
   '/api/public/guest-chat': typeof ApiPublicGuestChatRoute
   '/app': typeof AuthenticatedAppIndexRoute
   '/app/c/$id': typeof AuthenticatedAppCIdRoute
@@ -82,6 +91,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/_authenticated/app': typeof AuthenticatedAppRouteWithChildren
   '/api/chat': typeof ApiChatRoute
+  '/_authenticated/admin/prompts': typeof AuthenticatedAdminPromptsRoute
   '/api/public/guest-chat': typeof ApiPublicGuestChatRoute
   '/_authenticated/app/': typeof AuthenticatedAppIndexRoute
   '/_authenticated/app/c/$id': typeof AuthenticatedAppCIdRoute
@@ -93,6 +103,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/app'
     | '/api/chat'
+    | '/admin/prompts'
     | '/api/public/guest-chat'
     | '/app/'
     | '/app/c/$id'
@@ -101,6 +112,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/api/chat'
+    | '/admin/prompts'
     | '/api/public/guest-chat'
     | '/app'
     | '/app/c/$id'
@@ -111,6 +123,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/_authenticated/app'
     | '/api/chat'
+    | '/_authenticated/admin/prompts'
     | '/api/public/guest-chat'
     | '/_authenticated/app/'
     | '/_authenticated/app/c/$id'
@@ -175,6 +188,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicGuestChatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/admin/prompts': {
+      id: '/_authenticated/admin/prompts'
+      path: '/admin/prompts'
+      fullPath: '/admin/prompts'
+      preLoaderRoute: typeof AuthenticatedAdminPromptsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/app/c/$id': {
       id: '/_authenticated/app/c/$id'
       path: '/c/$id'
@@ -200,10 +220,12 @@ const AuthenticatedAppRouteWithChildren =
 
 interface AuthenticatedRouteChildren {
   AuthenticatedAppRoute: typeof AuthenticatedAppRouteWithChildren
+  AuthenticatedAdminPromptsRoute: typeof AuthenticatedAdminPromptsRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedAppRoute: AuthenticatedAppRouteWithChildren,
+  AuthenticatedAdminPromptsRoute: AuthenticatedAdminPromptsRoute,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
