@@ -1,4 +1,4 @@
-import { createFileRoute, Link, Outlet, redirect, useNavigate, useParams, useRouter } from "@tanstack/react-router";
+import { createFileRoute, Link, Outlet, redirect, useNavigate, useParams } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -35,7 +35,6 @@ export const Route = createFileRoute("/app")({
 type Conv = { id: string; title: string; updated_at?: string; created_at?: string };
 
 function AppLayout() {
-  const router = useRouter();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const list = useServerFn(listConversations);
@@ -61,13 +60,20 @@ function AppLayout() {
   });
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
-      router.invalidate();
-      qc.invalidateQueries();
-      if (!session) navigate({ to: "/login", replace: true });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_OUT" || (event === "SIGNED_IN" && !session)) {
+        qc.clear();
+        // Use window.location to avoid any router-state races on hard sign-out.
+        if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+          window.location.replace("/login");
+        }
+      } else if (event === "SIGNED_IN") {
+        qc.invalidateQueries();
+      }
     });
     return () => subscription.unsubscribe();
-  }, [router, qc, navigate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const activeId = useActiveConversationId();
   const [query, setQuery] = useState("");

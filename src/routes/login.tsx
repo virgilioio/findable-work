@@ -1,10 +1,14 @@
-import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { createFileRoute, redirect, useNavigate, useRouter } from "@tanstack/react-router";
+import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Logo } from "@/components/findable-icons";
 
 export const Route = createFileRoute("/login")({
   head: () => ({ meta: [{ title: "Sign in — findable" }] }),
+  beforeLoad: async () => {
+    const { data } = await supabase.auth.getUser();
+    if (data.user) throw redirect({ to: "/app" });
+  },
   component: LoginPage,
 });
 
@@ -16,12 +20,6 @@ function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      if (data.user) navigate({ to: "/app", replace: true });
-    });
-  }, [navigate]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();

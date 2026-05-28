@@ -1,44 +1,44 @@
-# Reveal phone numbers — credit-safe design
+# Fix infinite /app ↔ /login redirect loop
 
-The user asked for two things that combine naturally: turn on Apollo's `reveal_phone_number` AND give the user a toggle. Doing it on every bulk enrichment would burn export credits for every sourced candidate (even ones nobody contacts). Instead, we'll reveal **on demand, per candidate**, and surface a badge so the user knows ahead of time whether a phone exists.
+## Root cause
 
-## What the user will see
+In `src/routes/app.tsx`, an `onAuthStateChange` listener is registered inside an effect with `[router, qc, navigate]` as dependencies:
 
-1. **Badge on candidate cards & drawer**: a small "📞 Direct phone" pill whenever `has_direct_phone` is true (already collected from both Apollo and PDL — just not displayed).
-2. **Candidate drawer**:
-   - If `phone` is already populated (PDL path) → show it as today.
-   - If empty but `has_direct_phone` is true → show a **"Reveal phone (1 credit)"** button. Clicking it calls Apollo with `reveal_phone_number: true` for that single ID, stores the number on the candidate row, and re-renders.
-   - If `has_direct_phone` is false → show muted "No direct phone available".
+```ts
+useEffect(() => {
+  const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
+    router.invalidate();
+    qc.invalidateQueries();
+    if (!session) navigate({ to: "/login", replace: true });
+  });
+  return () => subscription.unsubscribe();
+}, [router, qc, navigate]);
+```
 
-## Changes
+Three problems compound into a loop:
 
-### Backend
-- `src/lib/sourcing/apollo.server.ts`
-  - Add `revealApolloPhone(apolloId)`: calls `/people/bulk_match` for one ID with `reveal_phone_number: true`, returns the sanitized number.
-  - Leave the bulk `enrichApolloProfiles` call as-is (`reveal_phone_number: false`) so initial sourcing stays credit-cheap.
-- New server fn `src/lib/candidates.functions.ts` → `revealCandidatePhone({ candidateId })`:
-  - `requireSupabaseAuth`, load candidate by id (RLS-scoped), require `apollo_id`.
-  - Call `revealApolloPhone`, update `candidates.phone`, append an `activity` entry (`"Phone revealed"`), return the new phone.
-  - Increments `sourcing_credits_usage` by 1 via existing `increment_sourcing_usage` RPC so users see the cost.
+1. **`navigate` from `useNavigate()` is a fresh reference each render.** Every re-render unsubscribes and re-subscribes. Each fresh subscription fires `INITIAL_SESSION` immediately, which calls `router.invalidate()` → triggers re-render → new `navigate` ref → re-subscribe → fires again. A second tick later it can briefly see `session === null` while Supabase restores tokens and bounces the user to `/login`.
+2. **`router.invalidate()` is called on EVERY auth event**, including `INITIAL_SESSION` and `TOKEN_REFRESHED`. That forces the `/app` route's `beforeLoad` (which awaits `supabase.auth.getUser()`) to re-run on every event, multiplying the chance of a transient null read.
+3. **`login.tsx` redirects back the moment it sees a user** (`useEffect` → `getUser` → `navigate("/app")`). The moment `/app` bounces here, login bounces back. Infinite loop.
 
-### Frontend
-- `src/components/candidates/candidate-drawer.tsx`
-  - Add `has_direct_phone` to the candidate type (read from `match_breakdown` or a new column? See data shape note below).
-  - Replace the static `KV label="Phone"` block with a `<PhoneRow />` that handles the three states above. Uses `useMutation` → `revealCandidatePhone`, toasts on success/error, optimistically updates the row.
-- `src/components/candidates/candidates-panel.tsx`
-  - Render the "📞" pill next to candidate name when `has_direct_phone` is true.
+## Fix
 
-### Data shape
-`has_direct_phone` is currently only on preview rows (`sourcing_preview_candidates.preview` jsonb) and isn't persisted on `candidates`. We need it on the candidate to drive the badge/button after promotion.
+### `src/routes/app.tsx`
+- Replace the unstable effect with one that has an **empty dependency array** and uses `router.navigate` (stable) instead of the `useNavigate` hook reference inside the listener.
+- Only react to meaningful events: `SIGNED_OUT` → navigate to `/login`. Skip `INITIAL_SESSION` / `TOKEN_REFRESHED` / `USER_UPDATED`.
+- Only invalidate caches on `SIGNED_IN` / `SIGNED_OUT`, not on every event.
+- Remove the standalone `getUser()` effect that sets email — read it from the same listener (or from the existing `beforeLoad` return) to avoid an extra round-trip.
 
-- Add a nullable `boolean` column `candidates.has_direct_phone` (default `false`).
-- Update the promotion path in `src/lib/sourcing/agent.server.ts` (around line 326/382) to write `has_direct_phone` from both Apollo (`p.phone_numbers?.length > 0`) and PDL.
-- Update `src/lib/sourcing/search.functions.ts` line ~208 similarly.
+### `src/routes/login.tsx`
+- Remove the `useEffect` that redirects authenticated users back to `/app`. The redirect-back behavior should only happen **after the user explicitly submits the form** (which already navigates). An automatic redirect on mount is what closes the loop with `/app`'s misbehaving listener — and once `/app`'s listener is fixed, this auto-redirect serves no purpose (a signed-in user lands on `/app` directly, not `/login`).
+- If we want to keep a guard so a signed-in user manually visiting `/login` is bounced, do it in `beforeLoad` (runs once, server + client) instead of in a `useEffect` that races with auth restoration.
 
-## Out of scope
-- No bulk "reveal all phones" button (intentional — too easy to burn credits accidentally).
-- No phone-reveal during the initial sourcing pass.
-- No changes to PDL (already returns numbers without extra credits).
+## Files changed
+- `src/routes/app.tsx` — fix listener (stable refs, filter events, no constant invalidation).
+- `src/routes/login.tsx` — replace `useEffect` redirect with a `beforeLoad` guard.
 
-## Cost note for the user
-Apollo charges export credits per phone reveal. With this design, credits are only spent when the recruiter explicitly clicks "Reveal phone" on a candidate they actually plan to contact.
+## Verification
+- Hard reload `/app` while signed in → no bouncing, page renders once.
+- Hard reload `/login` while signed in → redirects to `/app` once (via `beforeLoad`).
+- Click "Sign out" → goes to `/login` once and stays.
+- Sign in with email/password → goes to `/app` once and stays.
