@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { toast } from "sonner";
 import {
   getOutreach,
   upsertOutreach,
@@ -11,7 +10,7 @@ import {
   DEFAULT_FOLLOWUPS,
 } from "@/lib/outreach/outreach.functions";
 import { listCandidates } from "@/lib/candidates.functions";
-import { Send, Linkedin, Sparkle, Calendar, Check } from "@/components/findable-icons";
+import { Send, Linkedin } from "@/components/findable-icons";
 import { cn } from "@/lib/utils";
 
 type Followup = { day: number; channel: string; subject: string; enabled: boolean };
