@@ -182,6 +182,11 @@ export const collectCandidates = createServerFn({ method: "POST" })
       .map((p) => p.external_id);
 
     const enriched = await enrichApolloProfiles(toEnrich);
+    // Build a quick external_id → has_direct_phone lookup from the preview rows
+    // so we can persist the flag without paying for a phone reveal.
+    const phoneFlag = new Map<string, boolean>(
+      apolloPreviews.map((p: any) => [p.external_id, Boolean(p.preview?.has_direct_phone)]),
+    );
 
     if (!data.conversation_id) {
       throw new Error("conversation_id is required to attach collected candidates");
@@ -221,6 +226,7 @@ export const collectCandidates = createServerFn({ method: "POST" })
           match_breakdown: [] as any,
           apollo_id: e.id,
           linkedin_slug: slug,
+          has_direct_phone: phoneFlag.get(e.id) ?? false,
         })
         .select("*")
         .single();
