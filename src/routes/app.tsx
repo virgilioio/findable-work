@@ -234,9 +234,7 @@ function AppLayout() {
                     onTogglePin={() =>
                       pinMut.mutate({ id: c.id, pinned: !c.pinned_at })
                     }
-                    onDelete={() => {
-                      if (confirm("Delete this conversation?")) delMut.mutate(c.id);
-                    }}
+                    onDelete={() => setDeletingId(c.id)}
                   />
                 ))}
               </div>
