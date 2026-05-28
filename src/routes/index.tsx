@@ -8,6 +8,7 @@ import { AuthDialog, type AuthReason } from "@/components/auth/auth-dialog";
 import { ClarifyCard, type ClarifyData } from "@/components/chat/clarify-card";
 import {
   Logo,
+  Wordmark,
   Send as SendIcon,
   Sparkle,
   Briefcase,
