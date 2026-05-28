@@ -1,5 +1,5 @@
 import { createFileRoute, Link, Outlet, redirect, useNavigate, useParams, useRouter } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
@@ -8,8 +8,18 @@ import {
   createConversation,
   deleteConversation,
 } from "@/lib/conversations.functions";
-import { Button } from "@/components/ui/button";
-import { Plus, MessageSquare, Trash2, LogOut } from "lucide-react";
+import { useTheme } from "@/hooks/use-theme";
+import {
+  Logo,
+  Plus,
+  Search as SearchIcon,
+  Dots,
+  Chat as ChatIcon,
+  Sun,
+  Moon,
+  LogOut,
+  XSm,
+} from "@/components/gio-icons";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/app")({
@@ -21,6 +31,8 @@ export const Route = createFileRoute("/app")({
   },
   component: AppLayout,
 });
+
+type Conv = { id: string; title: string; updated_at?: string; created_at?: string };
 
 function AppLayout() {
   const router = useRouter();
@@ -58,61 +70,141 @@ function AppLayout() {
   }, [router, qc, navigate]);
 
   const activeId = useActiveConversationId();
+  const [query, setQuery] = useState("");
+  const [email, setEmail] = useState<string>("");
+  const { theme, toggle } = useTheme();
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? ""));
+  }, []);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return conversations as Conv[];
+    return (conversations as Conv[]).filter((c) => c.title.toLowerCase().includes(q));
+  }, [conversations, query]);
+
+  const groups = useMemo(() => groupByDate(filtered), [filtered]);
 
   async function onSignOut() {
     await supabase.auth.signOut();
   }
 
   return (
-    <div className="flex h-screen w-full bg-background text-foreground">
-      <aside className="flex w-64 flex-col border-r bg-sidebar text-sidebar-foreground">
-        <div className="flex items-center justify-between p-3">
-          <Link to="/app" className="text-sm font-semibold">
-            Recruit AI
+    <div className="flex h-screen w-full bg-bg text-text">
+      <aside
+        className="flex flex-col border-r border-border bg-bg-side"
+        style={{ width: "var(--side-w)" }}
+      >
+        {/* Brand */}
+        <div className="flex items-center justify-between px-4 pt-4 pb-3">
+          <Link to="/app" className="flex items-center gap-2 text-text">
+            <Logo size={22} />
+            <span className="text-[15px] font-semibold tracking-tight">Gio AI</span>
           </Link>
-          <Button size="sm" variant="ghost" onClick={() => createMut.mutate()} disabled={createMut.isPending}>
-            <Plus className="h-4 w-4" />
-          </Button>
         </div>
-        <div className="flex-1 space-y-0.5 overflow-y-auto px-2 pb-2">
-          {conversations.length === 0 && (
-            <p className="px-2 py-4 text-xs text-muted-foreground">
-              No conversations yet. Click + to start one.
+
+        {/* New project */}
+        <div className="px-3 pb-2">
+          <button
+            onClick={() => createMut.mutate()}
+            disabled={createMut.isPending}
+            className="flex w-full items-center gap-2 rounded-[10px] border border-border bg-bg px-3 py-2 text-[13px] font-medium text-text shadow-[var(--shadow-sm)] transition hover:bg-bg-hover disabled:opacity-60"
+          >
+            <Plus size={16} />
+            New project
+          </button>
+        </div>
+
+        {/* Search */}
+        <div className="px-3 pb-3">
+          <div className="flex items-center gap-2 rounded-[10px] bg-bg-input px-2.5 py-1.5">
+            <SearchIcon size={14} className="text-text-faint" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search"
+              className="w-full bg-transparent text-[13px] outline-none placeholder:text-text-faint"
+            />
+          </div>
+        </div>
+
+        {/* Conversation list */}
+        <div className="flex-1 overflow-y-auto px-2 pb-2">
+          {filtered.length === 0 && (
+            <p className="px-3 py-6 text-center text-xs text-text-faint">
+              {query ? "No matches." : "No projects yet. Click + to start one."}
             </p>
           )}
-          {conversations.map((c) => (
-            <Link
-              key={c.id}
-              to="/app/c/$id"
-              params={{ id: c.id }}
-              className={cn(
-                "group flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-sidebar-accent",
-                activeId === c.id && "bg-sidebar-accent",
-              )}
-            >
-              <MessageSquare className="h-3.5 w-3.5 shrink-0 opacity-60" />
-              <span className="flex-1 truncate">{c.title}</span>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  if (confirm("Delete this conversation?")) delMut.mutate(c.id);
-                }}
-                className="opacity-0 transition group-hover:opacity-60 hover:opacity-100"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            </Link>
+          {groups.map((g) => (
+            <div key={g.label} className="mb-3">
+              <div className="px-3 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wide text-text-faint">
+                {g.label}
+              </div>
+              <div className="space-y-0.5">
+                {g.items.map((c) => (
+                  <Link
+                    key={c.id}
+                    to="/app/c/$id"
+                    params={{ id: c.id }}
+                    className={cn(
+                      "group flex items-center gap-2 rounded-[8px] px-2.5 py-1.5 text-[13px] text-text/90 transition hover:bg-bg-hover",
+                      activeId === c.id && "bg-bg-active text-text",
+                    )}
+                  >
+                    <ChatIcon size={14} className="shrink-0 text-text-faint" />
+                    <span className="flex-1 truncate">{c.title || "Untitled"}</span>
+                    <button
+                      type="button"
+                      aria-label="Delete conversation"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (confirm("Delete this conversation?")) delMut.mutate(c.id);
+                      }}
+                      className="rounded p-0.5 text-text-faint opacity-0 transition hover:bg-bg-active hover:text-text group-hover:opacity-100"
+                    >
+                      <XSm />
+                    </button>
+                  </Link>
+                ))}
+              </div>
+            </div>
           ))}
         </div>
-        <div className="border-t p-2">
-          <Button variant="ghost" size="sm" className="w-full justify-start" onClick={onSignOut}>
-            <LogOut className="mr-2 h-4 w-4" /> Sign out
-          </Button>
+
+        {/* Footer */}
+        <div className="flex items-center gap-2 border-t border-border px-3 py-2.5">
+          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-text text-text-invert text-[11px] font-medium">
+            {(email[0] ?? "?").toUpperCase()}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[12px] text-text">{email || "Signed in"}</p>
+          </div>
+          <button
+            onClick={toggle}
+            aria-label="Toggle theme"
+            className="rounded-md p-1.5 text-text-mute transition hover:bg-bg-hover hover:text-text"
+          >
+            {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
+          </button>
+          <button
+            onClick={onSignOut}
+            aria-label="Sign out"
+            className="rounded-md p-1.5 text-text-mute transition hover:bg-bg-hover hover:text-text"
+          >
+            <LogOut size={14} />
+          </button>
+          <button
+            aria-label="More"
+            className="rounded-md p-1.5 text-text-mute transition hover:bg-bg-hover hover:text-text"
+          >
+            <Dots size={14} />
+          </button>
         </div>
       </aside>
-      <main className="flex flex-1 flex-col overflow-hidden">
+
+      <main className="flex flex-1 flex-col overflow-hidden bg-bg">
         <Outlet />
       </main>
     </div>
@@ -126,4 +218,28 @@ function useActiveConversationId(): string | null {
   } catch {
     return null;
   }
+}
+
+function groupByDate(items: Conv[]): { label: string; items: Conv[] }[] {
+  const now = new Date();
+  const startOfDay = (d: Date) => {
+    const x = new Date(d);
+    x.setHours(0, 0, 0, 0);
+    return x.getTime();
+  };
+  const today = startOfDay(now);
+  const yesterday = today - 86400000;
+  const weekAgo = today - 7 * 86400000;
+
+  const buckets: Record<string, Conv[]> = { Today: [], Yesterday: [], "Last 7 days": [], Earlier: [] };
+  for (const c of items) {
+    const t = new Date(c.updated_at ?? c.created_at ?? Date.now()).getTime();
+    if (t >= today) buckets["Today"].push(c);
+    else if (t >= yesterday) buckets["Yesterday"].push(c);
+    else if (t >= weekAgo) buckets["Last 7 days"].push(c);
+    else buckets["Earlier"].push(c);
+  }
+  return Object.entries(buckets)
+    .filter(([, arr]) => arr.length > 0)
+    .map(([label, items]) => ({ label, items }));
 }
