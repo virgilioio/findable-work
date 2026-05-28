@@ -179,6 +179,45 @@ export type Database = {
         }
         Relationships: []
       }
+      job_posts: {
+        Row: {
+          channels: Json
+          conversation_id: string
+          created_at: string
+          est_reach: number
+          id: string
+          schedule: Json
+          status: string
+          updated_at: string
+          user_id: string
+          variants: Json
+        }
+        Insert: {
+          channels?: Json
+          conversation_id: string
+          created_at?: string
+          est_reach?: number
+          id?: string
+          schedule?: Json
+          status?: string
+          updated_at?: string
+          user_id: string
+          variants?: Json
+        }
+        Update: {
+          channels?: Json
+          conversation_id?: string
+          created_at?: string
+          est_reach?: number
+          id?: string
+          schedule?: Json
+          status?: string
+          updated_at?: string
+          user_id?: string
+          variants?: Json
+        }
+        Relationships: []
+      }
       jobs: {
         Row: {
           conversation_id: string
