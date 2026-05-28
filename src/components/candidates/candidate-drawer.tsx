@@ -192,9 +192,17 @@ export function CandidateDrawer({
           <button className="flex h-[34px] w-8 items-center justify-center rounded-lg border border-border-strong bg-bg-elev text-text-mute" title="Email">
             <Doc size={14} />
           </button>
-          <button className="flex h-[34px] w-8 items-center justify-center rounded-lg border border-border-strong bg-bg-elev text-text-mute" title="LinkedIn">
-            <Linkedin size={14} />
-          </button>
+          {candidate.linkedin && (
+            <a
+              href={candidate.linkedin}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex h-[34px] w-8 items-center justify-center rounded-lg border border-border-strong bg-bg-elev text-text-mute hover:text-text"
+              title="LinkedIn"
+            >
+              <Linkedin size={14} />
+            </a>
+          )}
         </div>
 
         {/* Tabs */}
@@ -300,7 +308,7 @@ function Overview({ c }: { c: Candidate }) {
         )}
         {c.linkedin && (
           <KV label="LinkedIn">
-            <a href="#" className="text-text underline decoration-border-strong underline-offset-2">{c.linkedin}</a>
+            <a href={c.linkedin} target="_blank" rel="noopener noreferrer" className="text-text underline decoration-border-strong underline-offset-2">{c.linkedin}</a>
           </KV>
         )}
         {c.phone && <KV label="Phone" value={c.phone} />}
