@@ -188,7 +188,6 @@ function ConversationPage() {
       }
       if (jobCreated) {
         setPulse(true);
-        setTab("job");
         setTimeout(() => setPulse(false), 3500);
       }
     } finally {
