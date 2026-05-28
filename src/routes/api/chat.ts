@@ -4,6 +4,12 @@ import { z } from "zod";
 import { runSourcingAgent, type TaskEvent } from "@/lib/sourcing/agent.server";
 import { buildJobPostArtifact } from "@/lib/job-posts/builder.server";
 import { getPrompt } from "@/lib/prompts/registry.server";
+import {
+  DEFAULT_LINKEDIN,
+  DEFAULT_EMAIL_SUBJECT,
+  DEFAULT_EMAIL_BODY,
+  DEFAULT_FOLLOWUPS,
+} from "@/lib/outreach/outreach.functions";
 
 const bodySchema = z.object({
   conversationId: z.string().uuid(),
@@ -128,6 +134,22 @@ const draftJobPostsTool = {
   },
 };
 
+const draftOutreachTool = {
+  type: "function" as const,
+  function: {
+    name: "draft_outreach",
+    description:
+      "Draft outreach templates (LinkedIn under 200 chars + email subject/body + 3-step follow-up sequence) for contacting sourced candidates. Call once a Job exists and candidates have been sourced.",
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        tone: { type: "string", enum: ["Warm", "Direct", "Casual"] },
+      },
+    },
+  },
+};
+
 async function getUserFromRequest(request: Request): Promise<string | null> {
   const auth = request.headers.get("authorization");
   if (!auth?.startsWith("Bearer ")) return null;
@@ -147,7 +169,7 @@ async function callGateway(messages: ChatMessage[], apiKey: string): Promise<Res
       model: "openai/gpt-5-mini",
       stream: true,
       messages,
-      tools: [createJobTool, sourceCandidatesTool, askClarifyingQuestionsTool, draftJobPostsTool],
+      tools: [createJobTool, sourceCandidatesTool, askClarifyingQuestionsTool, draftJobPostsTool, draftOutreachTool],
     }),
   });
 }
@@ -509,6 +531,64 @@ export const Route = createFileRoute("/api/chat")({
                         channels_selected: selectedCount,
                         est_reach: artifact.est_reach,
                       }),
+                    });
+                  }
+                } else if (call.name === "draft_outreach") {
+                  const args = call.args ? JSON.parse(call.args) : {};
+                  const { data: jobRow } = await supabaseAdmin
+                    .from("jobs")
+                    .select("id")
+                    .eq("conversation_id", conversationId)
+                    .maybeSingle();
+                  if (!jobRow) {
+                    toolResults.push({
+                      role: "tool",
+                      tool_call_id: call.id ?? "",
+                      name: "draft_outreach",
+                      content: JSON.stringify({ ok: false, error: "No Job exists yet — call create_job first." }),
+                    });
+                  } else {
+                    const { data: orRow } = await supabaseAdmin
+                      .from("outreach_drafts")
+                      .upsert(
+                        {
+                          conversation_id: conversationId,
+                          user_id: userId,
+                          channel: "linkedin",
+                          tone: args.tone ?? "Warm",
+                          linkedin_template: DEFAULT_LINKEDIN,
+                          email_subject: DEFAULT_EMAIL_SUBJECT,
+                          email_body: DEFAULT_EMAIL_BODY,
+                          followups: DEFAULT_FOLLOWUPS,
+                        },
+                        { onConflict: "conversation_id" },
+                      )
+                      .select("*")
+                      .single();
+                    send("outreach", orRow);
+                    const { data: orTask } = await supabaseAdmin
+                      .from("agent_tasks")
+                      .insert({
+                        user_id: userId,
+                        conversation_id: conversationId,
+                        kind: "create_outreach",
+                        label: "Outreach templates drafted",
+                        status: "done",
+                        summary: "Open Outreach tab to review",
+                        data: { outreach_id: orRow?.id },
+                        finished_at: new Date().toISOString(),
+                      })
+                      .select("*")
+                      .single();
+                    if (orTask) {
+                      allTaskIds.push(orTask.id);
+                      send("task", orTask);
+                    }
+                    toolResults.push({
+                      role: "tool",
+                      tool_call_id: call.id ?? "",
+                      name: "draft_outreach",
+                      content: JSON.stringify({ ok: true }),
                     });
                   }
                 }

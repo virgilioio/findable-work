@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { Briefcase, Users, ArrowRight, Megaphone } from "@/components/findable-icons";
+import { Briefcase, Users, ArrowRight, Megaphone, Send } from "@/components/findable-icons";
 import { ClarifyCard, type ClarifyData } from "./clarify-card";
 
 export type ChatTask = {
@@ -12,12 +12,13 @@ export type ChatTask = {
   data?: Record<string, unknown>;
 };
 
-export type ArtifactTab = "job" | "candidates" | "job_posts";
+export type ArtifactTab = "job" | "candidates" | "job_posts" | "outreach";
 
 const ARTIFACT_BY_KIND: Record<string, { tab: ArtifactTab; icon: React.ReactNode; subtitle: string }> = {
   create_job: { tab: "job", icon: <Briefcase size={14} />, subtitle: "Open Job tab to review" },
   collect: { tab: "candidates", icon: <Users size={14} />, subtitle: "Open Candidates tab to review" },
   create_job_posts: { tab: "job_posts", icon: <Megaphone size={14} />, subtitle: "Open Job Posts tab to review" },
+  create_outreach: { tab: "outreach", icon: <Send size={14} />, subtitle: "Open Outreach tab to review" },
 };
 
 export function TaskCard({

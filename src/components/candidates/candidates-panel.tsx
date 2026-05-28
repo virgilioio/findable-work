@@ -16,6 +16,7 @@ import {
 import { cn } from "@/lib/utils";
 import { CandidateDrawer, type Candidate } from "./candidate-drawer";
 import { AddCandidateModal } from "./add-candidate-modal";
+import { ContactAutomation } from "@/components/outreach/contact-automation";
 
 const STAGES = ["Sourced", "Contacted", "Screening", "Interview", "Offer"] as const;
 type Stage = (typeof STAGES)[number];
@@ -45,6 +46,7 @@ export function CandidatesPanel({
   const [openId, setOpenId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [contacting, setContacting] = useState(false);
 
   useEffect(() => {
     setSelectedIds(new Set());
@@ -163,7 +165,7 @@ export function CandidatesPanel({
           </button>
           {selectedIds.size > 0 && (
             <button
-              onClick={() => toast("Contacting flow coming soon.")}
+              onClick={() => setContacting(true)}
               className="flex h-8 items-center gap-1.5 rounded-lg bg-text px-3 text-[12.5px] font-medium text-text-invert transition hover:opacity-90"
             >
               Contact ( {selectedIds.size} ) <ArrowRight size={13} />
@@ -370,6 +372,16 @@ export function CandidatesPanel({
           onAdded={(id) => {
             setAdding(false);
             setOpenId(id);
+          }}
+        />
+      )}
+      {contacting && (
+        <ContactAutomation
+          conversationId={conversationId}
+          candidates={candidates.filter((c) => selectedIds.has(c.id))}
+          onClose={() => {
+            setContacting(false);
+            setSelectedIds(new Set());
           }}
         />
       )}
