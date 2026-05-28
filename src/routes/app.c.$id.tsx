@@ -390,7 +390,7 @@ function ChatPanel({
   setText: (v: string) => void;
   persistedTasks: ChatTask[];
   liveTasks: ChatTask[];
-  onOpenTab: (t: "job" | "candidates") => void;
+  onOpenTab: (t: ArtifactTab) => void;
   clarifyAnswers: Record<string, Record<string, string[]>>;
   onSubmitClarify: (taskId: string, formatted: string, answers: Record<string, string[]>) => void;
 }) {
