@@ -1,10 +1,11 @@
-import { createFileRoute, notFound } from "@tanstack/react-router";
+import { createFileRoute, notFound, useRouter } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
+import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 import { getConversation } from "@/lib/conversations.functions";
-import { updateJob } from "@/lib/jobs.functions";
+import { updateJob, duplicateJob } from "@/lib/jobs.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,8 +27,14 @@ import {
   Sparkle,
   Dots,
   XSm,
+  Users,
+  Copy,
+  Pencil,
+  Upload,
+  Check,
 } from "@/components/gio-icons";
 import { cn } from "@/lib/utils";
+import { CandidatesPanel } from "@/components/candidates/candidates-panel";
 
 export const Route = createFileRoute("/app/c/$id")({
   component: ConversationPage,
@@ -52,6 +59,7 @@ function ConversationPage() {
   const { id } = Route.useParams();
   const qc = useQueryClient();
   const get = useServerFn(getConversation);
+  const router = useRouter();
 
   const { data, isLoading } = useQuery({
     queryKey: ["conversation", id],
@@ -60,8 +68,9 @@ function ConversationPage() {
 
   const [streaming, setStreaming] = useState<string>("");
   const [sending, setSending] = useState(false);
-  const [tab, setTab] = useState<"chat" | "job">("chat");
+  const [tab, setTab] = useState<"chat" | "job" | "candidates">("chat");
   const [pulse, setPulse] = useState(false);
+  const [composerText, setComposerText] = useState("");
 
   const messages: Message[] = data?.messages ?? [];
   const job: Job | null = (data?.job as Job | null) ?? null;
@@ -160,6 +169,11 @@ function ConversationPage() {
     }
   }
 
+  function askGio(prompt: string) {
+    setTab("chat");
+    setComposerText((prev) => (prev ? prev + "\n\n" + prompt : prompt));
+  }
+
   return (
     <div className="flex h-full flex-col">
       {/* Browser-style tab bar */}
@@ -184,6 +198,14 @@ function ConversationPage() {
               closable
             />
           )}
+          {job && (
+            <TabButton
+              active={tab === "candidates"}
+              onClick={() => setTab("candidates")}
+              icon={<Users size={14} />}
+              label="Candidates"
+            />
+          )}
         </div>
         <div className="flex items-center gap-3 pr-1">
           <span className="max-w-[280px] truncate text-[12.5px] font-medium text-text">{title}</span>
@@ -205,11 +227,31 @@ function ConversationPage() {
       {/* Tab content */}
       <div className="flex flex-1 flex-col overflow-hidden">
         {tab === "chat" ? (
-          <ChatPanel messages={messages} streaming={streaming} sending={sending} onSend={sendMessage} />
-        ) : job ? (
+          <ChatPanel
+            messages={messages}
+            streaming={streaming}
+            sending={sending}
+            onSend={sendMessage}
+            text={composerText}
+            setText={setComposerText}
+          />
+        ) : tab === "job" && job ? (
           <div className="flex-1 overflow-y-auto">
-            <JobPanel job={job} conversationId={id} />
+            <JobPanel
+              job={job}
+              conversationId={id}
+              onAskRevise={() =>
+                askGio(
+                  `Please revise this job. Specifically: `,
+                )
+              }
+              onDuplicated={(newId) => {
+                router.navigate({ to: "/app/c/$id", params: { id: newId } });
+              }}
+            />
           </div>
+        ) : tab === "candidates" && job ? (
+          <CandidatesPanel conversationId={id} onAskGio={askGio} />
         ) : null}
       </div>
     </div>
@@ -259,13 +301,16 @@ function ChatPanel({
   streaming,
   sending,
   onSend,
+  text,
+  setText,
 }: {
   messages: Message[];
   streaming: string;
   sending: boolean;
   onSend: (text: string) => void;
+  text: string;
+  setText: (v: string) => void;
 }) {
-  const [text, setText] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -434,12 +479,26 @@ function MessageBubble({
   );
 }
 
-function JobPanel({ job, conversationId }: { job: Job; conversationId: string }) {
+function JobPanel({
+  job,
+  conversationId,
+  onAskRevise,
+  onDuplicated,
+}: {
+  job: Job;
+  conversationId: string;
+  onAskRevise: () => void;
+  onDuplicated: (newId: string) => void;
+}) {
   const qc = useQueryClient();
   const update = useServerFn(updateJob);
+  const dupe = useServerFn(duplicateJob);
   const [form, setForm] = useState<Job>(job);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState<boolean>(!job.description);
+  const [duplicating, setDuplicating] = useState(false);
+  const [publishing, setPublishing] = useState(false);
 
   useEffect(() => setForm(job), [job.id]);
 
@@ -471,6 +530,32 @@ function JobPanel({ job, conversationId }: { job: Job; conversationId: string })
 
   const reqText = useMemo(() => form.requirements.join("\n"), [form.requirements]);
   const statusLabel = form.status.charAt(0).toUpperCase() + form.status.slice(1);
+  const published = form.status === "open";
+
+  async function handleDuplicate() {
+    setDuplicating(true);
+    try {
+      const res = await dupe({ data: { conversationId } });
+      qc.invalidateQueries({ queryKey: ["conversations"] });
+      toast("Job duplicated");
+      onDuplicated((res as { conversationId: string }).conversationId);
+    } catch (e) {
+      toast.error("Could not duplicate job");
+    } finally {
+      setDuplicating(false);
+    }
+  }
+
+  async function handlePublish() {
+    if (published) return;
+    setPublishing(true);
+    try {
+      await save({ status: "open" });
+      toast.success("Job published");
+    } finally {
+      setPublishing(false);
+    }
+  }
 
   return (
     <div className="mx-auto w-full max-w-[1200px] px-8 py-7">
@@ -498,12 +583,29 @@ function JobPanel({ job, conversationId }: { job: Job; conversationId: string })
                 {statusLabel}
               </span>
               {form.location && <span className="ml-3">{form.location}</span>}
+              <span className="ml-3 text-text-faint">
+                {saving ? "Saving…" : savedAt ? `Saved ${savedAt}` : "Edits autosave"}
+              </span>
             </p>
           </div>
         </div>
-        <p className="text-[11px] text-text-faint">
-          {saving ? "Saving…" : savedAt ? `Saved ${savedAt}` : "Edits autosave on blur"}
-        </p>
+        <div className="flex items-center gap-1.5">
+          <HeaderBtn onClick={handleDuplicate} disabled={duplicating} icon={<Copy size={13} />} label="Duplicate" />
+          <HeaderBtn
+            onClick={() => setEditing((v) => !v)}
+            icon={<Pencil size={13} />}
+            label={editing ? "Done" : "Edit"}
+            active={editing}
+          />
+          <HeaderBtn
+            onClick={handlePublish}
+            disabled={published || publishing}
+            icon={published ? <Check size={13} /> : <Upload size={13} />}
+            label={published ? "Published" : "Publish"}
+            primary={!published}
+            dot={published}
+          />
+        </div>
       </div>
 
       {/* Two columns */}
@@ -514,34 +616,50 @@ function JobPanel({ job, conversationId }: { job: Job; conversationId: string })
             <h3 className="mb-2 text-[11px] font-medium uppercase tracking-wide text-text-faint">
               Summary
             </h3>
-            <Textarea
-              rows={6}
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-              onBlur={(e) => e.target.value !== job.description && save({ description: e.target.value })}
-              className="border-border bg-bg-elev text-[14px] leading-relaxed"
-            />
+            {editing ? (
+              <Textarea
+                rows={6}
+                value={form.description}
+                onChange={(e) => setForm({ ...form, description: e.target.value })}
+                onBlur={(e) => e.target.value !== job.description && save({ description: e.target.value })}
+                className="border-border bg-bg-elev text-[14px] leading-relaxed"
+              />
+            ) : (
+              <div className="whitespace-pre-wrap text-[14px] leading-relaxed text-text">
+                {form.description || <span className="text-text-faint">No summary yet.</span>}
+              </div>
+            )}
           </section>
 
           <section>
             <h3 className="mb-2 text-[11px] font-medium uppercase tracking-wide text-text-faint">
               Requirements
             </h3>
-            <Textarea
-              rows={8}
-              value={reqText}
-              onChange={(e) =>
-                setForm({ ...form, requirements: e.target.value.split("\n").filter(Boolean) })
-              }
-              onBlur={(e) => {
-                const next = e.target.value.split("\n").map((s) => s.trim()).filter(Boolean);
-                if (JSON.stringify(next) !== JSON.stringify(job.requirements)) {
-                  save({ requirements: next });
+            {editing ? (
+              <Textarea
+                rows={8}
+                value={reqText}
+                onChange={(e) =>
+                  setForm({ ...form, requirements: e.target.value.split("\n").filter(Boolean) })
                 }
-              }}
-              placeholder="One per line"
-              className="border-border bg-bg-elev text-[14px] leading-relaxed"
-            />
+                onBlur={(e) => {
+                  const next = e.target.value.split("\n").map((s) => s.trim()).filter(Boolean);
+                  if (JSON.stringify(next) !== JSON.stringify(job.requirements)) {
+                    save({ requirements: next });
+                  }
+                }}
+                placeholder="One per line"
+                className="border-border bg-bg-elev text-[14px] leading-relaxed"
+              />
+            ) : form.requirements.length ? (
+              <ul className="list-disc space-y-1 pl-5 text-[14px] leading-relaxed text-text">
+                {form.requirements.map((r, i) => (
+                  <li key={i}>{r}</li>
+                ))}
+              </ul>
+            ) : (
+              <span className="text-[14px] text-text-faint">No requirements yet.</span>
+            )}
           </section>
         </div>
 
@@ -642,6 +760,7 @@ function JobPanel({ job, conversationId }: { job: Job; conversationId: string })
             <Button
               variant="outline"
               size="sm"
+              onClick={onAskRevise}
               className="mt-3 h-8 w-full border-border bg-bg text-[12.5px]"
             >
               Ask Gio to revise
@@ -659,5 +778,42 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <Label className="text-[11px] font-medium text-text-mute">{label}</Label>
       {children}
     </div>
+  );
+}
+
+function HeaderBtn({
+  onClick,
+  disabled,
+  icon,
+  label,
+  primary,
+  active,
+  dot,
+}: {
+  onClick: () => void;
+  disabled?: boolean;
+  icon: React.ReactNode;
+  label: string;
+  primary?: boolean;
+  active?: boolean;
+  dot?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={cn(
+        "flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[12.5px] transition disabled:opacity-60",
+        primary
+          ? "border-transparent bg-text text-text-invert hover:opacity-90"
+          : active
+            ? "border-border-strong bg-bg-bubble text-text"
+            : "border-border bg-bg text-text-mute hover:bg-bg-hover hover:text-text",
+      )}
+    >
+      {dot && <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />}
+      {icon}
+      <span>{label}</span>
+    </button>
   );
 }
