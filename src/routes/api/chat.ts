@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { z } from "zod";
 import { runSourcingAgent, type TaskEvent } from "@/lib/sourcing/agent.server";
+import { buildJobPostArtifact } from "@/lib/job-posts/builder.server";
 
 const bodySchema = z.object({
   conversationId: z.string().uuid(),
@@ -23,6 +24,7 @@ Tools available:
   After the user answers a clarifying card, do NOT echo or restate their answers back. Skip recap and go straight to the next action with a single short line like "Got it — drafting the Job and sourcing now."
 - create_job: draft (or update) the Job artifact for this conversation. Call once you have at minimum a title + a basic description. Don't wait for perfection — the user can edit afterward.
 - source_candidates: search our candidate pool, find matches, and add the top N to the Candidates tab. Call this whenever the user asks to source / find / pull / get candidates. Don't ask 10 clarifying questions first — call it with what you know (title, location, seniority) and refine afterward. Default limit is 20.
+- draft_job_posts: produce 3 ready-to-publish post variants (Punchy, Mission-led, Concise), pre-select channels (LinkedIn + regional boards), and a default schedule. Call this when the user confirms "yes, draft the job post" (after the Job exists). Don't ask further questions first — the user can tweak in the Job Posts tab.
 
 Mandatory flow:
 1. Before sourcing, you MUST have at least: a role title, a location (or "remote"), and a seniority hint. If ANY of those three are missing from the conversation so far, call ask_clarifying_questions and STOP — do not call source_candidates in the same turn.
@@ -30,6 +32,7 @@ Mandatory flow:
    When you call create_job and source_candidates in the same turn, emit them as PARALLEL tool calls in the same response — do not narrate between them.
 3. If source_candidates returns 0 matches or pool_limited=true, call ask_clarifying_questions with BROADENING suggestions (e.g. "Open to LATAM-remote?", "Other seniority levels OK?", "Adjacent titles to consider?"). Never silently retry.
 4. After the user answers clarifying questions, proceed with create_job + source_candidates.
+5. When the user confirms drafting the job post (e.g. "yes", "go ahead", "draft the post"), call draft_job_posts in that same turn. After it runs, end with "Ready to set up the interview loop?".
 
 Next-step proposal (always close with one):
 - A complete recruiting project has four artifacts: Job → Candidates → Job Post → Interview Schedule.
@@ -148,6 +151,22 @@ const askClarifyingQuestionsTool = {
   },
 };
 
+const draftJobPostsTool = {
+  type: "function" as const,
+  function: {
+    name: "draft_job_posts",
+    description:
+      "Draft 3 ready-to-publish job post variants (Punchy, Mission-led, Concise), pre-select channels (LinkedIn + regional boards), and set a default schedule. Requires that a Job already exists in the conversation.",
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        tone_focus: { type: "string", description: "Optional one-line steer, e.g. 'lean into mission' or 'emphasize comp'." },
+      },
+    },
+  },
+};
+
 async function getUserFromRequest(request: Request): Promise<string | null> {
   const auth = request.headers.get("authorization");
   if (!auth?.startsWith("Bearer ")) return null;
@@ -167,7 +186,7 @@ async function callGateway(messages: ChatMessage[], apiKey: string): Promise<Res
       model: "openai/gpt-5-mini",
       stream: true,
       messages,
-      tools: [createJobTool, sourceCandidatesTool, askClarifyingQuestionsTool],
+      tools: [createJobTool, sourceCandidatesTool, askClarifyingQuestionsTool, draftJobPostsTool],
     }),
   });
 }
@@ -468,6 +487,69 @@ export const Route = createFileRoute("/api/chat")({
                     name: "ask_clarifying_questions",
                     content: JSON.stringify({ ok: true, asked: normalized.length }),
                   });
+                } else if (call.name === "draft_job_posts") {
+                  const { data: jobRow } = await supabaseAdmin
+                    .from("jobs")
+                    .select("title,description,location,requirements,salary_min,salary_max,currency")
+                    .eq("conversation_id", conversationId)
+                    .maybeSingle();
+                  if (!jobRow) {
+                    toolResults.push({
+                      role: "tool",
+                      tool_call_id: call.id ?? "",
+                      name: "draft_job_posts",
+                      content: JSON.stringify({ ok: false, error: "No Job exists yet — call create_job first." }),
+                    });
+                  } else {
+                    const artifact = buildJobPostArtifact(jobRow);
+                    const { data: jpRow } = await supabaseAdmin
+                      .from("job_posts")
+                      .upsert(
+                        {
+                          conversation_id: conversationId,
+                          user_id: userId,
+                          variants: artifact.variants,
+                          channels: artifact.channels,
+                          schedule: artifact.schedule,
+                          est_reach: artifact.est_reach,
+                          status: "draft",
+                        },
+                        { onConflict: "conversation_id" },
+                      )
+                      .select("*")
+                      .single();
+                    send("job_posts", jpRow);
+                    const { data: jpTask } = await supabaseAdmin
+                      .from("agent_tasks")
+                      .insert({
+                        user_id: userId,
+                        conversation_id: conversationId,
+                        kind: "create_job_posts",
+                        label: `${artifact.variants.length} job post variants drafted`,
+                        status: "done",
+                        summary: "Open Job Posts tab to review",
+                        data: { job_post_id: jpRow?.id },
+                        finished_at: new Date().toISOString(),
+                      })
+                      .select("*")
+                      .single();
+                    if (jpTask) {
+                      allTaskIds.push(jpTask.id);
+                      send("task", jpTask);
+                    }
+                    const selectedCount = artifact.channels.filter((c) => c.selected).length;
+                    toolResults.push({
+                      role: "tool",
+                      tool_call_id: call.id ?? "",
+                      name: "draft_job_posts",
+                      content: JSON.stringify({
+                        ok: true,
+                        variants: artifact.variants.length,
+                        channels_selected: selectedCount,
+                        est_reach: artifact.est_reach,
+                      }),
+                    });
+                  }
                 }
                 }
 
