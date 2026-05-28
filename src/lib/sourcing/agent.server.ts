@@ -122,7 +122,7 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
       model: "gpt-4o-mini",
       response_format: { type: "json_object" },
       messages: [
-        { role: "system", content: NORMALIZE_SYSTEM },
+        { role: "system", content: await getPrompt("sourcing.agent_normalize") },
         { role: "user", content: promptText },
       ],
     });
@@ -161,7 +161,7 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
     const completion = await openaiChat({
       model: "gpt-4o-mini",
       messages: [
-        { role: "system", content: "You are a sourcing research assistant. Use the provide_research_results tool." },
+        { role: "system", content: await getPrompt("sourcing.research") },
         { role: "user", content: userMsg },
       ],
       tools: [RESEARCH_TOOL],
