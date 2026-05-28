@@ -20,6 +20,7 @@ import {
 import { useTheme } from "@/hooks/use-theme";
 import {
   Logo,
+  Wordmark,
   Plus,
   Search as SearchIcon,
   Dots,
