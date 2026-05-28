@@ -84,7 +84,7 @@ export function AuthDialog({
       }}
     >
       <DialogContent
-        className="w-full max-w-[380px] gap-0 rounded-[14px] border border-[var(--border)] bg-[var(--bg-elev)] p-0 px-8 py-9 shadow-lg sm:rounded-[14px]"
+        className="w-full max-w-[440px] gap-0 rounded-[14px] border border-[var(--border)] bg-[var(--bg-elev)] p-0 px-10 py-10 shadow-lg sm:rounded-[14px]"
         onPointerDownOutside={(e) => {
           if (!dismissible) e.preventDefault();
         }}
@@ -98,7 +98,7 @@ export function AuthDialog({
         </VisuallyHidden>
 
         <div className="mb-5 flex items-center">
-          <Wordmark height={22} />
+          <Wordmark height={28} />
         </div>
         <h1 className="text-[22px] font-semibold tracking-[-0.015em] text-[var(--text)]">
           {mode === "signin" ? "Welcome back" : "Create your account"}

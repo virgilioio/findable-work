@@ -60,11 +60,14 @@ function LoginPage() {
     <div className="relative flex min-h-screen flex-col items-center justify-center bg-[var(--bg)] px-6 py-10">
       {/* Top-left brand */}
       <div className="absolute left-6 top-6 flex items-center gap-2 text-[var(--text)]">
-        <Wordmark height={22} />
+        <Wordmark height={28} />
       </div>
 
       {/* Card */}
       <div className="w-full max-w-[380px] rounded-[14px] border border-[var(--border)] bg-[var(--bg-elev)] px-8 py-9">
+        <div className="mb-5 flex items-center">
+          <Wordmark height={28} />
+        </div>
         <h1 className="text-[22px] font-semibold tracking-[-0.015em] text-[var(--text)]">
           {mode === "signin" ? "Welcome back" : "Create your account"}
         </h1>
