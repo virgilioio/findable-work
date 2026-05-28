@@ -39,6 +39,7 @@ import { cn } from "@/lib/utils";
 import { CandidatesPanel } from "@/components/candidates/candidates-panel";
 import { TaskCard, type ChatTask, type ArtifactTab } from "@/components/chat/task-card";
 import { JobPostsPanel, type JobPost } from "@/components/job-posts/job-posts-panel";
+import { OutreachPanel } from "@/components/outreach/outreach-panel";
 
 // Splits an assistant message into segments rendered before and after the
 // associated task cards. Must stay in sync with the constant in
@@ -86,10 +87,11 @@ function ConversationPage() {
 
   const [streaming, setStreaming] = useState<string>("");
   const [sending, setSending] = useState(false);
-  const [tab, setTab] = useState<"chat" | "job" | "job_posts" | "candidates">("chat");
+  const [tab, setTab] = useState<"chat" | "job" | "job_posts" | "candidates" | "outreach">("chat");
   const [pulse, setPulse] = useState(false);
   const [jobPostsPulse, setJobPostsPulse] = useState(false);
   const [candidatesPulse, setCandidatesPulse] = useState(false);
+  const [outreachPulse, setOutreachPulse] = useState(false);
   const [composerText, setComposerText] = useState("");
   const [liveTasks, setLiveTasks] = useState<ChatTask[]>([]);
   const [clarifyAnswers, setClarifyAnswers] = useState<Record<string, Record<string, string[]>>>({});
@@ -97,6 +99,7 @@ function ConversationPage() {
   const messages: Message[] = data?.messages ?? [];
   const job: Job | null = (data?.job as Job | null) ?? null;
   const jobPost: JobPost | null = (data?.jobPost as JobPost | null) ?? null;
+  const outreach = (data as any)?.outreach ?? null;
   const title: string = data?.conversation?.title ?? "Untitled project";
   const persistedTasks: ChatTask[] = (data?.tasks as ChatTask[] | undefined) ?? [];
 
@@ -148,6 +151,7 @@ function ConversationPage() {
       let acc = "";
       let jobCreated = false;
       let jobPostCreated = false;
+      let outreachCreated = false;
       let candidatesAdded = 0;
 
       while (true) {
@@ -179,6 +183,8 @@ function ConversationPage() {
             jobCreated = true;
           } else if (event === "job_posts") {
             jobPostCreated = true;
+          } else if (event === "outreach") {
+            outreachCreated = true;
           } else if (event === "task") {
             const t = payload as ChatTask;
             setLiveTasks((prev) => {
@@ -214,6 +220,10 @@ function ConversationPage() {
       if (jobPostCreated && tab !== "job_posts") {
         setJobPostsPulse(true);
         setTimeout(() => setJobPostsPulse(false), 3500);
+      }
+      if (outreachCreated && tab !== "outreach") {
+        setOutreachPulse(true);
+        setTimeout(() => setOutreachPulse(false), 3500);
       }
     } finally {
       setSending(false);
