@@ -1,45 +1,46 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { z } from "zod";
+import { runSourcingAgent, type TaskEvent } from "@/lib/sourcing/agent.server";
 
 const bodySchema = z.object({
   conversationId: z.string().uuid(),
   message: z.string().min(1).max(20000),
 });
 
-const SYSTEM_PROMPT = `You are a senior recruiting AI agent embedded in a recruiting workspace.
+const SYSTEM_PROMPT = `You are Gio, a senior recruiting agent embedded in a workspace.
 
-Your job is to help the user run a recruiting project end-to-end. You progressively build the project by creating workspace artifacts: a Job, a Pipeline, Job Posts, etc.
+You progressively build a recruiting project by calling tools that produce real artifacts: a Job draft, a candidate pipeline, etc. The user can see each tool you call as a live "task" card in the chat.
 
-Right now, only the "create_job" tool is available. Other artifacts (pipeline, posts) will come later.
+Tools available:
+- create_job: draft (or update) the Job artifact for this conversation. Call once you have at minimum a title + a basic description. Don't wait for perfection — the user can edit afterward.
+- source_candidates: actually go out to Apollo + PDL, find matching candidates, and add the top N to the Candidates tab. Call this whenever the user asks to source / find / pull / get candidates. Don't ask 10 clarifying questions first — call it with what you know (title, location, seniority) and refine afterward. Default limit is 20.
 
-Conversational style:
-- Ask focused, recruiter-grade scoping questions: role title, seniority, must-have skills, nice-to-haves, location/remote, employment type, salary band, hiring goals.
-- Don't dump everything at once. Two or three pointed questions per turn.
-- As soon as you have enough to draft a Job (at minimum: title and a basic description), call the create_job tool. Don't wait for perfection — the user can edit the Job tab afterward.
-- After creating the job, briefly confirm what you drafted and ask what to refine.
-
-Markdown formatting is encouraged.`;
+Style:
+- Concise, recruiter-grade, no fluff.
+- When you call a tool, briefly say what you're about to do before the call (one short sentence).
+- After tools complete, summarize the result in 1–2 lines and propose the next move.
+- Markdown is encouraged for lists and emphasis.`;
 
 type ChatMessage = {
   role: "user" | "assistant" | "system" | "tool";
   content: string;
   tool_call_id?: string;
   tool_calls?: unknown;
+  name?: string;
 };
 
 const createJobTool = {
   type: "function" as const,
   function: {
     name: "create_job",
-    description:
-      "Create or update the Job artifact for this conversation. Call this once you have enough information to draft a job.",
+    description: "Create or update the Job artifact for this conversation.",
     parameters: {
       type: "object",
       additionalProperties: false,
       properties: {
         title: { type: "string" },
-        description: { type: "string", description: "Markdown-formatted job description." },
+        description: { type: "string", description: "Markdown job description." },
         requirements: { type: "array", items: { type: "string" } },
         location: { type: "string" },
         employment_type: {
@@ -55,6 +56,27 @@ const createJobTool = {
   },
 };
 
+const sourceCandidatesTool = {
+  type: "function" as const,
+  function: {
+    name: "source_candidates",
+    description:
+      "Search Apollo + PDL and add the top matching candidates to the Candidates tab. Use whenever the user wants to find / source / pull candidates.",
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        brief: {
+          type: "string",
+          description: "Plain-English brief of who we're looking for. Include title, seniority, location, must-have skills.",
+        },
+        limit: { type: "number", description: "How many candidates to add. Default 20, max 50." },
+      },
+      required: ["brief"],
+    },
+  },
+};
+
 async function getUserFromRequest(request: Request): Promise<string | null> {
   const auth = request.headers.get("authorization");
   if (!auth?.startsWith("Bearer ")) return null;
@@ -62,6 +84,21 @@ async function getUserFromRequest(request: Request): Promise<string | null> {
   const { data, error } = await supabaseAdmin.auth.getUser(token);
   if (error || !data.user) return null;
   return data.user.id;
+}
+
+type StreamedToolCall = { id?: string; name?: string; args: string };
+
+async function callGateway(messages: ChatMessage[], apiKey: string): Promise<Response> {
+  return fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "google/gemini-3-flash-preview",
+      stream: true,
+      messages,
+      tools: [createJobTool, sourceCandidatesTool],
+    }),
+  });
 }
 
 export const Route = createFileRoute("/api/chat")({
@@ -81,7 +118,6 @@ export const Route = createFileRoute("/api/chat")({
         }
         const { conversationId, message } = parsed.data;
 
-        // verify conversation belongs to user
         const { data: conv } = await supabaseAdmin
           .from("conversations")
           .select("id,user_id,title")
@@ -91,7 +127,6 @@ export const Route = createFileRoute("/api/chat")({
           return new Response("Not found", { status: 404 });
         }
 
-        // persist user message
         await supabaseAdmin.from("messages").insert({
           conversation_id: conversationId,
           user_id: userId,
@@ -99,30 +134,24 @@ export const Route = createFileRoute("/api/chat")({
           content: message,
         });
 
-        // auto-title from first user message
         if (conv.title === "New conversation") {
-          const newTitle = message.slice(0, 60);
           await supabaseAdmin
             .from("conversations")
-            .update({ title: newTitle })
+            .update({ title: message.slice(0, 60) })
             .eq("id", conversationId);
         }
 
-        // load full message history
         const { data: history } = await supabaseAdmin
           .from("messages")
           .select("role,content,tool_calls")
           .eq("conversation_id", conversationId)
           .order("created_at", { ascending: true });
 
-        const messages: ChatMessage[] = [
+        const baseMessages: ChatMessage[] = [
           { role: "system", content: SYSTEM_PROMPT },
           ...(history ?? [])
             .filter((m) => m.role === "user" || m.role === "assistant")
-            .map((m) => ({
-              role: m.role as "user" | "assistant",
-              content: m.content || "",
-            })),
+            .map((m) => ({ role: m.role as "user" | "assistant", content: m.content || "" })),
         ];
 
         const apiKey = process.env.LOVABLE_API_KEY;
@@ -133,50 +162,32 @@ export const Route = createFileRoute("/api/chat")({
           });
         }
 
-        const upstream = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "google/gemini-3-flash-preview",
-            stream: true,
-            messages,
-            tools: [createJobTool],
-          }),
-        });
-
-        if (!upstream.ok || !upstream.body) {
-          const text = await upstream.text().catch(() => "");
-          const status = upstream.status === 429 || upstream.status === 402 ? upstream.status : 500;
-          const errMsg =
-            upstream.status === 429
-              ? "Rate limit reached. Try again in a moment."
-              : upstream.status === 402
-              ? "AI credits exhausted. Add credits in Settings → Workspace → Usage."
-              : `AI gateway error (${upstream.status}). ${text.slice(0, 200)}`;
-          return new Response(JSON.stringify({ error: errMsg }), {
-            status,
-            headers: { "content-type": "application/json" },
-          });
-        }
-
         const encoder = new TextEncoder();
         const stream = new ReadableStream({
           async start(controller) {
-            const reader = upstream.body!.getReader();
-            const decoder = new TextDecoder();
-            let buffer = "";
-            let assistantText = "";
-            // toolCalls indexed by gateway-reported index
-            const toolCalls: Record<number, { id?: string; name?: string; args: string }> = {};
-
             const send = (event: string, data: unknown) => {
               controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
             };
 
-            try {
+            // Streams a gateway response and returns parsed { text, toolCalls }.
+            async function streamCompletion(messages: ChatMessage[]): Promise<{ text: string; toolCalls: StreamedToolCall[] }> {
+              const upstream = await callGateway(messages, apiKey!);
+              if (!upstream.ok || !upstream.body) {
+                const text = await upstream.text().catch(() => "");
+                const errMsg =
+                  upstream.status === 429
+                    ? "Rate limit reached. Try again in a moment."
+                    : upstream.status === 402
+                    ? "AI credits exhausted."
+                    : `AI gateway error (${upstream.status}). ${text.slice(0, 200)}`;
+                throw new Error(errMsg);
+              }
+              const reader = upstream.body.getReader();
+              const decoder = new TextDecoder();
+              let buffer = "";
+              let assistantText = "";
+              const toolCalls: Record<number, StreamedToolCall> = {};
+
               while (true) {
                 const { done, value } = await reader.read();
                 if (done) break;
@@ -213,60 +224,159 @@ export const Route = createFileRoute("/api/chat")({
                   }
                 }
               }
+              return { text: assistantText, toolCalls: Object.values(toolCalls) };
+            }
 
-              // Process tool calls (only create_job is supported)
-              const calls = Object.values(toolCalls);
-              const toolCallsForDb = calls.length
-                ? calls.map((c) => ({
+            try {
+              // First pass
+              const first = await streamCompletion(baseMessages);
+              let combinedText = first.text;
+              const allTaskIds: string[] = [];
+              let candidatesAddedTotal = 0;
+              let jobCreatedRow: any = null;
+
+              // Execute tool calls
+              const toolResults: ChatMessage[] = [];
+              for (const call of first.toolCalls) {
+                if (!call.name) continue;
+                let args: any = {};
+                try {
+                  args = JSON.parse(call.args || "{}");
+                } catch {}
+
+                if (call.name === "create_job") {
+                  const jobPayload = {
+                    conversation_id: conversationId,
+                    user_id: userId,
+                    title: String(args.title ?? "").slice(0, 200),
+                    description: String(args.description ?? ""),
+                    requirements: Array.isArray(args.requirements)
+                      ? args.requirements.map((r: unknown) => String(r)).slice(0, 50)
+                      : [],
+                    location: String(args.location ?? ""),
+                    employment_type: ["full_time", "part_time", "contract", "internship", "temporary"].includes(
+                      args.employment_type,
+                    )
+                      ? args.employment_type
+                      : "full_time",
+                    salary_min: typeof args.salary_min === "number" ? Math.round(args.salary_min) : null,
+                    salary_max: typeof args.salary_max === "number" ? Math.round(args.salary_max) : null,
+                    currency: String(args.currency ?? "USD").slice(0, 8),
+                    status: "draft" as const,
+                  };
+                  const { data: jobRow } = await supabaseAdmin
+                    .from("jobs")
+                    .upsert(jobPayload, { onConflict: "conversation_id" })
+                    .select("*")
+                    .single();
+                  jobCreatedRow = jobRow;
+                  send("job", jobRow);
+                  toolResults.push({
+                    role: "tool",
+                    tool_call_id: call.id ?? "",
+                    name: "create_job",
+                    content: JSON.stringify({ ok: true, title: jobPayload.title }),
+                  });
+                } else if (call.name === "source_candidates") {
+                  const brief = String(args.brief ?? message).slice(0, 4000);
+                  const limit = Math.min(Math.max(Number(args.limit) || 20, 1), 50);
+
+                  // Pull job context if present
+                  const { data: jobRow } = await supabaseAdmin
+                    .from("jobs")
+                    .select("title,description,location,requirements")
+                    .eq("conversation_id", conversationId)
+                    .maybeSingle();
+
+                  try {
+                    const result = await runSourcingAgent({
+                      userId,
+                      conversationId,
+                      brief,
+                      jobBrief: jobRow ?? undefined,
+                      limit,
+                      onTask: (t: TaskEvent) => {
+                        allTaskIds.push(t.id);
+                        send("task", t);
+                      },
+                    });
+                    if (result.added > 0) {
+                      candidatesAddedTotal += result.added;
+                      send("candidates_added", { count: result.added });
+                    }
+                    toolResults.push({
+                      role: "tool",
+                      tool_call_id: call.id ?? "",
+                      name: "source_candidates",
+                      content: JSON.stringify({
+                        ok: true,
+                        added: result.added,
+                        skipped: result.skipped,
+                        preview_total: result.preview_total,
+                        apollo_count: result.apollo_count,
+                        pdl_count: result.pdl_count,
+                        apollo_error: result.apollo_error,
+                        pdl_error: result.pdl_error,
+                      }),
+                    });
+                  } catch (err: any) {
+                    toolResults.push({
+                      role: "tool",
+                      tool_call_id: call.id ?? "",
+                      name: "source_candidates",
+                      content: JSON.stringify({ ok: false, error: err?.message ?? "Sourcing failed" }),
+                    });
+                  }
+                }
+              }
+
+              // Second pass: let the model produce a natural summary using tool results
+              if (toolResults.length > 0) {
+                const assistantToolCallMsg: ChatMessage = {
+                  role: "assistant",
+                  content: first.text,
+                  tool_calls: first.toolCalls.map((c) => ({
+                    id: c.id,
+                    type: "function",
+                    function: { name: c.name, arguments: c.args },
+                  })),
+                };
+                // Add a small separator delta so client visually splits
+                if (first.text) send("delta", { content: "\n\n" });
+                const second = await streamCompletion([...baseMessages, assistantToolCallMsg, ...toolResults]);
+                combinedText = (first.text ? first.text + "\n\n" : "") + second.text;
+              }
+
+              // Persist assistant message
+              const toolCallsForDb = first.toolCalls.length
+                ? first.toolCalls.map((c) => ({
                     id: c.id,
                     type: "function",
                     function: { name: c.name, arguments: c.args },
                   }))
                 : null;
-
-              // persist assistant message
-              await supabaseAdmin.from("messages").insert({
-                conversation_id: conversationId,
-                user_id: userId,
-                role: "assistant",
-                content: assistantText,
-                tool_calls: toolCallsForDb,
-              });
-
-              for (const call of calls) {
-                if (call.name !== "create_job") continue;
-                let args: any = {};
-                try {
-                  args = JSON.parse(call.args || "{}");
-                } catch {}
-                const jobPayload = {
+              const { data: assistantMsg } = await supabaseAdmin
+                .from("messages")
+                .insert({
                   conversation_id: conversationId,
                   user_id: userId,
-                  title: String(args.title ?? "").slice(0, 200),
-                  description: String(args.description ?? ""),
-                  requirements: Array.isArray(args.requirements)
-                    ? args.requirements.map((r: unknown) => String(r)).slice(0, 50)
-                    : [],
-                  location: String(args.location ?? ""),
-                  employment_type: ["full_time", "part_time", "contract", "internship", "temporary"].includes(
-                    args.employment_type,
-                  )
-                    ? args.employment_type
-                    : "full_time",
-                  salary_min: typeof args.salary_min === "number" ? Math.round(args.salary_min) : null,
-                  salary_max: typeof args.salary_max === "number" ? Math.round(args.salary_max) : null,
-                  currency: String(args.currency ?? "USD").slice(0, 8),
-                  status: "draft" as const,
-                };
-                const { data: jobRow } = await supabaseAdmin
-                  .from("jobs")
-                  .upsert(jobPayload, { onConflict: "conversation_id" })
-                  .select("*")
-                  .single();
-                send("job", jobRow);
+                  role: "assistant",
+                  content: combinedText,
+                  tool_calls: toolCallsForDb,
+                })
+                .select("id")
+                .single();
+
+              // Link all agent_tasks to this assistant message
+              if (assistantMsg && allTaskIds.length > 0) {
+                await supabaseAdmin
+                  .from("agent_tasks")
+                  .update({ message_id: assistantMsg.id })
+                  .in("id", allTaskIds);
+                send("tasks_linked", { message_id: assistantMsg.id, task_ids: allTaskIds });
               }
 
-              send("done", { ok: true });
+              send("done", { ok: true, candidates_added: candidatesAddedTotal, job: jobCreatedRow });
             } catch (err) {
               console.error("chat stream error", err);
               send("error", { message: err instanceof Error ? err.message : "stream error" });
