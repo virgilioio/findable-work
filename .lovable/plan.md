@@ -1,47 +1,25 @@
-## Plan: geo-correct locations end-to-end
+## Plan: Default to verified + likely-to-engage emails only
 
-Make city / state-or-province / country a first-class structured field so Apollo and PDL both filter on all three.
+Apollo's `/mixed_people/api_search` accepts a `contact_email_status` array filter. Today we don't send it, so results mix verified, guessed, and unavailable emails. We'll always request only high-quality contacts.
 
-### 1. Capture state in the normalized brief
+### Change
 
-`src/lib/sourcing/normalize.functions.ts`
-- Replace the single `location: string` with a structured object:
-  ```ts
-  location: { city: string; region: string; country: string }
-  ```
-  (all strings; empty when unknown).
-- Update the LLM JSON schema/prompt to extract `city`, `region` (state/province/admin area), and `country` separately. Add few-shot examples covering: "Austin, TX, USA", "São Paulo, SP, Brasil", "Berlin, Germany", "remote EU", "Mexico City, Mexico".
-- Keep a derived display string ("Austin, TX, United States") for UI compatibility.
+**`src/lib/sourcing/apollo.server.ts`**
 
-### 2. Propagate the structured location
+1. In `buildBody()`, always include:
+   ```ts
+   contact_email_status: ["verified", "likely to engage"]
+   ```
+   No conditional, no UI toggle — it's a hard default for every Apollo search.
 
-- `agent.server.ts`: pass `normalized.location` (the object) into the SearchCriteria instead of `[normalized.location]`.
-- `budget.ts` `SearchCriteria.locations` type changes from `string[]` to `LocationInput[]` (object form), with a small adapter so any existing string usage still works.
+2. Apply it to **every attempt** in the broadening ladder (`full`, `dropped_seniority`, `dropped_companies`, `country_only_location`, `title_only`) so we never silently fall back to unverified contacts when broadening for geo/title.
 
-### 3. Apollo: send city + state + country
+### Out of scope
 
-`apollo.server.ts` + `normalizeLocationForApollo` in `budget.ts`:
-- Build `person_locations` as a deduped list of progressively-broader strings:
-  1. `"City, Region, Country"` (full)
-  2. `"City, Country"`
-  3. `"Region, Country"`
-  4. `"Country"`
-- Expand US/CA/AU/BR/MX/IN state abbreviations to full names (extend `US_STATE_ABBR_TO_NAME` map, or add per-country maps).
-- Use the broader entries only in the broadening cascade (already structured in `apollo.server.ts:132-148`), instead of re-deriving "country only" by string split.
+- No UI changes.
+- No new `SearchCriteria` field — this is a constant baked into `buildBody()`.
+- PDL (`pdl.server.ts`) is unaffected; it has its own email-quality signal handled separately.
 
-### 4. PDL: include `location_region`
+### Verification
 
-`pdl.server.ts` `buildEsQuery`:
-- For each location, add `term: { location_region: <region> }` to the `should` array alongside `location_locality` and `location_country`.
-- Normalize region to PDL's lowercase convention (matches the existing `locality`/`country` casing in `splitLocationForPdl`).
-- Optionally tighten with `bool.must` (`country` required, `region OR locality` should) when all three fields are present, to reduce noise.
-
-### 5. Verification
-
-- Unit-style sanity log: for a brief like "Senior data engineer, Austin, Texas, USA", log the final Apollo `person_locations` array and PDL `query` body once to confirm:
-  - Apollo gets `["Austin, Texas, United States", "Austin, United States", "Texas, United States", "United States"]`.
-  - PDL gets `should: [{location_locality:"austin"}, {location_region:"texas"}, {location_country:"united states"}]`.
-- Re-run an existing conversation that previously over-matched to confirm tighter geo filtering.
-
-### Out of scope (for now)
-- Remote/timezone filtering ("remote EU", "remote AMER") — needs a separate field on `SearchCriteria` and a different Apollo/PDL strategy. Flag-only here; happy to plan it next.
+After the change, log the outgoing Apollo body once for a sample search and confirm `contact_email_status: ["verified","likely to engage"]` is present on every attempt, then re-run a known query and confirm the result count drops (expected) and all returned previews have `has_email: true` for the verified tier.

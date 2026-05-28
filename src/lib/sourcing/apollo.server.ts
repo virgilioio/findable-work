@@ -61,6 +61,9 @@ function buildBody(opts: {
 }): ApolloSearchBody {
   return {
     per_page: 100,
+    // Quality default: only verified or likely-to-engage contacts.
+    // We're a distillery of data — never return guessed/unavailable emails.
+    contact_email_status: ["verified", "likely to engage"],
     ...(opts.titles.length ? { person_titles: opts.titles.slice(0, 10) } : {}),
     ...(opts.companies.length ? { q_organization_name: opts.companies.join(" OR ") } : {}),
     ...(opts.locations.length ? { person_locations: opts.locations } : {}),
