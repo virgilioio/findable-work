@@ -26,9 +26,9 @@ export const createSourcingProject = createServerFn({ method: "POST" })
         conversation_id: data.conversation_id ?? null,
         title: data.title,
         raw_prompt: data.raw_prompt,
-        normalized: data.normalized ?? {},
-        research: data.research ?? {},
-        search_criteria: budgeted as unknown as Record<string, unknown>,
+        normalized: (data.normalized ?? {}) as any,
+        research: (data.research ?? {}) as any,
+        search_criteria: budgeted as any,
       })
       .select("*")
       .single();
@@ -108,7 +108,7 @@ export const refineSourcingProject = createServerFn({ method: "POST" })
     const budgeted = budgetSearchCriteria(merged as SearchCriteria);
     const { error: uErr } = await supabase
       .from("sourcing_projects")
-      .update({ search_criteria: budgeted as unknown as Record<string, unknown> })
+      .update({ search_criteria: budgeted as any })
       .eq("id", data.project_id);
     if (uErr) throw new Error(uErr.message);
 
