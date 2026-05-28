@@ -26,8 +26,10 @@ export const Route = createFileRoute("/app")({
   beforeLoad: async () => {
     const { data, error } = await supabase.auth.getUser();
     if (error || !data.user) {
+      console.info("[auth] /app guard redirecting to /login", { message: error?.message });
       throw redirect({ to: "/login" });
     }
+    console.info("[auth] /app guard allowed", { email: data.user.email });
   },
   component: AppLayout,
 });
@@ -61,10 +63,12 @@ function AppLayout() {
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.info("[auth] app auth state changed", { event, hasSession: Boolean(session) });
       if (event === "SIGNED_OUT" || (event === "SIGNED_IN" && !session)) {
         qc.clear();
         // Use window.location to avoid any router-state races on hard sign-out.
         if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+          console.info("[auth] redirecting to /login after sign-out or missing session");
           window.location.replace("/login");
         }
       } else if (event === "SIGNED_IN") {
@@ -93,6 +97,7 @@ function AppLayout() {
   const groups = useMemo(() => groupByDate(filtered), [filtered]);
 
   async function onSignOut() {
+    console.info("[auth] sign-out requested");
     await supabase.auth.signOut();
   }
 
