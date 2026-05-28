@@ -433,9 +433,13 @@ function ChatPanel({
         <div className="mx-auto max-w-[760px] space-y-6 px-4 py-10">
           {messages.map((m) => {
             const msgTasks = persistedTasks.filter((t) => t.message_id === m.id);
+            const { before, after } =
+              m.role === "assistant"
+                ? splitAroundTasks(m.content)
+                : { before: m.content, after: "" };
             return (
               <div key={m.id} className="space-y-4">
-                <MessageRow role={m.role} content={m.content} />
+                {before && <MessageRow role={m.role} content={before} />}
                 {msgTasks.length > 0 && m.role === "assistant" &&
                   msgTasks.map((t) => (
                     <TimelineRow key={t.id}>
@@ -448,23 +452,34 @@ function ChatPanel({
                       />
                     </TimelineRow>
                   ))}
+                {after && m.role === "assistant" && (
+                  <MessageRow role={m.role} content={after} />
+                )}
               </div>
             );
           })}
           {(streaming || liveTasks.length > 0) && (
             <div className="space-y-4">
-              {streaming && <MessageRow role="assistant" content={streaming} streaming />}
-              {liveTasks.map((t) => (
-                <TimelineRow key={t.id}>
-                  <TaskCard
-                    task={t}
-                    onOpenTab={onOpenTab}
-                    onSubmitClarify={onSubmitClarify}
-                    clarifyAnswered={Boolean(clarifyAnswers[t.id])}
-                    clarifyAnswers={clarifyAnswers[t.id]}
-                  />
-                </TimelineRow>
-              ))}
+              {(() => {
+                const { before, after } = splitAroundTasks(streaming);
+                return (
+                  <>
+                    {before && <MessageRow role="assistant" content={before} streaming />}
+                    {liveTasks.map((t) => (
+                      <TimelineRow key={t.id}>
+                        <TaskCard
+                          task={t}
+                          onOpenTab={onOpenTab}
+                          onSubmitClarify={onSubmitClarify}
+                          clarifyAnswered={Boolean(clarifyAnswers[t.id])}
+                          clarifyAnswers={clarifyAnswers[t.id]}
+                        />
+                      </TimelineRow>
+                    ))}
+                    {after && <MessageRow role="assistant" content={after} streaming />}
+                  </>
+                );
+              })()}
             </div>
           )}
           {sending && !streaming && liveTasks.length === 0 && (
