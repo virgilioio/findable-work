@@ -1,78 +1,83 @@
+# Agentic chat + working sourcing pipeline
 
-# Apollo + PDL Sourcing Pipeline (backend-only)
+## Goals
 
-**Golden rule honored**: No UI changes. No edits to existing components, routes, or styles. All existing flows (jobs, candidates, drawer, chat) remain untouched. This adds a parallel set of server functions + tables that a future UI task can wire up.
+1. **Agentic UI**: When Gio works, the chat shows live "task cards" inline (one per step) that animate from `running → done` (or `failed`), with a short label, optional sub-status, and a result summary. Multiple tasks can run/queue in a single assistant turn. This matches the recording feel.
+2. **Sourcing actually works**: From a normal chat ("find me 20 SDRs in Mexico City"), the agent runs the full Apollo+PDL pipeline and lands real rows in the Candidates tab — no new buttons or panels required (golden rule: no UI redesign).
 
-## What gets built
-
-A 5-stage pipeline behind `createServerFn` handlers, mirroring your other app:
+## How a turn flows after this change
 
 ```text
-prompt → normalize → research → save project → search (Apollo + PDL) → collect
+User: "Find 20 SDRs for the HR-Tech SDR role, Mexico, remote"
+Gio: (streams text) "On it — scoping and sourcing now."
+  [task] Normalize the brief                ✓
+  [task] Research titles + companies        ✓  (12 titles, 8 companies)
+  [task] Search Apollo + PDL                ✓  (847 candidates, 312 after dedupe)
+  [task] Collect top 20 into Candidates     ✓  (20 added, 0 skipped)
+Gio: "Added 20 candidates to the Candidates tab. Want me to filter for SaaS background?"
 ```
 
-## Secrets to add (via `add_secret`)
+The Candidates tab pulse-highlights (same pattern as the Job tab today) when new rows arrive.
 
-- `APOLLO_API_KEY` — Apollo search + bulk_match
-- `PDL_API_KEY` — People Data Labs search
-- `OPENAI_API_KEY` — gpt-4o-mini for normalize / research / refine
+## What we build
 
-I will request these before writing the server functions.
+### 1. Task records (backend + stream)
 
-## Database (new tables only — existing tables untouched)
+New table `agent_tasks` (RLS by `user_id`):
+- `id`, `user_id`, `conversation_id`, `message_id` (parent assistant msg), `kind` (enum: `normalize | research | search | collect | create_job`), `label`, `status` (`running | done | failed`), `summary` (short result text), `data` jsonb (counts, ids), `started_at`, `finished_at`.
+- Server emits SSE `event: task` payloads on create/update so the UI can render and animate without a refetch.
+- On reconnect / page refresh, tasks are reloaded from the table next to messages.
 
-All RLS-scoped to `auth.uid() = user_id`. New tables only — `candidates` table left alone (collect will write into it but only via additive columns we already have plus a new nullable `apollo_id` + `pdl_id` for dedup).
+### 2. Agent tools wired into `/api/chat`
 
-1. **`sourcing_projects`**
-   - `id`, `user_id`, `conversation_id` (nullable, links to existing conversation/job), `title`, `raw_prompt`, `normalized` jsonb, `search_criteria` jsonb, `research` jsonb, `created_at`, `updated_at`
+Add three tools (the model can call them in any order, in parallel with `create_job`):
 
-2. **`sourcing_preview_candidates`** (24h cache of search results)
-   - `id`, `project_id`, `user_id`, `source` text (`apollo`|`pdl`|`gio`|`internal`), `external_id`, `linkedin_slug`, `preview` jsonb (first_name, last_name_obfuscated, title, company, has_email, has_phone, location flags, keyword_score, etc.), `collected_at`, `created_at`
-   - unique `(project_id, source, external_id)`
+- `source_candidates({ brief?: string, refine?: string, limit?: number })` — creates/reuses a `sourcing_projects` row for this conversation, runs normalize → research → `runSourcingSearch` → auto-`collectCandidates` for top N (default 20, cap 50). Streams one task per stage. Returns `{ added, skipped, preview_total }`.
+- `refine_search({ add_titles?: [], add_companies?: [], add_keywords?: [], locations?: [] })` — updates `search_criteria`, reruns search, re-collects new top-N delta. (Same task pattern.)
+- Keep `create_job` as-is.
 
-3. **`sourcing_credits_usage`** (tracked but not enforced — per user/month)
-   - `id`, `user_id`, `period` (YYYY-MM), `collect_credits_used` int default 0, unique `(user_id, period)`
+The model's system prompt is updated so it knows: "When the user asks to source / find / pull candidates, call `source_candidates`. Don't ask 10 questions first — call it with what you have, then refine."
 
-4. **`candidates` additive columns** (nullable, non-breaking)
-   - `apollo_id text`, `pdl_id text`, `linkedin_slug text` (for cross-tenant dedup)
+### 3. Stream protocol additions
 
-5. **`increment_sourcing_usage(_user_id uuid, _count int)`** RPC (security definer)
+The existing SSE stream already emits `delta`, `job`, `error`, `done`. We add:
+- `event: task` with `{ id, kind, label, status, summary, data }` — sent on insert and on every status change. UI upserts by `id`.
+- `event: candidates_added` with `{ count }` — triggers the Candidates tab pulse + query invalidation, same way `job` triggers the Job tab pulse today.
 
-## Server functions (new files only)
+### 4. UI: inline task cards
 
-All in `src/lib/sourcing/`. Each is a `createServerFn` with `requireSupabaseAuth`.
+In `app.c.$id.tsx` `ChatPanel`:
+- Group tasks under the assistant message they belong to (by `message_id`; live tasks during streaming attach to the in-flight assistant bubble).
+- New `<TaskCard>` component (small, dense, monospace counters): icon + label on the left, status pill on the right, animated shimmer while `running`, check on `done`, subtle red on `failed`. `summary` shown when present.
+- Tasks fade-in (`animate-fade-in`) and the status pill scale-pulses on transition. No external animation libs — uses the existing tailwind keyframes (`fade-in`, `scale-in`, `pulse`).
+- Persisted tasks are loaded by `getConversation` and rendered the same way for history.
 
-| File | Function | Purpose |
-|---|---|---|
-| `normalize.functions.ts` | `normalizeJobSpecs` | OpenAI gpt-4o-mini → `{ title, skills[], location, ai_variations }` |
-| `research.functions.ts` | `researchSourcingCriteria` | OpenAI function-calling → titles/companies/keywords/reasoning (capped) |
-| `project.functions.ts` | `createSourcingProject`, `getSourcingProject`, `refineSourcingProject` | Orchestration + `budgetSearchCriteria` (the AND-stack caps), refine via OpenAI |
-| `apollo.server.ts` | `searchApollo`, `enrichApolloProfiles` | Direct `https://api.apollo.io/api/v1/mixed_people/api_search` + `/people/bulk_match`. Pagination 100/page up to 2000. Keywords scored locally (+25/match). |
-| `pdl.server.ts` | `searchPdl` | PDL person search, returns normalized rows |
-| `sourcing.functions.ts` | `runSourcingSearch` | Parallel Apollo + PDL → dedupe by linkedin_slug → cross-ref existing `candidates` (same tenant → `internal`, other tenant → `gio`, none → `apollo`/`pdl`) → upsert into `sourcing_preview_candidates` |
-| `collect.functions.ts` | `collectCandidates` | Bulk-match up to 10 ids/call, skip already-in-tenant, write `candidates` + `apollo_id`, increment usage, mark `collected_at` |
+### 5. Candidates pulse
 
-Server-only helpers use the `.server.ts` suffix; client-facing entry points use `.functions.ts`. Admin writes (cross-tenant lookups) use `supabaseAdmin`; user-scoped reads/writes use `requireSupabaseAuth`'s `supabase` client.
+When the stream emits `candidates_added`, the conversation page invalidates `["candidates", id]` and briefly pulses the Candidates tab — mirrors the existing `jobCreated` flow for the Job tab. Zero changes to `CandidatesPanel` internals.
 
-## Apollo/PDL mapping (unchanged from your spec)
+## Files touched
 
-- Apollo: `person_titles[]`, `q_organization_name` (OR-joined), `person_locations[]` ("City, Country" only), `person_seniorities[]`, `organization_num_employees_ranges[]`, `q_organization_domains_list[]`. **Keywords and industries NOT sent.** Keywords scored locally.
-- Caps enforced in `budgetSearchCriteria`: titles 4, user companies 5, researched companies 3 (0 if user provided), keywords 3, seniorities 2, industries always emptied.
-- 24h preview cache lookup keyed by `project_id`.
+- **DB migration** (new): `agent_tasks` table + RLS + grants.
+- `src/lib/conversations.functions.ts`: include `agent_tasks` in `getConversation`.
+- `src/routes/api/chat.ts`: add `source_candidates` + `refine_search` tools, task insert/update helpers, stream `event: task` and `event: candidates_added`, updated system prompt.
+- `src/lib/sourcing/agent.server.ts` (new): orchestrator that ties `normalize → research → runSourcingSearch → collectCandidates` together and emits task callbacks. Reuses every existing file in `src/lib/sourcing/`.
+- `src/routes/app.c.$id.tsx`: parse `task` + `candidates_added` SSE events, group tasks by assistant message, render `<TaskCard>` inside the assistant bubble, pulse Candidates tab.
+- `src/components/chat/task-card.tsx` (new): small presentational component.
 
-## What is explicitly NOT done
+## Explicitly NOT in scope
 
-- No UI components, no routes, no buttons, no nav. Future task wires this into a "Source" surface.
-- No phone webhook endpoint (phones arrive async via Apollo webhook — out of scope for this round; collect returns email + LinkedIn + employment history immediately).
-- No standard_job_titles / standard_skills lookup tables (you opted out).
-- No credit enforcement (tracking only).
-- No edits to existing `candidates-panel.tsx`, `candidate-drawer.tsx`, `app.c.$id.tsx`, etc.
+- No redesign of Chat / Job / Candidates panels — only inline task cards inside existing assistant bubbles + a tab pulse.
+- No new top-level routes, no sidebar changes, no "Sourcing" page.
+- No credit limits (still no enforcement, per earlier decision).
+- No phone webhook, no standard lookup tables.
 
-## Order of execution (after approval)
+## Order of work
 
-1. `add_secret` for `APOLLO_API_KEY`, `PDL_API_KEY`, `OPENAI_API_KEY` — wait for user to fill.
-2. Migration: create 3 tables + additive `candidates` columns + RPC + RLS + GRANTs.
-3. Create all server function files under `src/lib/sourcing/`.
-4. Smoke-test each stage with `invoke-server-function` (normalize → research → search returns rows; collect deferred until UI exists).
-
-Nothing in `src/routes/` or `src/components/` is modified.
+1. Migration: `agent_tasks` + grants + RLS.
+2. `src/lib/sourcing/agent.server.ts` orchestrator with task callbacks.
+3. `/api/chat`: register `source_candidates` + `refine_search`, emit `task` / `candidates_added` events, update system prompt.
+4. `getConversation`: include tasks.
+5. `app.c.$id.tsx`: parse new events, render task cards, pulse Candidates tab.
+6. `TaskCard` component + animations.
+7. Smoke test: send "find 5 SDRs in Mexico City"; verify tasks appear, complete, and Candidates tab fills.
