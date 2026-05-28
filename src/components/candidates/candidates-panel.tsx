@@ -375,6 +375,16 @@ export function CandidatesPanel({
           }}
         />
       )}
+      {contacting && (
+        <ContactAutomation
+          conversationId={conversationId}
+          candidates={candidates.filter((c) => selectedIds.has(c.id))}
+          onClose={() => {
+            setContacting(false);
+            setSelectedIds(new Set());
+          }}
+        />
+      )}
     </div>
   );
 }
