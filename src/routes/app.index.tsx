@@ -2,8 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { createConversation } from "@/lib/conversations.functions";
-import { Button } from "@/components/ui/button";
-import { Sparkles } from "lucide-react";
+import { Logo, Plus } from "@/components/gio-icons";
 
 export const Route = createFileRoute("/app/")({
   component: AppHome,
@@ -17,18 +16,25 @@ function AppHome() {
     onSuccess: (c) => c && navigate({ to: "/app/c/$id", params: { id: c.id } }),
   });
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-6 p-8 text-center">
-      <div className="space-y-2">
-        <Sparkles className="mx-auto h-10 w-10 text-primary" />
-        <h1 className="text-2xl font-semibold">Your recruiting copilot</h1>
-        <p className="max-w-md text-sm text-muted-foreground">
-          Start a conversation. As you describe the role and what you need, the AI builds out
-          workspace tabs — starting with the Job, then pipeline, posts, and more.
+    <div className="flex h-full flex-col items-center justify-center px-6">
+      <div className="w-full max-w-[520px] text-center">
+        <div className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-bg-bubble text-text">
+          <Logo size={26} />
+        </div>
+        <h1 className="text-[24px] font-semibold tracking-tight text-text">
+          What hire can I help with?
+        </h1>
+        <p className="mt-2 text-[13px] text-text-mute">
+          Start a project. As you describe the role, Gio drafts a Job, then pipeline, posts, and more.
         </p>
+        <button
+          onClick={() => mut.mutate()}
+          disabled={mut.isPending}
+          className="mt-6 inline-flex items-center gap-2 rounded-full bg-text px-4 py-2 text-[13px] font-medium text-text-invert transition hover:opacity-90 disabled:opacity-50"
+        >
+          <Plus size={14} /> New project
+        </button>
       </div>
-      <Button onClick={() => mut.mutate()} disabled={mut.isPending}>
-        New conversation
-      </Button>
     </div>
   );
 }
