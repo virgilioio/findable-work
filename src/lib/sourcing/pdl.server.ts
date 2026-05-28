@@ -1,7 +1,21 @@
 // People Data Labs search. Server-only.
-import { linkedinSlug, scoreKeywordsLocally, type SearchCriteria } from "./budget";
+import {
+  linkedinSlug,
+  mapPdlLevels,
+  mapSeniorities,
+  scoreKeywordsLocally,
+  splitLocationForPdl,
+  type SearchCriteria,
+} from "./budget";
 
 const PDL_BASE = "https://api.peopledatalabs.com/v5";
+
+export class PdlQuotaError extends Error {
+  constructor(message = "PDL quota exhausted") {
+    super(message);
+    this.name = "PdlQuotaError";
+  }
+}
 
 export type PdlPreview = {
   source: "pdl";
@@ -16,7 +30,7 @@ export type PdlPreview = {
   has_city: boolean;
   has_state: boolean;
   has_country: boolean;
-  keyword_score: number;
+  keyword_score?: number;
   // Full record kept server-side so the collect step can hydrate candidates
   // without a second API round-trip. Never sent to the browser.
   raw?: any;
@@ -45,9 +59,23 @@ function buildEsQuery(c: SearchCriteria): Record<string, unknown> {
     });
   }
   if (c.locations?.length) {
+    const localityShoulds: any[] = [];
+    const countryShoulds: any[] = [];
+    for (const loc of c.locations) {
+      const { locality, country } = splitLocationForPdl(loc);
+      if (locality) localityShoulds.push({ term: { location_locality: locality } });
+      if (country) countryShoulds.push({ term: { location_country: country } });
+    }
+    const shoulds = [...localityShoulds, ...countryShoulds];
+    if (shoulds.length) {
+      must.push({ bool: { should: shoulds, minimum_should_match: 1 } });
+    }
+  }
+  const levels = mapPdlLevels(mapSeniorities(c.seniorities ?? []));
+  if (levels.length) {
     must.push({
       bool: {
-        should: c.locations.map((loc) => ({ match: { location_name: loc } })),
+        should: levels.map((lv) => ({ term: { job_title_levels: lv } })),
         minimum_should_match: 1,
       },
     });
@@ -64,6 +92,9 @@ export async function searchPdl(criteria: SearchCriteria, size = 100): Promise<P
     headers: { "Content-Type": "application/json", "X-Api-Key": key },
     body: JSON.stringify(body),
   });
+  if (res.status === 402) {
+    throw new PdlQuotaError();
+  }
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`PDL error [${res.status}]: ${text.slice(0, 500)}`);

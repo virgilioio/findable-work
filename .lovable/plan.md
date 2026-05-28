@@ -1,100 +1,135 @@
-# Fix sourcing + redesign chat to a clickable agent timeline
+# What's actually wrong right now
 
-Two problems to solve in one pass:
+From `agent_tasks` for this conversation:
 
-1. **Sourcing is broken**: PDL credits get burned, but 0 candidates land in the Candidates tab.
-2. **Chat looks crowded** vs. the airy "magnifying-glass timeline" in your reference, and task cards aren't clickable.
+- **PDL** → `402 — account out of search credits`.
+- **Apollo** → 0 results, no error. Query was over-constrained AND the location string was in the wrong shape ("Mexico City, Mexico" with no country-code expansion path, no city-alias).
+- **Research step hallucinated** `researched_companies: ["Mexico City"]` (a location masquerading as a company), which then got AND-ed into the search.
+- **Job** never drafted — the model jumped straight to `source_candidates`.
 
----
+We need three things: (1) ask before sourcing when info is thin (Claude-style structured card), (2) port the proven GoGioATS Apollo guardrails, (3) add the progressive relaxation that GoGioATS itself admits it's missing.
 
-## Part 1 — Sourcing: collect from BOTH providers + hide source names
+# Plan
 
-### Root cause of "0 candidates"
+## 1. Claude-style clarifying-question card (pills + free text)
 
-In `src/lib/sourcing/agent.server.ts`, the collect step only enriches **Apollo** results:
+### New tool
 
-```text
-const apolloTop = sorted.filter((c) => c.source === "apollo").slice(0, limit);
-const apolloIds = apolloTop.map((c) => c.external_id);
-// ...enrichApolloProfiles(toEnrich)
+`ask_clarifying_questions` in `src/routes/api/chat.ts`:
+
+```ts
+ask_clarifying_questions({
+  reason: string,                  // "Need a few details before I source"
+  questions: Array<{
+    id: string,                    // "seniority" | "vertical" | …
+    label: string,
+    type: "single" | "multi" | "text",
+    options?: string[],            // pill labels
+    placeholder?: string,
+    allowOther?: boolean
+  }>
+})
 ```
 
-If Apollo returns 0 (key missing, 401, rate-limited) but PDL returns 80, we burn PDL credits during search, then insert nothing because PDL rows are filtered out. That's exactly what you saw.
+Server-side handler: persists a row in `agent_tasks` with `kind: "clarify"`, payload in `data`, and emits SSE `task`.
 
-### Fixes (in `agent.server.ts`)
+### Chat rendering
 
-- **Insert PDL candidates directly** from the search payload (no enrichment endpoint — PDL `person/search` already returns full profile JSON we can map to `candidates`). Add a `pdl_id` column (migration below) and dedupe against it.
-- Keep Apollo enrichment path as-is for Apollo rows.
-- Merge top-N across both sources by `keyword_score` so we always fill the quota even when one provider is down.
-- If both providers return 0 or both error, mark the `collect` task `failed` with a clean message ("No matches found — try broadening the brief"). Never silently return 0.
+New `src/components/chat/clarify-card.tsx`:
 
-### Hide provider names from users
+- Header: magnifying-glass + `reason`.
+- One block per question: label, then pills (rounded-full, semantic-token borders) for single/multi, or `Input`/`Textarea` for text.
+- `allowOther`: extra "Other…" pill that reveals an inline text input.
+- "Send answers" button disabled until each question has at least one answer.
+- On submit: format as markdown (`**Seniority:** Senior\n**Vertical:** Fintech, B2B SaaS\n…`) and POST through the existing chat send path. Card collapses to read-only summary.
 
-Speak in product terms, not vendor names. Affects:
+`task-card.tsx`: when `kind === "clarify"`, render `<ClarifyCard />` instead of the standard pill.
 
-- `agent.server.ts` task labels: `"Searching Apollo + PDL"` → `"Searching candidate pool"`; summary `"12 Apollo · 80 PDL · 90 after dedupe"` → `"90 matches found"`.
-- `source` / `display_source` column values stored on `candidates`: `"Apollo"` / `"pdl"` → `"Sourced"` (or keep raw provider in a private `provider` field, surface `"Sourced"` in UI).
-- System prompt in `src/routes/api/chat.ts`: drop "Apollo + PDL" → `"search our candidate pool"`.
-- Tool description for `source_candidates`: same wording change.
-- Any toast / error strings.
+### Gate rules in `SYSTEM_PROMPT`
 
-### Migration
+Before `source_candidates`, the agent must have:
+1. Specific job title
+2. Location (city+country, or "remote+region")
+3. Seniority (entry/mid/senior/manager/director/vp)
+4. ≥1 of: vertical, must-have skill, target companies, product sold
 
-```sql
-ALTER TABLE public.candidates ADD COLUMN IF NOT EXISTS pdl_id text;
-CREATE INDEX IF NOT EXISTS candidates_pdl_id_idx ON public.candidates(user_id, pdl_id);
-```
+Rules:
+- Missing any of 1-3 → call `ask_clarifying_questions`, stop.
+- 1-3 present, 4 missing → call `create_job` first, then `ask_clarifying_questions`.
+- After failed/empty search → call `ask_clarifying_questions` with **broadening** suggestions (e.g. "Open to LATAM-remote?", "Consider SDR-to-AE candidates?", "Drop seniority filter?"). Never silently retry the same query.
 
----
+Tighten `source_candidates` description: *"Only call after `create_job` has been called this conversation AND the checklist is satisfied."*
 
-## Part 2 — Chat redesign: timeline with clickable task cards
+## 2. Port GoGioATS Apollo guardrails into `src/lib/sourcing/`
 
-### What changes visually
+Bring over the proven patterns from `aba41743-9dfe-4b0e-88f2-0c24aeb910c4` (GoGioATS):
 
-Match the reference exactly:
+### `budget.ts` additions
 
-- **No bubbles** for assistant messages. Assistant text renders as plain prose on the page background, left-aligned, with a small magnifying-glass glyph in a left gutter (~32px). User messages stay as the soft grey rounded bubble, right-aligned.
-- **Each agent step is its own row** in the same transcript flow (not nested inside the message), with the same gutter icon. Steps appear in chronological order interleaved with prose.
-- Generous vertical rhythm (`space-y-6`), max width ~`720px`, no card borders on assistant prose.
-- The thinking dots become a single faint pulsing magnifying glass while a step is running.
+- **Country-code / state expansion maps** (subset of GoGioATS): `COUNTRY_CODE_TO_NAME` and `US_STATE_ABBR_TO_NAME`, plus a reverse `COUNTRY_NAME_TO_CODE` for "Mexico" → `MX`.
+- **City alias map**: `{ "cdmx": "mexico city", "ciudad de méxico": "mexico city", "df": "mexico city", "nyc": "new york", "sf": "san francisco", … }`. Small, hand-curated list.
+- `normalizeLocationForApollo(loc)` returning `string[]` (city-level + country-level fallback in the same array).
+- `deduplicateKeywords(keywords, titles)` — drop keywords whose words are all covered by title tokens (GoGioATS verbatim).
+- `dropLocationLikeCompanies(companies, locations)` — strip "Mexico City", "United States", etc. from `researched_companies` by checking against the location tokens, country names, and state names. Fixes the hallucinated "Mexico City" company we saw today.
+- `SENIORITY_MAPPING` — verbatim from GoGioATS (junior→entry, mid→senior, executive→c_suite, …), drop anything that doesn't map cleanly.
 
-### Task cards become artifact links
+### `apollo.server.ts` rewrite of `searchApollo`
 
-A completed task is a card with: icon · title (e.g. "Job description drafted") · subtitle ("Open Job tab to review") · right-side arrow. Clicking it switches the workspace tab.
+- **Use URL params** (`URLSearchParams`) instead of JSON body, matching Apollo's `api_search` contract that GoGioATS uses (avoids the occasional 400 on body shape).
+- **Mutual exclusion**: never send `q_organization_name` AND keyword-like filters together — company list wins. Today we don't send `q_keywords`, but enforce the rule.
+- **Keywords stay local-only**: drop `q_keywords` entirely; score post-hoc with `scoreKeywordsLocally` (already exists). Apply `deduplicateKeywords` first.
+- **Drop industries** silently (Apollo needs numeric tag IDs).
+- **Locations**: expand each via `normalizeLocationForApollo` → flatten to `person_locations[]`.
+- **Companies**: filter via `dropLocationLikeCompanies` before send.
 
-Mapping:
+### **Progressive relaxation ladder** (the gap GoGioATS admits)
 
-| Task kind        | Card title                  | onClick action              |
-| ---------------- | --------------------------- | --------------------------- |
-| `create_job`     | "Job description drafted"   | switch tab → `job`          |
-| `collect` (done) | "N candidates sourced"      | switch tab → `candidates`   |
-| `normalize`      | "Brief normalized"          | no-op (or expand inline)    |
-| `research`       | "Researched titles & co."   | no-op                       |
-| `search`         | "Search complete"           | no-op                       |
+`searchApolloWithFallback(criteria)` tries:
+1. Full query.
+2. Drop `person_seniorities`.
+3. Drop `q_organization_name`.
+4. Country-only locations (drop city).
+5. Title-only (drop locations).
 
-Running / failed states keep the existing shimmer / red border but are not clickable.
+Stops at the first attempt with ≥1 candidate. Records `task.data.broadened_to = N` and `task.data.broadening_steps = ["dropped_seniority", "dropped_companies"]` so the search task summary can read **"X matches found (broadened search)"** and the post-failure clarify card knows which dimensions were already relaxed.
 
-### Wiring
+## 3. PDL improvements + graceful degrade
 
-- `TaskCard` gains an `onOpenTab?: (tab: "job" | "candidates") => void` prop. Pure presentation, parent decides routing.
-- `ChatPanel` already receives `messages`, `persistedTasks`, `liveTasks`. It flattens both into a single ordered timeline of `{kind: "message" | "task", ...}` sorted by `created_at`, then renders rows. Drops the current "tasks nested under message" grouping.
-- The page passes `setTab` down so cards can switch tabs.
-- Add a `create_job` task emission in `api/chat.ts` so the "Job description drafted" card actually exists in the timeline (today only the sourcing pipeline emits tasks; `create_job` does not). One row inserted into `agent_tasks` with `kind='create_job'`, `status='done'`, label `"Job description drafted"`.
+In `pdl.server.ts`:
+- Use `term` filters for `location_country`, `location_locality`, `job_title_levels`; keep `match` for free-text `job_title`.
+- Map our seniority set → PDL `job_title_levels` enum (`cxo, director, entry, manager, owner, partner, senior, training, unpaid, vp`).
+- Split "Mexico City, Mexico" → `location_locality: "mexico city"` + `location_country: "mexico"`.
+- Detect 402 → throw typed `PdlQuotaError`. In `agent.server.ts`, set `task.data.pool_limited = true` and continue Apollo-only without throwing.
 
-### Out of scope (not changing)
+## 4. Friendlier failure messaging
 
-- No changes to the Job / Candidates panels themselves.
-- No changes to auth, conversations list, or composer behaviour.
-- No model/provider swap (still using the gateway already wired).
-- No new icons beyond what `findable-icons.tsx` already exports.
+In `agent.server.ts`, search-task summaries (never name vendors):
+- Both empty + quota → **"Candidate pool partially limited — try broadening the brief"**, then agent immediately follows with `ask_clarifying_questions`.
+- Apollo broadened → **"X matches found (broadened search)"**.
+- Normal → **"X matches found"**.
 
----
+## 5. Files
 
-## Files touched
+- `src/lib/sourcing/budget.ts` — country/state/alias maps, `normalizeLocationForApollo` (array), `deduplicateKeywords`, `dropLocationLikeCompanies`, stricter `SENIORITY_MAPPING`, PDL helpers.
+- `src/lib/sourcing/apollo.server.ts` — URLSearchParams build, mutual exclusion, `searchApolloWithFallback` ladder.
+- `src/lib/sourcing/pdl.server.ts` — `term` filters, `job_title_levels`, typed `PdlQuotaError`.
+- `src/lib/sourcing/agent.server.ts` — call `searchApolloWithFallback`, `pool_limited` / `broadened_to` flags, friendlier summaries, never throw on PDL quota.
+- `src/routes/api/chat.ts` — `ask_clarifying_questions` tool + system-prompt gate + post-failure follow-up.
+- `src/components/chat/clarify-card.tsx` — new component.
+- `src/components/chat/task-card.tsx` — render `ClarifyCard` for `kind: "clarify"`.
+- `src/routes/app.c.$id.tsx` — pass `sendMessage(text)` callback through.
 
-- `supabase/migrations/<new>.sql` — add `pdl_id` column + index.
-- `src/lib/sourcing/agent.server.ts` — insert PDL directly, merge providers in collect, rename labels.
-- `src/lib/sourcing/pdl.server.ts` — return the extra fields we need to map into `candidates` (email/phone/location/experience if available in `person/search`).
-- `src/routes/api/chat.ts` — system prompt wording; emit `create_job` task into `agent_tasks` + SSE.
-- `src/components/chat/task-card.tsx` — clickable variant, refined typography, no bubble.
-- `src/routes/app.c.$id.tsx` — flatten messages+tasks into one timeline, render gutter-icon rows, pass `setTab` to cards, restyle user/assistant rows.
+## 6. Out of scope
+
+- Topping up / rotating the PDL key (Settings → Secrets action).
+- Visual chat redesign — already shipped.
+- Multi-variant job posts artifact.
+
+## 7. Verification
+
+1. New conversation: "Find AEs in Mexico City".
+   → Agent renders clarify card: Seniority (single pills) · Vertical (multi pills) · Comp range (text). No sourcing yet.
+2. Reply via pills: Senior + Fintech, B2B SaaS + "$80-110k USD" → Send answers.
+   → Agent calls `create_job`, then `source_candidates`. Timeline: Normalize → Research → Job description drafted → Searching pool → Collecting top 20 → "X candidates sourced".
+3. Candidates tab populates from Apollo (after broadening if needed), even with PDL on 402.
+4. If Apollo still 0 after the full ladder, agent comes back with a *broadening* clarify card pre-filled based on which dimensions were already relaxed.

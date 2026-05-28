@@ -1,9 +1,12 @@
 // Apollo API helpers. Server-only.
 import {
   budgetSearchCriteria,
-  formatLocationForApollo,
   linkedinSlug,
   mapSeniorities,
+  normalizeLocationForApollo,
+  normalizeTitles,
+  deduplicateKeywords,
+  dropLocationLikeCompanies,
   scoreKeywordsLocally,
   type SearchCriteria,
 } from "./budget";
@@ -24,7 +27,7 @@ export type ApolloPreview = {
   has_city: boolean;
   has_state: boolean;
   has_country: boolean;
-  keyword_score: number;
+  keyword_score?: number;
 };
 
 async function apolloFetch(path: string, body: unknown): Promise<any> {
@@ -46,33 +49,31 @@ async function apolloFetch(path: string, body: unknown): Promise<any> {
   return res.json();
 }
 
-export async function searchApollo(criteria: SearchCriteria): Promise<ApolloPreview[]> {
-  const c = budgetSearchCriteria(criteria);
-  const personTitles = c.title_keywords ?? [];
-  const companies = [
-    ...(c.user_company_names ?? []),
-    ...(c.researched_companies ?? []),
-  ];
-  const personLocations = (c.locations ?? []).map(formatLocationForApollo);
-  const personSeniorities = mapSeniorities(c.seniorities ?? []);
+type ApolloSearchBody = Record<string, unknown>;
 
-  const baseBody: Record<string, unknown> = {
+function buildBody(opts: {
+  titles: string[];
+  companies: string[];
+  locations: string[];
+  seniorities: string[];
+  companySizes: string[];
+  companyDomains: string[];
+}): ApolloSearchBody {
+  return {
     per_page: 100,
-    ...(personTitles.length ? { person_titles: personTitles.slice(0, 10) } : {}),
-    ...(companies.length ? { q_organization_name: companies.join(" OR ") } : {}),
-    ...(personLocations.length ? { person_locations: personLocations } : {}),
-    ...(personSeniorities.length ? { person_seniorities: personSeniorities } : {}),
-    ...(c.company_sizes?.length
-      ? { organization_num_employees_ranges: c.company_sizes }
-      : {}),
-    ...(c.company_domains?.length
-      ? { q_organization_domains_list: c.company_domains }
-      : {}),
+    ...(opts.titles.length ? { person_titles: opts.titles.slice(0, 10) } : {}),
+    ...(opts.companies.length ? { q_organization_name: opts.companies.join(" OR ") } : {}),
+    ...(opts.locations.length ? { person_locations: opts.locations } : {}),
+    ...(opts.seniorities.length ? { person_seniorities: opts.seniorities } : {}),
+    ...(opts.companySizes.length ? { organization_num_employees_ranges: opts.companySizes } : {}),
+    ...(opts.companyDomains.length ? { q_organization_domains_list: opts.companyDomains } : {}),
   };
+}
 
+async function runApolloSearch(body: ApolloSearchBody): Promise<ApolloPreview[]> {
   const collected: any[] = [];
   for (let page = 1; page <= MAX_PAGES; page++) {
-    const data = await apolloFetch("/mixed_people/api_search", { ...baseBody, page });
+    const data = await apolloFetch("/mixed_people/api_search", { ...body, page });
     const people: any[] = data.people ?? [];
     if (people.length === 0) break;
     collected.push(...people);
@@ -80,8 +81,7 @@ export async function searchApollo(criteria: SearchCriteria): Promise<ApolloPrev
     if (collected.length >= total || people.length < 100) break;
     await new Promise((r) => setTimeout(r, 300));
   }
-
-  const rows = collected.map((p) => ({
+  return collected.map((p) => ({
     source: "apollo" as const,
     external_id: String(p.id),
     linkedin_slug: linkedinSlug(p.linkedin_url),
@@ -95,8 +95,85 @@ export async function searchApollo(criteria: SearchCriteria): Promise<ApolloPrev
     has_state: Boolean(p.state),
     has_country: Boolean(p.country),
   }));
+}
 
-  return scoreKeywordsLocally(rows, c.keywords ?? []);
+export type ApolloSearchOutcome = {
+  rows: ApolloPreview[];
+  broadened_to: number; // 0 = full query, 1..N = which fallback succeeded
+  broadening_steps: string[];
+};
+
+/**
+ * Progressive relaxation ladder. Stops at the first attempt with ≥1 result.
+ */
+export async function searchApolloWithFallback(criteria: SearchCriteria): Promise<ApolloSearchOutcome> {
+  const c = budgetSearchCriteria(criteria);
+
+  const titles = normalizeTitles(c.title_keywords ?? []);
+  const locationsArr = (c.locations ?? []).flatMap(normalizeLocationForApollo);
+  // De-dupe while preserving order
+  const locations = [...new Set(locationsArr)];
+  const countryOnly = [...new Set(
+    locations.filter((l) => !l.includes(",")),
+  )];
+  const seniorities = mapSeniorities(c.seniorities ?? []);
+  const rawCompanies = [
+    ...(c.user_company_names ?? []),
+    ...(c.researched_companies ?? []),
+  ];
+  const companies = dropLocationLikeCompanies(rawCompanies, c.locations ?? []);
+  const keywords = deduplicateKeywords(c.keywords ?? [], titles);
+  const companySizes = c.company_sizes ?? [];
+  const companyDomains = c.company_domains ?? [];
+
+  const attempts: Array<{ step: string; body: ApolloSearchBody }> = [
+    {
+      step: "full",
+      body: buildBody({ titles, companies, locations, seniorities, companySizes, companyDomains }),
+    },
+    {
+      step: "dropped_seniority",
+      body: buildBody({ titles, companies, locations, seniorities: [], companySizes, companyDomains }),
+    },
+    {
+      step: "dropped_companies",
+      body: buildBody({ titles, companies: [], locations, seniorities: [], companySizes, companyDomains }),
+    },
+    {
+      step: "country_only_location",
+      body: buildBody({ titles, companies: [], locations: countryOnly, seniorities: [], companySizes, companyDomains }),
+    },
+    {
+      step: "title_only",
+      body: buildBody({ titles, companies: [], locations: [], seniorities: [], companySizes, companyDomains: [] }),
+    },
+  ];
+
+  const broadeningSteps: string[] = [];
+  for (let i = 0; i < attempts.length; i++) {
+    const attempt = attempts[i];
+    // Skip degenerate attempts (e.g. country_only when there is no country)
+    if (i > 0 && JSON.stringify(attempt.body) === JSON.stringify(attempts[i - 1].body)) {
+      continue;
+    }
+    const rows = await runApolloSearch(attempt.body);
+    if (rows.length > 0) {
+      return {
+        rows: scoreKeywordsLocally(rows, keywords),
+        broadened_to: i,
+        broadening_steps: broadeningSteps,
+      };
+    }
+    if (i > 0) broadeningSteps.push(attempt.step);
+  }
+
+  return { rows: [], broadened_to: attempts.length, broadening_steps: broadeningSteps };
+}
+
+// Legacy single-shot kept for any other callers (none today).
+export async function searchApollo(criteria: SearchCriteria): Promise<ApolloPreview[]> {
+  const out = await searchApolloWithFallback(criteria);
+  return out.rows;
 }
 
 export type ApolloEnriched = {
