@@ -1,4 +1,4 @@
-import { createFileRoute, redirect, useNavigate, useRouter } from "@tanstack/react-router";
+import { createFileRoute, isRedirect, redirect, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Logo } from "@/components/findable-icons";
@@ -14,7 +14,6 @@ export const Route = createFileRoute("/login")({
 
 function LoginPage() {
   const navigate = useNavigate();
-  const router = useRouter();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -35,7 +34,6 @@ function LoginPage() {
         if (error) throw error;
         const { data } = await supabase.auth.getSession();
         if (data.session) {
-          await router.invalidate();
           navigate({ to: "/app", replace: true });
         } else {
           setError("Check your email to confirm your account, then sign in.");
@@ -43,10 +41,10 @@ function LoginPage() {
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        await router.invalidate();
         navigate({ to: "/app", replace: true });
       }
     } catch (err) {
+      if (isRedirect(err)) throw err;
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setLoading(false);
