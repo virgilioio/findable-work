@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { createCandidate } from "@/lib/candidates.functions";
@@ -21,6 +21,7 @@ export function AddCandidateModal({
   const [dragOver, setDragOver] = useState(false);
   const [parsing, setParsing] = useState(false);
   const [parsed, setParsed] = useState<{ name: string; role: string; company: string; source: string; tags: string[]; match: number } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     function onEsc(e: KeyboardEvent) {
@@ -109,7 +110,26 @@ export function AddCandidateModal({
                 <Doc size={28} className="text-text-mute" />
                 <div className="mt-3 text-[14px] font-medium text-text">Drop a resume here</div>
                 <div className="mt-1 text-[12.5px] text-text-mute">PDF, DOC, or DOCX · findable will parse name, role, skills and history</div>
-                <button className="mt-3.5 h-[34px] rounded-lg border border-border-strong bg-bg-elev px-3.5 text-[13px] text-text">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files.length > 0) {
+                      simulateParse();
+                      e.target.value = "";
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    fileInputRef.current?.click();
+                  }}
+                  className="mt-3.5 h-[34px] rounded-lg border border-border-strong bg-bg-elev px-3.5 text-[13px] text-text"
+                >
                   Or browse files…
                 </button>
               </div>
