@@ -1,4 +1,11 @@
-import { createFileRoute, Link, Outlet, redirect, useNavigate, useParams } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  Link,
+  Outlet,
+  redirect,
+  useNavigate,
+  useParams,
+} from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -62,7 +69,9 @@ function AppLayout() {
   });
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
       console.info("[auth] app auth state changed", { event, hasSession: Boolean(session) });
       if (event === "SIGNED_OUT" || (event === "SIGNED_IN" && !session)) {
         qc.clear();
@@ -242,7 +251,12 @@ function groupByDate(items: Conv[]): { label: string; items: Conv[] }[] {
   const yesterday = today - 86400000;
   const weekAgo = today - 7 * 86400000;
 
-  const buckets: Record<string, Conv[]> = { Today: [], Yesterday: [], "Last 7 days": [], Earlier: [] };
+  const buckets: Record<string, Conv[]> = {
+    Today: [],
+    Yesterday: [],
+    "Last 7 days": [],
+    Earlier: [],
+  };
   for (const c of items) {
     const t = new Date(c.updated_at ?? c.created_at ?? Date.now()).getTime();
     if (t >= today) buckets["Today"].push(c);
