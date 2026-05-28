@@ -51,11 +51,17 @@ export const updateJobPost = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const { supabase } = context;
     const { conversationId, ...patch } = data;
-    const update: Record<string, unknown> = { ...patch };
+    const update: {
+      variants?: typeof patch.variants;
+      channels?: typeof patch.channels;
+      schedule?: typeof patch.schedule;
+      status?: typeof patch.status;
+      est_reach?: number;
+    } = { ...patch };
     if (patch.channels) update.est_reach = reach(patch.channels);
     const { data: row, error } = await supabase
       .from("job_posts")
-      .update(update)
+      .update(update as never)
       .eq("conversation_id", conversationId)
       .select("*")
       .single();

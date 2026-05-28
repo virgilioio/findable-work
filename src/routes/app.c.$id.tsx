@@ -22,6 +22,7 @@ import {
   Logo,
   Chat as ChatIcon,
   Briefcase,
+  Megaphone,
   Send as SendIcon,
   Attach,
   Sparkle,
@@ -36,7 +37,8 @@ import {
 } from "@/components/findable-icons";
 import { cn } from "@/lib/utils";
 import { CandidatesPanel } from "@/components/candidates/candidates-panel";
-import { TaskCard, type ChatTask } from "@/components/chat/task-card";
+import { TaskCard, type ChatTask, type ArtifactTab } from "@/components/chat/task-card";
+import { JobPostsPanel, type JobPost } from "@/components/job-posts/job-posts-panel";
 
 // Splits an assistant message into segments rendered before and after the
 // associated task cards. Must stay in sync with the constant in
@@ -84,8 +86,9 @@ function ConversationPage() {
 
   const [streaming, setStreaming] = useState<string>("");
   const [sending, setSending] = useState(false);
-  const [tab, setTab] = useState<"chat" | "job" | "candidates">("chat");
+  const [tab, setTab] = useState<"chat" | "job" | "job_posts" | "candidates">("chat");
   const [pulse, setPulse] = useState(false);
+  const [jobPostsPulse, setJobPostsPulse] = useState(false);
   const [candidatesPulse, setCandidatesPulse] = useState(false);
   const [composerText, setComposerText] = useState("");
   const [liveTasks, setLiveTasks] = useState<ChatTask[]>([]);
@@ -93,6 +96,7 @@ function ConversationPage() {
 
   const messages: Message[] = data?.messages ?? [];
   const job: Job | null = (data?.job as Job | null) ?? null;
+  const jobPost: JobPost | null = (data?.jobPost as JobPost | null) ?? null;
   const title: string = data?.conversation?.title ?? "Untitled project";
   const persistedTasks: ChatTask[] = (data?.tasks as ChatTask[] | undefined) ?? [];
 
@@ -143,6 +147,7 @@ function ConversationPage() {
       let buf = "";
       let acc = "";
       let jobCreated = false;
+      let jobPostCreated = false;
       let candidatesAdded = 0;
 
       while (true) {
@@ -172,6 +177,8 @@ function ConversationPage() {
             setStreaming(acc);
           } else if (event === "job") {
             jobCreated = true;
+          } else if (event === "job_posts") {
+            jobPostCreated = true;
           } else if (event === "task") {
             const t = payload as ChatTask;
             setLiveTasks((prev) => {
@@ -203,6 +210,10 @@ function ConversationPage() {
       if (jobCreated) {
         setPulse(true);
         setTimeout(() => setPulse(false), 3500);
+      }
+      if (jobPostCreated && tab !== "job_posts") {
+        setJobPostsPulse(true);
+        setTimeout(() => setJobPostsPulse(false), 3500);
       }
     } finally {
       setSending(false);
@@ -236,6 +247,15 @@ function ConversationPage() {
               label="Job"
               pulse={pulse && tab !== "job"}
               closable
+            />
+          )}
+          {jobPost && (
+            <TabButton
+              active={tab === "job_posts"}
+              onClick={() => setTab("job_posts")}
+              icon={<Megaphone size={14} />}
+              label="Job Posts"
+              pulse={jobPostsPulse && tab !== "job_posts"}
             />
           )}
           {job && (
@@ -298,6 +318,10 @@ function ConversationPage() {
                 router.navigate({ to: "/app/c/$id", params: { id: newId } });
               }}
             />
+          </div>
+        ) : tab === "job_posts" && jobPost ? (
+          <div className="flex-1 overflow-y-auto">
+            <JobPostsPanel jobPost={jobPost} conversationId={id} />
           </div>
         ) : tab === "candidates" && job ? (
           <CandidatesPanel conversationId={id} onAskFindable={askFindable} />
