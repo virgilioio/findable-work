@@ -57,6 +57,7 @@ export function ClarifyCard({
   });
 
   function submit() {
+    if (!complete) return;
     const ans = buildAnswers();
     const lines = data.questions
       .filter((q) => ans[q.id]?.length)
@@ -86,7 +87,13 @@ export function ClarifyCard({
   }
 
   return (
-    <div className="animate-fade-in space-y-3 rounded-xl border border-border bg-bg-elev px-3.5 py-3">
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        submit();
+      }}
+      className="animate-fade-in space-y-3 rounded-xl border border-border bg-bg-elev px-3.5 py-3"
+    >
       {data.intro && <div className="text-[12.5px] text-text-mute">{data.intro}</div>}
       {data.questions.map((q) => {
         const picks = selections[q.id] ?? [];
@@ -130,14 +137,13 @@ export function ClarifyCard({
       })}
       <div className="flex justify-end pt-1">
         <button
-          type="button"
-          onClick={submit}
+          type="submit"
           disabled={!complete}
           className="rounded-full bg-text px-3.5 py-1.5 text-[12px] font-medium text-text-invert transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-30"
         >
           Send answers
         </button>
       </div>
-    </div>
+    </form>
   );
 }
