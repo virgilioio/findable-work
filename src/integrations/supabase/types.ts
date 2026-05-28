@@ -14,6 +14,87 @@ export type Database = {
   }
   public: {
     Tables: {
+      candidates: {
+        Row: {
+          activity: Json
+          avatar: string
+          company: string
+          conversation_id: string
+          created_at: string
+          education: Json
+          email: string | null
+          experience: Json
+          id: string
+          linkedin: string | null
+          location: string | null
+          match: number
+          match_breakdown: Json
+          name: string
+          phone: string | null
+          role: string
+          source: string
+          stage: string
+          stage_changed_at: string
+          starred: boolean
+          summary: string | null
+          tags: string[]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          activity?: Json
+          avatar?: string
+          company?: string
+          conversation_id: string
+          created_at?: string
+          education?: Json
+          email?: string | null
+          experience?: Json
+          id?: string
+          linkedin?: string | null
+          location?: string | null
+          match?: number
+          match_breakdown?: Json
+          name: string
+          phone?: string | null
+          role?: string
+          source?: string
+          stage?: string
+          stage_changed_at?: string
+          starred?: boolean
+          summary?: string | null
+          tags?: string[]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          activity?: Json
+          avatar?: string
+          company?: string
+          conversation_id?: string
+          created_at?: string
+          education?: Json
+          email?: string | null
+          experience?: Json
+          id?: string
+          linkedin?: string | null
+          location?: string | null
+          match?: number
+          match_breakdown?: Json
+          name?: string
+          phone?: string | null
+          role?: string
+          source?: string
+          stage?: string
+          stage_changed_at?: string
+          starred?: boolean
+          summary?: string | null
+          tags?: string[]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       conversations: {
         Row: {
           created_at: string
