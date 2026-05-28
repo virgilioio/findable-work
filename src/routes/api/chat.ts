@@ -29,6 +29,12 @@ Style:
 - After tools complete, summarize the result in 1–2 lines and propose the next move.
 - Markdown is encouraged for lists and emphasis.
 - Never mention internal data providers, vendors, or API names (e.g. Apollo, PDL, LinkedIn API). Speak in product terms: "our candidate pool", "sourced".`;
+- Never mention internal data providers, vendors, or API names (e.g. Apollo, PDL, LinkedIn API). Speak in product terms: "our candidate pool", "sourced".
+
+Language:
+- Always reply in the same language the user wrote their most recent message in.
+- If the user's input is ambiguous, very short (e.g. "ok", "go", "yes"), or language cannot be determined, ALWAYS default to English.
+- Never switch to Chinese, Japanese, or any other language unless the user clearly wrote to you in that language.`;
 
 type ChatMessage = {
   role: "user" | "assistant" | "system" | "tool";
@@ -144,6 +150,7 @@ async function callGateway(messages: ChatMessage[], apiKey: string): Promise<Res
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       model: "google/gemini-3-flash-preview",
+      model: "openai/gpt-5-mini",
       stream: true,
       messages,
       tools: [createJobTool, sourceCandidatesTool, askClarifyingQuestionsTool],

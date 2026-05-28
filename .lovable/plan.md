@@ -1,25 +1,9 @@
-## Plan: Default to verified + likely-to-engage emails only
+## Plan: Switch to OpenAI Model + Fix Language Drift
 
-Apollo's `/mixed_people/api_search` accepts a `contact_email_status` array filter. Today we don't send it, so results mix verified, guessed, and unavailable emails. We'll always request only high-quality contacts.
+### What we change
+1. **Model swap** — in `src/routes/api/chat.ts`, change the Lovable AI Gateway model from `google/gemini-3-flash-preview` to `openai/gpt-5-mini` (best cost/quality balance for this agentic workload). One-line change inside the `callGateway` function.
+2. **Language guardrail** — append a high-priority rule to the `SYSTEM_PROMPT` instructing the assistant to always reply in the same language as the user's input, defaulting to English when the input is ambiguous or very short (e.g. "ok", "go").
 
-### Change
-
-**`src/lib/sourcing/apollo.server.ts`**
-
-1. In `buildBody()`, always include:
-   ```ts
-   contact_email_status: ["verified", "likely to engage"]
-   ```
-   No conditional, no UI toggle — it's a hard default for every Apollo search.
-
-2. Apply it to **every attempt** in the broadening ladder (`full`, `dropped_seniority`, `dropped_companies`, `country_only_location`, `title_only`) so we never silently fall back to unverified contacts when broadening for geo/title.
-
-### Out of scope
-
-- No UI changes.
-- No new `SearchCriteria` field — this is a constant baked into `buildBody()`.
-- PDL (`pdl.server.ts`) is unaffected; it has its own email-quality signal handled separately.
-
-### Verification
-
-After the change, log the outgoing Apollo body once for a sample search and confirm `contact_email_status: ["verified","likely to engage"]` is present on every attempt, then re-run a known query and confirm the result count drops (expected) and all returned previews have `has_email: true` for the verified tier.
+### Outcome
+- Responses will come from OpenAI instead of Gemini, leveraging the existing Lovable AI Gateway (no extra keys needed).
+- Short/ambiguous prompts will no longer drift into Chinese or Japanese.
