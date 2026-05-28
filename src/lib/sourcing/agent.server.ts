@@ -66,7 +66,7 @@ async function finishTask(
     .update({
       status,
       summary,
-      data,
+      data: data as any,
       finished_at: new Date().toISOString(),
     })
     .eq("id", task.id)
