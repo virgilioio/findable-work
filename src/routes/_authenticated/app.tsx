@@ -2,7 +2,6 @@ import {
   createFileRoute,
   Link,
   Outlet,
-  redirect,
   useNavigate,
   useParams,
 } from "@tanstack/react-router";
@@ -51,16 +50,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 
-export const Route = createFileRoute("/app")({
-  beforeLoad: async () => {
-    if (typeof window === "undefined") return;
-    const { data, error } = await supabase.auth.getUser();
-    if (error || !data.user) {
-      console.info("[auth] /app guard redirecting to /login", { message: error?.message });
-      throw redirect({ to: "/login" });
-    }
-    console.info("[auth] /app guard allowed", { email: data.user.email });
-  },
+export const Route = createFileRoute("/_authenticated/app")({
   component: AppLayout,
 });
 

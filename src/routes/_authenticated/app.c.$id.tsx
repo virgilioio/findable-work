@@ -54,7 +54,7 @@ function splitAroundTasks(content: string): { before: string; after: string } {
   };
 }
 
-export const Route = createFileRoute("/app/c/$id")({
+export const Route = createFileRoute("/_authenticated/app/c/$id")({
   component: ConversationPage,
 });
 
