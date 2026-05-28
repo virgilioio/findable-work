@@ -1,29 +1,30 @@
-import { createFileRoute, isRedirect, redirect, useNavigate } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Logo } from "@/components/findable-icons";
 
 export const Route = createFileRoute("/login")({
   head: () => ({ meta: [{ title: "Sign in — findable" }] }),
-  beforeLoad: async () => {
-    const { data } = await supabase.auth.getUser();
-    if (data.user) throw redirect({ to: "/app" });
-  },
   component: LoginPage,
 });
 
 function LoginPage() {
-  const navigate = useNavigate();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  function redirectToApp() {
+    console.info("[auth] redirecting to app after successful auth");
+    window.location.replace("/app");
+  }
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setLoading(true);
+    console.info("[auth] login form submitted", { mode, email });
     try {
       if (mode === "signup") {
         const { error } = await supabase.auth.signUp({
@@ -34,17 +35,20 @@ function LoginPage() {
         if (error) throw error;
         const { data } = await supabase.auth.getSession();
         if (data.session) {
-          navigate({ to: "/app", replace: true });
+          console.info("[auth] signup returned an active session");
+          redirectToApp();
         } else {
+          console.info("[auth] signup requires email confirmation");
           setError("Check your email to confirm your account, then sign in.");
         }
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        navigate({ to: "/app", replace: true });
+        console.info("[auth] sign-in succeeded");
+        redirectToApp();
       }
     } catch (err) {
-      if (isRedirect(err)) throw err;
+      console.error("[auth] login failed", err);
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setLoading(false);
