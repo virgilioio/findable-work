@@ -111,3 +111,93 @@ export const getConversation = createServerFn({ method: "POST" })
       jobPost: jobPost ?? null,
     };
   });
+
+// ---------------------------------------------------------------------
+// Guest claim — takes a guest transcript + optional draft Job from the
+// public homepage chat and persists it as a real conversation owned by
+// the just-signed-in user. Returns the new conversationId.
+
+const guestMessageSchema = z.object({
+  role: z.enum(["user", "assistant", "system", "tool"]),
+  content: z.string().max(20000),
+  tool_calls: z.unknown().nullable().optional(),
+});
+
+const guestDraftJobSchema = z
+  .object({
+    title: z.string().max(200).optional(),
+    description: z.string().max(20000).optional(),
+    requirements: z.array(z.string().max(500)).max(50).optional(),
+    location: z.string().max(200).optional(),
+    employment_type: z
+      .enum(["full_time", "part_time", "contract", "internship", "temporary"])
+      .optional(),
+    salary_min: z.number().nullable().optional(),
+    salary_max: z.number().nullable().optional(),
+    currency: z.string().max(8).optional(),
+  })
+  .partial();
+
+export const claimGuestConversation = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input) =>
+    z
+      .object({
+        title: z.string().min(1).max(200).optional(),
+        messages: z.array(guestMessageSchema).max(80),
+        draftJob: guestDraftJobSchema.optional(),
+      })
+      .parse(input),
+  )
+  .handler(async ({ context, data }) => {
+    const { supabase, userId } = context;
+
+    const title =
+      data.title?.trim() ||
+      data.draftJob?.title?.trim() ||
+      data.messages.find((m) => m.role === "user")?.content.slice(0, 60) ||
+      "New conversation";
+
+    const { data: conv, error: convErr } = await supabase
+      .from("conversations")
+      .insert({ user_id: userId, title })
+      .select("id")
+      .single();
+    if (convErr || !conv) throw new Error(convErr?.message ?? "Failed to create conversation");
+
+    if (data.messages.length > 0) {
+      const rows = data.messages
+        .filter((m) => m.role === "user" || m.role === "assistant")
+        .map((m) => ({
+          conversation_id: conv.id,
+          user_id: userId,
+          role: m.role,
+          content: m.content,
+          tool_calls: (m.tool_calls ?? null) as never,
+        }));
+      if (rows.length > 0) {
+        const { error: msgErr } = await supabase.from("messages").insert(rows);
+        if (msgErr) throw new Error(msgErr.message);
+      }
+    }
+
+    if (data.draftJob && (data.draftJob.title || data.draftJob.description)) {
+      const dj = data.draftJob;
+      const { error: jobErr } = await supabase.from("jobs").insert({
+        user_id: userId,
+        conversation_id: conv.id,
+        title: dj.title ?? "",
+        description: dj.description ?? "",
+        requirements: dj.requirements ?? [],
+        location: dj.location ?? "",
+        employment_type: dj.employment_type ?? "full_time",
+        salary_min: dj.salary_min ?? null,
+        salary_max: dj.salary_max ?? null,
+        currency: dj.currency ?? "USD",
+        status: "draft",
+      });
+      if (jobErr) throw new Error(jobErr.message);
+    }
+
+    return { conversationId: conv.id };
+  });
