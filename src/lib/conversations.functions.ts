@@ -8,7 +8,8 @@ export const listConversations = createServerFn({ method: "GET" })
     const { supabase } = context;
     const { data, error } = await supabase
       .from("conversations")
-      .select("id,title,updated_at,created_at")
+      .select("id,title,updated_at,created_at,pinned_at")
+      .order("pinned_at", { ascending: false, nullsFirst: false })
       .order("updated_at", { ascending: false });
     if (error) throw new Error(error.message);
     return data ?? [];
@@ -24,7 +25,7 @@ export const createConversation = createServerFn({ method: "POST" })
     const { data: row, error } = await supabase
       .from("conversations")
       .insert({ user_id: userId, title: data.title ?? "New conversation" })
-      .select("id,title,updated_at,created_at")
+      .select("id,title,updated_at,created_at,pinned_at")
       .single();
     if (error) throw new Error(error.message);
     return row;
@@ -40,6 +41,21 @@ export const renameConversation = createServerFn({ method: "POST" })
     const { error } = await supabase
       .from("conversations")
       .update({ title: data.title })
+      .eq("id", data.id);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+export const setConversationPinned = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input) =>
+    z.object({ id: z.string().uuid(), pinned: z.boolean() }).parse(input),
+  )
+  .handler(async ({ context, data }) => {
+    const { supabase } = context;
+    const { error } = await supabase
+      .from("conversations")
+      .update({ pinned_at: data.pinned ? new Date().toISOString() : null })
       .eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };
