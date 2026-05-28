@@ -70,6 +70,7 @@ export type Database = {
           education: Json
           email: string | null
           experience: Json
+          has_direct_phone: boolean
           id: string
           linkedin: string | null
           linkedin_slug: string | null
@@ -99,6 +100,7 @@ export type Database = {
           education?: Json
           email?: string | null
           experience?: Json
+          has_direct_phone?: boolean
           id?: string
           linkedin?: string | null
           linkedin_slug?: string | null
@@ -128,6 +130,7 @@ export type Database = {
           education?: Json
           email?: string | null
           experience?: Json
+          has_direct_phone?: boolean
           id?: string
           linkedin?: string | null
           linkedin_slug?: string | null

@@ -1,0 +1,1 @@
+ALTER TABLE public.candidates ADD COLUMN IF NOT EXISTS has_direct_phone boolean NOT NULL DEFAULT false;
