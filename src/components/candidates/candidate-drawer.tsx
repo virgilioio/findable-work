@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { updateCandidate, deleteCandidate } from "@/lib/candidates.functions";
+import { updateCandidate, deleteCandidate, revealCandidatePhone } from "@/lib/candidates.functions";
 import { cn } from "@/lib/utils";
 import {
   X,
@@ -36,6 +36,7 @@ export type Candidate = {
   avatar: string;
   email: string | null;
   phone: string | null;
+  has_direct_phone?: boolean;
   linkedin: string | null;
   location: string | null;
   summary: string | null;
