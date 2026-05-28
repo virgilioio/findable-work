@@ -5,17 +5,15 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * Design system definition.
+ * Gio AI design system.
  *
- * The @theme inline block maps CSS custom properties to Tailwind utility
- * classes (e.g. --color-primary -> bg-primary, text-primary).
+ * Two parallel sets of tokens:
+ *  - Raw Gio tokens (--bg, --bg-side, --text, --border, …) for our custom
+ *    components that mirror the prototype 1:1.
+ *  - Shadcn semantic tokens (--background, --foreground, --primary, …)
+ *    derived from the Gio tokens so existing shadcn components keep working.
  *
- * The :root and .dark blocks define the actual color values using oklch.
- * All colors MUST use oklch format.
- *
- * To add a new semantic color:
- * 1. Add the variable to :root (light value) and .dark (dark value)
- * 2. Register it in @theme inline as --color-<name>: var(--<name>)
+ * Dark mode is triggered by `.dark` class on <html> (set by ThemeProvider).
  */
 
 @theme inline {
@@ -59,77 +57,103 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-bg: var(--bg);
+  --color-bg-side: var(--bg-side);
+  --color-bg-elev: var(--bg-elev);
+  --color-bg-hover: var(--bg-hover);
+  --color-bg-active: var(--bg-active);
+  --color-bg-input: var(--bg-input);
+  --color-bg-bubble: var(--bg-bubble);
+  --color-bg-pulse: var(--bg-pulse);
+  --color-border-strong: var(--border-strong);
+  --color-text: var(--text);
+  --color-text-mute: var(--text-mute);
+  --color-text-faint: var(--text-faint);
+  --color-text-invert: var(--text-invert);
+  --font-sans: var(--font);
+  --font-mono: var(--mono);
 }
 
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.129 0.042 264.695);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.129 0.042 264.695);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.129 0.042 264.695);
-  --primary: oklch(0.208 0.042 265.755);
-  --primary-foreground: oklch(0.984 0.003 247.858);
-  --secondary: oklch(0.968 0.007 247.896);
-  --secondary-foreground: oklch(0.208 0.042 265.755);
-  --muted: oklch(0.968 0.007 247.896);
-  --muted-foreground: oklch(0.554 0.046 257.417);
-  --accent: oklch(0.968 0.007 247.896);
-  --accent-foreground: oklch(0.208 0.042 265.755);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.984 0.003 247.858);
-  --border: oklch(0.929 0.013 255.508);
-  --input: oklch(0.929 0.013 255.508);
-  --ring: oklch(0.704 0.04 256.788);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.984 0.003 247.858);
-  --sidebar-foreground: oklch(0.129 0.042 264.695);
-  --sidebar-primary: oklch(0.208 0.042 265.755);
-  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-accent: oklch(0.968 0.007 247.896);
-  --sidebar-accent-foreground: oklch(0.208 0.042 265.755);
-  --sidebar-border: oklch(0.929 0.013 255.508);
-  --sidebar-ring: oklch(0.704 0.04 256.788);
+  /* ── Gio raw tokens (light) ──────────────────────────────────── */
+  --bg: #ffffff;
+  --bg-side: #f7f7f8;
+  --bg-elev: #ffffff;
+  --bg-hover: #ececec;
+  --bg-active: #e5e5e5;
+  --bg-input: #f4f4f5;
+  --bg-bubble: #f4f4f5;
+  --bg-pulse: #e8e8ea;
+  --border: #e5e5e5;
+  --border-strong: #d4d4d8;
+  --text: #0f0f0f;
+  --text-mute: #6b6b6e;
+  --text-faint: #9a9a9e;
+  --text-invert: #ffffff;
+  --ring: rgba(15, 15, 15, 0.08);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.06);
+  --radius: 10px;
+  --radius-xs: 6px;
+  --radius-card: 14px;
+  --side-w: 264px;
+  --tabbar-h: 44px;
+  --font: "Geist", -apple-system, "Helvetica Neue", system-ui, sans-serif;
+  --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* ── shadcn semantic tokens derived from Gio ─────────────────── */
+  --background: var(--bg);
+  --foreground: var(--text);
+  --card: var(--bg-elev);
+  --card-foreground: var(--text);
+  --popover: var(--bg-elev);
+  --popover-foreground: var(--text);
+  --primary: var(--text);
+  --primary-foreground: var(--text-invert);
+  --secondary: var(--bg-input);
+  --secondary-foreground: var(--text);
+  --muted: var(--bg-input);
+  --muted-foreground: var(--text-mute);
+  --accent: var(--bg-hover);
+  --accent-foreground: var(--text);
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --input: var(--border-strong);
+  --chart-1: #6b6b6e;
+  --chart-2: #9a9a9e;
+  --chart-3: #d4d4d8;
+  --chart-4: #0f0f0f;
+  --chart-5: #ececec;
+  --sidebar: var(--bg-side);
+  --sidebar-foreground: var(--text);
+  --sidebar-primary: var(--text);
+  --sidebar-primary-foreground: var(--text-invert);
+  --sidebar-accent: var(--bg-hover);
+  --sidebar-accent-foreground: var(--text);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
 }
 
 .dark {
-  --background: oklch(0.129 0.042 264.695);
-  --foreground: oklch(0.984 0.003 247.858);
-  --card: oklch(0.208 0.042 265.755);
-  --card-foreground: oklch(0.984 0.003 247.858);
-  --popover: oklch(0.208 0.042 265.755);
-  --popover-foreground: oklch(0.984 0.003 247.858);
-  --primary: oklch(0.929 0.013 255.508);
-  --primary-foreground: oklch(0.208 0.042 265.755);
-  --secondary: oklch(0.279 0.041 260.031);
-  --secondary-foreground: oklch(0.984 0.003 247.858);
-  --muted: oklch(0.279 0.041 260.031);
-  --muted-foreground: oklch(0.704 0.04 256.788);
-  --accent: oklch(0.279 0.041 260.031);
-  --accent-foreground: oklch(0.984 0.003 247.858);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.984 0.003 247.858);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.551 0.027 264.364);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.208 0.042 265.755);
-  --sidebar-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-accent: oklch(0.279 0.041 260.031);
-  --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.551 0.027 264.364);
+  --bg: #212121;
+  --bg-side: #171717;
+  --bg-elev: #2a2a2a;
+  --bg-hover: #2f2f2f;
+  --bg-active: #353535;
+  --bg-input: #2f2f2f;
+  --bg-bubble: #2a2a2a;
+  --bg-pulse: #3a3a3a;
+  --border: #2f2f2f;
+  --border-strong: #404040;
+  --text: #ececec;
+  --text-mute: #a0a0a3;
+  --text-faint: #6e6e72;
+  --text-invert: #0f0f0f;
+  --ring: rgba(255, 255, 255, 0.06);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.4);
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
 }
 
 @layer base {
@@ -137,8 +161,129 @@
     border-color: var(--color-border);
   }
 
+  html,
   body {
-    background-color: var(--color-background);
-    color: var(--color-foreground);
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
+
+  button {
+    font-family: inherit;
+    color: inherit;
+  }
+  input,
+  textarea {
+    font-family: inherit;
+    color: inherit;
+  }
+}
+
+/* ── Utilities ──────────────────────────────────────────────── */
+.mono {
+  font-family: var(--mono);
+}
+
+/* Custom scrollbars */
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 4px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--text-faint);
+}
+
+/* ── Animations ─────────────────────────────────────────────── */
+@keyframes gio-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.fade-up {
+  animation: gio-fade-up 0.35s ease-out both;
+}
+
+@keyframes gio-tab-pulse {
+  0% {
+    background: var(--bg-pulse);
+    box-shadow: 0 0 0 0 var(--bg-pulse);
+  }
+  40% {
+    background: var(--bg-pulse);
+    box-shadow: 0 0 0 6px transparent;
+  }
+  100% {
+    background: transparent;
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+.tab-pulse {
+  animation: gio-tab-pulse 1.6s ease-out 2;
+}
+
+@keyframes gio-caret-blink {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  51%,
+  100% {
+    opacity: 0;
+  }
+}
+.caret {
+  display: inline-block;
+  width: 7px;
+  height: 1em;
+  background: currentColor;
+  margin-left: 2px;
+  vertical-align: -2px;
+  animation: gio-caret-blink 1s steps(1) infinite;
+}
+
+@keyframes gio-dot-bounce {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.35;
+  }
+  40% {
+    transform: translateY(-3px);
+    opacity: 1;
+  }
+}
+.thinking-dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--text-mute);
+  margin: 0 1.5px;
+  animation: gio-dot-bounce 1.2s infinite;
+}
+.thinking-dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.thinking-dot:nth-child(3) {
+  animation-delay: 0.3s;
 }
