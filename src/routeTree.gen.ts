@@ -15,6 +15,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppIndexRouteImport } from './routes/app.index'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
 import { Route as AppCIdRouteImport } from './routes/app.c.$id'
+import { Route as ApiPublicGuestChatRouteImport } from './routes/api/public/guest-chat'
 
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
@@ -46,6 +47,11 @@ const AppCIdRoute = AppCIdRouteImport.update({
   path: '/c/$id',
   getParentRoute: () => AppRoute,
 } as any)
+const ApiPublicGuestChatRoute = ApiPublicGuestChatRouteImport.update({
+  id: '/api/public/guest-chat',
+  path: '/api/public/guest-chat',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -53,6 +59,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/api/chat': typeof ApiChatRoute
   '/app/': typeof AppIndexRoute
+  '/api/public/guest-chat': typeof ApiPublicGuestChatRoute
   '/app/c/$id': typeof AppCIdRoute
 }
 export interface FileRoutesByTo {
@@ -60,6 +67,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/api/chat': typeof ApiChatRoute
   '/app': typeof AppIndexRoute
+  '/api/public/guest-chat': typeof ApiPublicGuestChatRoute
   '/app/c/$id': typeof AppCIdRoute
 }
 export interface FileRoutesById {
@@ -69,13 +77,27 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/api/chat': typeof ApiChatRoute
   '/app/': typeof AppIndexRoute
+  '/api/public/guest-chat': typeof ApiPublicGuestChatRoute
   '/app/c/$id': typeof AppCIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/app' | '/login' | '/api/chat' | '/app/' | '/app/c/$id'
+  fullPaths:
+    | '/'
+    | '/app'
+    | '/login'
+    | '/api/chat'
+    | '/app/'
+    | '/api/public/guest-chat'
+    | '/app/c/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/api/chat' | '/app' | '/app/c/$id'
+  to:
+    | '/'
+    | '/login'
+    | '/api/chat'
+    | '/app'
+    | '/api/public/guest-chat'
+    | '/app/c/$id'
   id:
     | '__root__'
     | '/'
@@ -83,6 +105,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/api/chat'
     | '/app/'
+    | '/api/public/guest-chat'
     | '/app/c/$id'
   fileRoutesById: FileRoutesById
 }
@@ -91,6 +114,7 @@ export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
   LoginRoute: typeof LoginRoute
   ApiChatRoute: typeof ApiChatRoute
+  ApiPublicGuestChatRoute: typeof ApiPublicGuestChatRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -137,6 +161,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppCIdRouteImport
       parentRoute: typeof AppRoute
     }
+    '/api/public/guest-chat': {
+      id: '/api/public/guest-chat'
+      path: '/api/public/guest-chat'
+      fullPath: '/api/public/guest-chat'
+      preLoaderRoute: typeof ApiPublicGuestChatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -157,7 +188,18 @@ const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
   LoginRoute: LoginRoute,
   ApiChatRoute: ApiChatRoute,
+  ApiPublicGuestChatRoute: ApiPublicGuestChatRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
