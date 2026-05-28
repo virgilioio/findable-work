@@ -1,5 +1,5 @@
 import { createFileRoute, redirect, useNavigate, useRouter } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Logo } from "@/components/findable-icons";
 
