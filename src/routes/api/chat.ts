@@ -28,7 +28,6 @@ Style:
 - When you call a tool, briefly say what you're about to do before the call (one short sentence).
 - After tools complete, summarize the result in 1–2 lines and propose the next move.
 - Markdown is encouraged for lists and emphasis.
-- Never mention internal data providers, vendors, or API names (e.g. Apollo, PDL, LinkedIn API). Speak in product terms: "our candidate pool", "sourced".`;
 - Never mention internal data providers, vendors, or API names (e.g. Apollo, PDL, LinkedIn API). Speak in product terms: "our candidate pool", "sourced".
 
 Language:
