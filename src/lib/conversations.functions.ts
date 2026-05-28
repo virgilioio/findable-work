@@ -82,6 +82,7 @@ export const getConversation = createServerFn({ method: "POST" })
       { data: job, error: e3 },
       { data: tasks, error: e4 },
       { data: jobPost, error: e5 },
+      { data: outreach, error: e6 },
     ] = await Promise.all([
         supabase.from("conversations").select("id,title,updated_at,created_at").eq("id", data.id).maybeSingle(),
         supabase
@@ -96,12 +97,14 @@ export const getConversation = createServerFn({ method: "POST" })
           .eq("conversation_id", data.id)
           .order("created_at", { ascending: true }),
         supabase.from("job_posts").select("*").eq("conversation_id", data.id).maybeSingle(),
+        supabase.from("outreach_drafts").select("*").eq("conversation_id", data.id).maybeSingle(),
       ]);
     if (e1) throw new Error(e1.message);
     if (e2) throw new Error(e2.message);
     if (e3) throw new Error(e3.message);
     if (e4) throw new Error(e4.message);
     if (e5) throw new Error(e5.message);
+    if (e6) throw new Error(e6.message);
     if (!conv) throw new Error("Conversation not found");
     return {
       conversation: conv,
@@ -109,6 +112,7 @@ export const getConversation = createServerFn({ method: "POST" })
       job: job ?? null,
       tasks: tasks ?? [],
       jobPost: jobPost ?? null,
+      outreach: outreach ?? null,
     };
   });
 
