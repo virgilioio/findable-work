@@ -284,16 +284,24 @@ export const Route = createFileRoute("/api/chat")({
             }
 
             try {
-              // First pass
-              const first = await streamCompletion(baseMessages);
-              let combinedText = first.text;
+              const MAX_ITERS = 5;
               const allTaskIds: string[] = [];
               let candidatesAddedTotal = 0;
               let jobCreatedRow: any = null;
+              let combinedText = "";
+              let firstToolCalls: StreamedToolCall[] = [];
+              const convo: ChatMessage[] = [...baseMessages];
 
-              // Execute tool calls
-              const toolResults: ChatMessage[] = [];
-              for (const call of first.toolCalls) {
+              for (let iter = 0; iter < MAX_ITERS; iter++) {
+                const pass = await streamCompletion(convo);
+                if (iter === 0) firstToolCalls = pass.toolCalls;
+                combinedText += (combinedText && pass.text ? "\n\n" : "") + pass.text;
+
+                if (pass.toolCalls.length === 0) break;
+
+                // Execute tool calls for this pass
+                const toolResults: ChatMessage[] = [];
+                for (const call of pass.toolCalls) {
                 if (!call.name) continue;
                 let args: any = {};
                 try {
@@ -439,28 +447,26 @@ export const Route = createFileRoute("/api/chat")({
                     content: JSON.stringify({ ok: true, asked: normalized.length }),
                   });
                 }
-              }
+                }
 
-              // Second pass: let the model produce a natural summary using tool results
-              if (toolResults.length > 0) {
+                // Append this pass + tool results to convo, then loop
                 const assistantToolCallMsg: ChatMessage = {
                   role: "assistant",
-                  content: first.text,
-                  tool_calls: first.toolCalls.map((c) => ({
+                  content: pass.text,
+                  tool_calls: pass.toolCalls.map((c) => ({
                     id: c.id,
                     type: "function",
                     function: { name: c.name, arguments: c.args },
                   })),
                 };
-                // Add a small separator delta so client visually splits
-                if (first.text) send("delta", { content: "\n\n" });
-                const second = await streamCompletion([...baseMessages, assistantToolCallMsg, ...toolResults]);
-                combinedText = (first.text ? first.text + "\n\n" : "") + second.text;
+                convo.push(assistantToolCallMsg, ...toolResults);
+                // Visual separator before the next streamed pass
+                send("delta", { content: "\n\n" });
               }
 
               // Persist assistant message
-              const toolCallsForDb = first.toolCalls.length
-                ? first.toolCalls.map((c) => ({
+              const toolCallsForDb = firstToolCalls.length
+                ? firstToolCalls.map((c) => ({
                     id: c.id,
                     type: "function",
                     function: { name: c.name, arguments: c.args },
