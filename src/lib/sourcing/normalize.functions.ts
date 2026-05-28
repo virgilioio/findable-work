@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { openaiChat } from "./openai.server";
+import { getPrompt } from "@/lib/prompts/registry.server";
 
 export type NormalizedSpecs = {
   title: string;
@@ -15,32 +16,16 @@ export type NormalizedSpecs = {
 
 const Input = z.object({ prompt: z.string().min(2).max(4000) });
 
-const SYSTEM = `You normalize raw recruiter prompts into structured job specs.
-Return strict JSON with shape:
-{
-  "title": "<single canonical job title>",
-  "skills": ["<skill1>", "<skill2>"],
-  "location": "<City, State/Region, Country — use full names, empty parts allowed, or empty string>",
-  "ai_variations": {
-    "titles": ["3 to 5 alternative titles or synonyms"],
-    "skills": ["3 to 5 skill abbreviations or synonyms"]
-  }
-}
-Location rules:
-- Always use the full "City, State/Region, Country" form when any are known. Leave a part empty (e.g. "Berlin, , Germany") if unknown, but never drop the commas.
-- Expand abbreviations to full names: "TX" → "Texas", "SP" → "São Paulo", "USA"/"US" → "United States", "UK" → "United Kingdom".
-- Examples: "Austin, Texas, United States", "São Paulo, São Paulo, Brazil", "Berlin, , Germany", "Mexico City, , Mexico", "remote EU" → "" (use empty when no concrete geography).
-Do not include any prose. Output JSON only.`;
-
 export const normalizeJobSpecs = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input) => Input.parse(input))
   .handler(async ({ data }): Promise<NormalizedSpecs> => {
+    const system = await getPrompt("sourcing.normalize");
     const completion = await openaiChat({
       model: "gpt-4o-mini",
       response_format: { type: "json_object" },
       messages: [
-        { role: "system", content: SYSTEM },
+        { role: "system", content: system },
         { role: "user", content: data.prompt },
       ],
     });
