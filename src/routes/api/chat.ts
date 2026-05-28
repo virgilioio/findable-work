@@ -20,6 +20,7 @@ Tools available:
 Mandatory flow:
 1. Before sourcing, you MUST have at least: a role title, a location (or "remote"), and a seniority hint. If ANY of those three are missing from the conversation so far, call ask_clarifying_questions and STOP — do not call source_candidates in the same turn.
 2. Once those three are present, call create_job FIRST (so the Job tab appears), then call source_candidates in the same turn.
+   When you call create_job and source_candidates in the same turn, emit them as PARALLEL tool calls in the same response — do not narrate between them.
 3. If source_candidates returns 0 matches or pool_limited=true, call ask_clarifying_questions with BROADENING suggestions (e.g. "Open to LATAM-remote?", "Other seniority levels OK?", "Adjacent titles to consider?"). Never silently retry.
 4. After the user answers clarifying questions, proceed with create_job + source_candidates.
 
