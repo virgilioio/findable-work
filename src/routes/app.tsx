@@ -154,6 +154,11 @@ function AppLayout() {
 
   const groups = useMemo(() => groupConversations(filtered), [filtered]);
 
+  const deletingConv = useMemo(
+    () => (conversations as Conv[]).find((c) => c.id === deletingId),
+    [conversations, deletingId],
+  );
+
   async function onSignOut() {
     console.info("[auth] sign-out requested");
     await supabase.auth.signOut();
