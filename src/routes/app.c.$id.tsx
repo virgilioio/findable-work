@@ -32,6 +32,7 @@ import {
   Pencil,
   Upload,
   Check,
+  Search as SearchIcon,
 } from "@/components/findable-icons";
 import { cn } from "@/lib/utils";
 import { CandidatesPanel } from "@/components/candidates/candidates-panel";
@@ -262,6 +263,7 @@ function ConversationPage() {
             setText={setComposerText}
             persistedTasks={persistedTasks}
             liveTasks={liveTasks}
+            onOpenTab={(t) => setTab(t)}
           />
         ) : tab === "job" && job ? (
           <div className="flex-1 overflow-y-auto">
@@ -333,6 +335,7 @@ function ChatPanel({
   setText,
   persistedTasks,
   liveTasks,
+  onOpenTab,
 }: {
   messages: Message[];
   streaming: string;
@@ -342,6 +345,7 @@ function ChatPanel({
   setText: (v: string) => void;
   persistedTasks: ChatTask[];
   liveTasks: ChatTask[];
+  onOpenTab: (t: "job" | "candidates") => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -403,45 +407,40 @@ function ChatPanel({
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-[720px] space-y-5 px-4 py-8">
+        <div className="mx-auto max-w-[760px] space-y-6 px-4 py-10">
           {messages.map((m) => {
             const msgTasks = persistedTasks.filter((t) => t.message_id === m.id);
             return (
-              <div key={m.id} className="space-y-2">
-                <MessageBubble role={m.role} content={m.content} />
-                {msgTasks.length > 0 && m.role === "assistant" && (
-                  <div className="ml-1 space-y-1.5">
-                    {msgTasks.map((t) => (
-                      <TaskCard key={t.id} task={t} />
-                    ))}
-                  </div>
-                )}
+              <div key={m.id} className="space-y-4">
+                <MessageRow role={m.role} content={m.content} />
+                {msgTasks.length > 0 && m.role === "assistant" &&
+                  msgTasks.map((t) => (
+                    <TimelineRow key={t.id}>
+                      <TaskCard task={t} onOpenTab={onOpenTab} />
+                    </TimelineRow>
+                  ))}
               </div>
             );
           })}
           {(streaming || liveTasks.length > 0) && (
-            <div className="space-y-2">
-              {streaming && <MessageBubble role="assistant" content={streaming} streaming />}
-              {liveTasks.length > 0 && (
-                <div className="ml-1 space-y-1.5">
-                  {liveTasks.map((t) => (
-                    <TaskCard key={t.id} task={t} />
-                  ))}
-                </div>
-              )}
+            <div className="space-y-4">
+              {streaming && <MessageRow role="assistant" content={streaming} streaming />}
+              {liveTasks.map((t) => (
+                <TimelineRow key={t.id}>
+                  <TaskCard task={t} onOpenTab={onOpenTab} />
+                </TimelineRow>
+              ))}
             </div>
           )}
-          {sending && !streaming && (
-            <div className="flex items-center gap-1.5 pl-1 text-text-mute">
-              <span className="thinking-dot" />
-              <span className="thinking-dot" />
-              <span className="thinking-dot" />
-            </div>
+          {sending && !streaming && liveTasks.length === 0 && (
+            <TimelineRow pulse>
+              <span className="text-[13px] text-text-mute">Thinking…</span>
+            </TimelineRow>
           )}
         </div>
       </div>
       <form onSubmit={submit} className="border-t border-border bg-bg px-4 py-3">
-        <div className="mx-auto max-w-[720px]">
+        <div className="mx-auto max-w-[760px]">
           <Composer text={text} setText={setText} sending={sending} onSubmit={submit} />
         </div>
       </form>
@@ -502,7 +501,29 @@ function Composer({
   );
 }
 
-function MessageBubble({
+function TimelineRow({
+  children,
+  pulse,
+}: {
+  children: React.ReactNode;
+  pulse?: boolean;
+}) {
+  return (
+    <div className="fade-up flex items-start gap-3">
+      <span
+        className={cn(
+          "mt-1 flex h-5 w-5 shrink-0 items-center justify-center text-text-faint",
+          pulse && "animate-pulse",
+        )}
+      >
+        <SearchIcon size={14} />
+      </span>
+      <div className="min-w-0 flex-1">{children}</div>
+    </div>
+  );
+}
+
+function MessageRow({
   role,
   content,
   streaming,
@@ -512,25 +533,22 @@ function MessageBubble({
   streaming?: boolean;
 }) {
   const isUser = role === "user";
-  return (
-    <div className={cn("fade-up", isUser ? "flex justify-end" : "")}>
-      <div
-        className={cn(
-          isUser
-            ? "max-w-[78%] rounded-2xl bg-bg-bubble px-4 py-2.5 text-[14px] text-text"
-            : "max-w-[92%] text-[14px] text-text",
-        )}
-      >
-        {isUser ? (
+  if (isUser) {
+    return (
+      <div className="fade-up flex justify-end">
+        <div className="max-w-[78%] rounded-2xl bg-bg-bubble px-4 py-2.5 text-[14px] text-text">
           <p className="whitespace-pre-wrap">{content}</p>
-        ) : (
-          <div className="prose prose-sm max-w-none text-text dark:prose-invert prose-p:my-2 prose-headings:mb-2 prose-headings:mt-4 prose-code:text-text">
-            <ReactMarkdown>{content || "…"}</ReactMarkdown>
-            {streaming && <span className="caret" />}
-          </div>
-        )}
+        </div>
       </div>
-    </div>
+    );
+  }
+  return (
+    <TimelineRow pulse={streaming && !content}>
+      <div className="prose prose-sm max-w-none text-[14px] text-text dark:prose-invert prose-p:my-2 prose-headings:mb-2 prose-headings:mt-4 prose-code:text-text">
+        <ReactMarkdown>{content || "…"}</ReactMarkdown>
+        {streaming && content && <span className="caret" />}
+      </div>
+    </TimelineRow>
   );
 }
 
