@@ -1,0 +1,345 @@
+// Server-only sourcing agent: normalize -> research -> search -> collect.
+// Emits task lifecycle events through a callback so the caller (chat SSE) can
+// stream them and persist agent_tasks rows.
+
+import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { openaiChat } from "./openai.server";
+import { budgetSearchCriteria, currentPeriod, linkedinSlug, type SearchCriteria } from "./budget";
+import { searchApollo, enrichApolloProfiles } from "./apollo.server";
+import { searchPdl } from "./pdl.server";
+
+export type AgentTask = {
+  id: string;
+  conversation_id: string;
+  user_id: string;
+  message_id: string | null;
+  kind: "normalize" | "research" | "search" | "collect";
+  label: string;
+  status: "running" | "done" | "failed";
+  summary: string | null;
+  data: Record<string, unknown>;
+  started_at: string;
+  finished_at: string | null;
+};
+
+export type TaskEvent = AgentTask;
+
+type Ctx = {
+  userId: string;
+  conversationId: string;
+  jobBrief?: { title?: string; description?: string; location?: string; requirements?: string[] };
+  brief: string;
+  limit: number;
+  onTask: (t: TaskEvent) => void;
+};
+
+async function insertTask(
+  userId: string,
+  conversationId: string,
+  kind: AgentTask["kind"],
+  label: string,
+): Promise<AgentTask> {
+  const { data, error } = await supabaseAdmin
+    .from("agent_tasks")
+    .insert({
+      user_id: userId,
+      conversation_id: conversationId,
+      kind,
+      label,
+      status: "running",
+      data: {},
+    })
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+  return data as AgentTask;
+}
+
+async function finishTask(
+  task: AgentTask,
+  status: "done" | "failed",
+  summary: string,
+  data: Record<string, unknown> = {},
+): Promise<AgentTask> {
+  const { data: updated, error } = await supabaseAdmin
+    .from("agent_tasks")
+    .update({
+      status,
+      summary,
+      data,
+      finished_at: new Date().toISOString(),
+    })
+    .eq("id", task.id)
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+  return updated as AgentTask;
+}
+
+const NORMALIZE_SYSTEM = `You normalize a recruiter request into a sourcing brief.
+Return strict JSON:
+{
+  "title": "<single canonical job title>",
+  "skills": ["..."],
+  "location": "<City, Country or empty>",
+  "seniorities": ["<one of: entry, senior, manager, director, vp, head, c_suite>"],
+  "keywords": ["<3-5 boost keywords>"]
+}
+Output JSON only.`;
+
+const RESEARCH_TOOL = {
+  type: "function",
+  function: {
+    name: "provide_research_results",
+    description: "Provide enriched sourcing criteria for a recruiter.",
+    parameters: {
+      type: "object",
+      properties: {
+        researched_titles: { type: "array", items: { type: "string" } },
+        researched_companies: { type: "array", items: { type: "string" } },
+        researched_keywords: { type: "array", items: { type: "string" } },
+        research_reasoning: { type: "string" },
+      },
+      required: ["researched_titles", "researched_companies", "researched_keywords", "research_reasoning"],
+    },
+  },
+} as const;
+
+export type SourceResult = {
+  preview_total: number;
+  added: number;
+  skipped: number;
+  apollo_count: number;
+  pdl_count: number;
+  apollo_error: string | null;
+  pdl_error: string | null;
+  project_id: string;
+};
+
+export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
+  const { userId, conversationId, brief, jobBrief, limit, onTask } = ctx;
+
+  // ── 1. Normalize ────────────────────────────────────────────────
+  const tNorm = await insertTask(userId, conversationId, "normalize", "Normalizing brief");
+  onTask(tNorm);
+  let normalized: any = {};
+  try {
+    const promptText =
+      jobBrief?.title
+        ? `Title: ${jobBrief.title}\nLocation: ${jobBrief.location ?? ""}\nRequirements: ${(jobBrief.requirements ?? []).join("; ")}\n\nRecruiter brief: ${brief}`
+        : brief;
+    const completion = await openaiChat({
+      model: "gpt-4o-mini",
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: NORMALIZE_SYSTEM },
+        { role: "user", content: promptText },
+      ],
+    });
+    const raw = completion.choices?.[0]?.message?.content ?? "{}";
+    normalized = JSON.parse(raw);
+    onTask(
+      await finishTask(tNorm, "done", `${normalized.title ?? "Untitled"} · ${normalized.location ?? "any location"}`, normalized),
+    );
+  } catch (e: any) {
+    onTask(await finishTask(tNorm, "failed", e?.message ?? "Normalization failed"));
+    throw e;
+  }
+
+  // ── 2. Research ─────────────────────────────────────────────────
+  const tRes = await insertTask(userId, conversationId, "research", "Researching titles & companies");
+  onTask(tRes);
+  let research: any = { researched_titles: [], researched_companies: [], researched_keywords: [] };
+  try {
+    const userMsg =
+      `Title: ${normalized.title ?? ""}\n` +
+      `Location: ${normalized.location ?? ""}\n` +
+      `Skills: ${(normalized.skills ?? []).join(", ")}\n` +
+      `Return at most 3 alt titles, 3 target companies, 5 boost keywords.`;
+    const completion = await openaiChat({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: "You are a sourcing research assistant. Use the provide_research_results tool." },
+        { role: "user", content: userMsg },
+      ],
+      tools: [RESEARCH_TOOL],
+      tool_choice: { type: "function", function: { name: "provide_research_results" } },
+    });
+    const call = completion.choices?.[0]?.message?.tool_calls?.[0];
+    research = JSON.parse(call?.function?.arguments ?? "{}");
+    onTask(
+      await finishTask(
+        tRes,
+        "done",
+        `${(research.researched_titles ?? []).length} titles · ${(research.researched_companies ?? []).length} companies · ${(research.researched_keywords ?? []).length} keywords`,
+        research,
+      ),
+    );
+  } catch (e: any) {
+    onTask(await finishTask(tRes, "failed", e?.message ?? "Research failed"));
+    // not fatal, continue with what we have
+  }
+
+  // ── Build criteria + create project ────────────────────────────
+  const criteria: SearchCriteria = budgetSearchCriteria({
+    title_keywords: [
+      ...(normalized.title ? [normalized.title] : []),
+      ...((research.researched_titles ?? []) as string[]),
+    ],
+    researched_companies: research.researched_companies ?? [],
+    keywords: [...((normalized.keywords ?? []) as string[]), ...((research.researched_keywords ?? []) as string[])],
+    seniorities: normalized.seniorities ?? [],
+    locations: normalized.location ? [normalized.location] : [],
+  });
+
+  const { data: project, error: projErr } = await supabaseAdmin
+    .from("sourcing_projects")
+    .insert({
+      user_id: userId,
+      conversation_id: conversationId,
+      title: normalized.title || jobBrief?.title || "Sourcing project",
+      raw_prompt: brief,
+      normalized: normalized as any,
+      research: research as any,
+      search_criteria: criteria as any,
+    })
+    .select("*")
+    .single();
+  if (projErr) throw new Error(projErr.message);
+
+  // ── 3. Search Apollo + PDL ─────────────────────────────────────
+  const tSearch = await insertTask(userId, conversationId, "search", "Searching Apollo + PDL");
+  onTask(tSearch);
+  const [apolloRes, pdlRes] = await Promise.allSettled([searchApollo(criteria), searchPdl(criteria)]);
+  const apollo = apolloRes.status === "fulfilled" ? apolloRes.value : [];
+  const pdl = pdlRes.status === "fulfilled" ? pdlRes.value : [];
+  const apolloErr = apolloRes.status === "rejected" ? String(apolloRes.reason).slice(0, 300) : null;
+  const pdlErr = pdlRes.status === "rejected" ? String(pdlRes.reason).slice(0, 300) : null;
+
+  const apolloSlugs = new Set(apollo.map((a) => a.linkedin_slug).filter(Boolean));
+  const pdlDedup = pdl.filter((p) => !p.linkedin_slug || !apolloSlugs.has(p.linkedin_slug));
+  const combined = [...apollo, ...pdlDedup];
+
+  const searchSummary = `${apollo.length} Apollo · ${pdl.length} PDL · ${combined.length} after dedupe`;
+  onTask(
+    await finishTask(
+      tSearch,
+      combined.length > 0 ? "done" : "failed",
+      combined.length > 0 ? searchSummary : (apolloErr || pdlErr || "No results"),
+      { apollo: apollo.length, pdl: pdl.length, deduped: combined.length, apollo_error: apolloErr, pdl_error: pdlErr },
+    ),
+  );
+
+  // Persist previews (best-effort, ignore errors)
+  if (combined.length > 0) {
+    const rows = combined.map((c) => {
+      const { keyword_score, ...preview } = c as any;
+      return {
+        project_id: project.id,
+        user_id: userId,
+        source: c.source,
+        external_id: c.external_id,
+        linkedin_slug: c.linkedin_slug,
+        preview: preview as any,
+        keyword_score: keyword_score ?? 0,
+        display_source: c.source,
+      };
+    });
+    await supabaseAdmin.from("sourcing_preview_candidates").insert(rows);
+    await supabaseAdmin
+      .from("sourcing_projects")
+      .update({ last_searched_at: new Date().toISOString() })
+      .eq("id", project.id);
+  }
+
+  // ── 4. Collect top N ───────────────────────────────────────────
+  const tCollect = await insertTask(userId, conversationId, "collect", `Collecting top ${limit}`);
+  onTask(tCollect);
+
+  // Sort by score, prefer Apollo (enrichable), take top N
+  const sorted = [...combined].sort((a: any, b: any) => (b.keyword_score ?? 0) - (a.keyword_score ?? 0));
+  const apolloTop = sorted.filter((c) => c.source === "apollo").slice(0, limit);
+  const apolloIds = apolloTop.map((c: any) => c.external_id);
+
+  // Skip already-collected
+  const { data: alreadyRows } = await supabaseAdmin
+    .from("candidates")
+    .select("apollo_id")
+    .eq("user_id", userId)
+    .in("apollo_id", apolloIds.length ? apolloIds : ["__none__"]);
+  const already = new Set((alreadyRows ?? []).map((r: any) => r.apollo_id));
+  const toEnrich = apolloIds.filter((id) => !already.has(id));
+
+  let added = 0;
+  let skipped = apolloIds.length - toEnrich.length;
+  let collectErr: string | null = null;
+  if (toEnrich.length > 0) {
+    try {
+      const enriched = await enrichApolloProfiles(toEnrich);
+      for (const e of enriched) {
+        const slug = linkedinSlug(e.linkedin_url);
+        const { error: insErr } = await supabaseAdmin.from("candidates").insert({
+          user_id: userId,
+          conversation_id: conversationId,
+          name: e.full_name || `${e.first_name} ${e.last_name}`.trim() || "Unknown",
+          role: e.title,
+          company: e.organization_name ?? "",
+          stage: "Sourced",
+          source: "Apollo",
+          match: 80,
+          tags: [],
+          starred: false,
+          avatar: (e.first_name?.[0] ?? "") + (e.last_name?.[0] ?? ""),
+          email: e.email,
+          phone: e.phone,
+          linkedin: e.linkedin_url,
+          location: [e.city, e.state, e.country].filter(Boolean).join(", ") || null,
+          summary: e.title ? `${e.title}${e.organization_name ? ` at ${e.organization_name}` : ""}.` : null,
+          experience: e.employment_history.map((h, idx) => ({
+            id: idx + 1,
+            role: h.title ?? "",
+            company: h.organization_name ?? "",
+            period: `${h.start_date ?? ""} — ${h.end_date ?? "Present"}`,
+            desc: h.description ?? "",
+          })) as any,
+          education: [] as any,
+          activity: [] as any,
+          match_breakdown: [] as any,
+          apollo_id: e.id,
+          linkedin_slug: slug,
+        });
+        if (insErr) {
+          console.error("candidate insert failed:", insErr.message);
+          skipped++;
+        } else {
+          added++;
+        }
+      }
+      if (added > 0) {
+        await supabaseAdmin.rpc("increment_sourcing_usage", { _user_id: userId, _count: added });
+      }
+    } catch (e: any) {
+      collectErr = e?.message ?? "Enrichment failed";
+    }
+  }
+
+  onTask(
+    await finishTask(
+      tCollect,
+      collectErr ? "failed" : "done",
+      collectErr ?? `${added} added · ${skipped} skipped`,
+      { added, skipped, period: currentPeriod() },
+    ),
+  );
+
+  return {
+    preview_total: combined.length,
+    added,
+    skipped,
+    apollo_count: apollo.length,
+    pdl_count: pdl.length,
+    apollo_error: apolloErr,
+    pdl_error: pdlErr,
+    project_id: project.id,
+  };
+}
