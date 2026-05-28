@@ -1,29 +1,30 @@
-import { createFileRoute, isRedirect, redirect, useNavigate } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Logo } from "@/components/findable-icons";
 
 export const Route = createFileRoute("/login")({
   head: () => ({ meta: [{ title: "Sign in — findable" }] }),
-  beforeLoad: async () => {
-    const { data } = await supabase.auth.getUser();
-    if (data.user) throw redirect({ to: "/app" });
-  },
   component: LoginPage,
 });
 
 function LoginPage() {
-  const navigate = useNavigate();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  function redirectToApp() {
+    console.info("[auth] redirecting to app after successful auth");
+    window.location.replace("/app");
+  }
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setLoading(true);
+    console.info("[auth] login form submitted", { mode, email });
     try {
       if (mode === "signup") {
         const { error } = await supabase.auth.signUp({
@@ -34,17 +35,20 @@ function LoginPage() {
         if (error) throw error;
         const { data } = await supabase.auth.getSession();
         if (data.session) {
-          navigate({ to: "/app", replace: true });
+          console.info("[auth] signup returned an active session");
+          redirectToApp();
         } else {
+          console.info("[auth] signup requires email confirmation");
           setError("Check your email to confirm your account, then sign in.");
         }
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        navigate({ to: "/app", replace: true });
+        console.info("[auth] sign-in succeeded");
+        redirectToApp();
       }
     } catch (err) {
-      if (isRedirect(err)) throw err;
+      console.error("[auth] login failed", err);
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setLoading(false);
@@ -129,7 +133,10 @@ function LoginPage() {
 
           {mode === "signin" && (
             <div className="-mt-1 mb-1 text-right">
-              <a href="#" className="text-[12.5px] text-[var(--text-mute)] hover:text-[var(--text)]">
+              <a
+                href="#"
+                className="text-[12.5px] text-[var(--text-mute)] hover:text-[var(--text)]"
+              >
                 Forgot password?
               </a>
             </div>
@@ -146,11 +153,7 @@ function LoginPage() {
             disabled={loading}
             className="mt-1.5 h-10 rounded-[10px] bg-[var(--text)] text-[14px] font-medium text-[var(--text-invert)] disabled:opacity-70"
           >
-            {loading
-              ? "Signing in…"
-              : mode === "signin"
-                ? "Sign in"
-                : "Create account"}
+            {loading ? "Signing in…" : mode === "signin" ? "Sign in" : "Create account"}
           </button>
         </form>
 
@@ -172,8 +175,12 @@ function LoginPage() {
       <div className="absolute bottom-5 flex items-center gap-3.5 text-[12px] text-[var(--text-faint)]">
         <span>© 2026 findable</span>
         <span>·</span>
-        <a href="#" className="hover:text-[var(--text-mute)]">Terms</a>
-        <a href="#" className="hover:text-[var(--text-mute)]">Privacy</a>
+        <a href="#" className="hover:text-[var(--text-mute)]">
+          Terms
+        </a>
+        <a href="#" className="hover:text-[var(--text-mute)]">
+          Privacy
+        </a>
       </div>
     </div>
   );
