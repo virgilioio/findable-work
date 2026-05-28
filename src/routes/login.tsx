@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Logo } from "@/components/findable-icons";
@@ -9,6 +9,7 @@ export const Route = createFileRoute("/login")({
 });
 
 function LoginPage() {
+  const navigate = useNavigate();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -17,7 +18,7 @@ function LoginPage() {
 
   function redirectToApp() {
     console.info("[auth] redirecting to app after successful auth");
-    window.location.replace("/app");
+    navigate({ to: "/app" });
   }
 
   async function onSubmit(e: React.FormEvent) {
