@@ -38,6 +38,20 @@ import { cn } from "@/lib/utils";
 import { CandidatesPanel } from "@/components/candidates/candidates-panel";
 import { TaskCard, type ChatTask } from "@/components/chat/task-card";
 
+// Splits an assistant message into segments rendered before and after the
+// associated task cards. Must stay in sync with the constant in
+// src/routes/api/chat.ts.
+const AFTER_TASKS_MARKER = "\n\n<<<AFTER_TASKS>>>\n\n";
+
+function splitAroundTasks(content: string): { before: string; after: string } {
+  const idx = content.indexOf(AFTER_TASKS_MARKER);
+  if (idx === -1) return { before: content, after: "" };
+  return {
+    before: content.slice(0, idx),
+    after: content.slice(idx + AFTER_TASKS_MARKER.length),
+  };
+}
+
 export const Route = createFileRoute("/app/c/$id")({
   component: ConversationPage,
 });
