@@ -1,7 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
+import { toast } from "sonner";
 import { listCandidates, updateCandidate } from "@/lib/candidates.functions";
+import { sourceMore } from "@/lib/sourcing/source-more.functions";
 import {
   Plus,
   Search,
@@ -9,6 +11,7 @@ import {
   Sparkle,
   Users,
   ChevDown,
+  ArrowRight,
 } from "@/components/findable-icons";
 import { cn } from "@/lib/utils";
 import { CandidateDrawer, type Candidate } from "./candidate-drawer";
@@ -41,6 +44,11 @@ export function CandidatesPanel({
   const [flaggedOnly, setFlaggedOnly] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [conversationId]);
 
   const counts = useMemo(() => {
     const c: Record<string, number> = { All: candidates.length };
@@ -79,6 +87,46 @@ export function CandidatesPanel({
     onSuccess: () => qc.invalidateQueries({ queryKey: ["candidates", conversationId] }),
   });
 
+  const sourceMoreFn = useServerFn(sourceMore);
+  const sourceMoreMut = useMutation({
+    mutationFn: () => sourceMoreFn({ data: { conversationId, limit: 10 } }),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ["candidates", conversationId] });
+      if (res.added > 0) {
+        toast.success(`${res.added} candidate${res.added === 1 ? "" : "s"} sourced`);
+      } else if (res.exhausted) {
+        toast("No more matches — refine the brief in chat.");
+      } else {
+        toast("No new candidates added.");
+      }
+    },
+    onError: (e: any) => toast.error(e?.message ?? "Source more failed"),
+  });
+
+  const allVisibleSelected =
+    filtered.length > 0 && filtered.every((c) => selectedIds.has(c.id));
+  const someVisibleSelected =
+    !allVisibleSelected && filtered.some((c) => selectedIds.has(c.id));
+
+  const toggleAllVisible = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allVisibleSelected) {
+        filtered.forEach((c) => next.delete(c.id));
+      } else {
+        filtered.forEach((c) => next.add(c.id));
+      }
+      return next;
+    });
+  };
+  const toggleOne = (id: string) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
   const opened = candidates.find((c) => c.id === openId) ?? null;
 
   return (
@@ -101,10 +149,26 @@ export function CandidatesPanel({
         <div className="flex items-center gap-2">
           <button
             onClick={() => setAdding(true)}
-            className="flex h-8 items-center gap-1.5 rounded-lg bg-text px-3 text-[12.5px] font-medium text-text-invert transition hover:opacity-90"
+            className="flex h-8 items-center gap-1.5 rounded-lg border border-border bg-bg-elev px-3 text-[12.5px] font-medium text-text transition hover:bg-bg-hover"
           >
-            <Plus size={13} /> Add candidate
+            <Plus size={13} /> Add
           </button>
+          <button
+            onClick={() => sourceMoreMut.mutate()}
+            disabled={sourceMoreMut.isPending}
+            className="flex h-8 items-center gap-1.5 rounded-lg border border-border bg-bg-elev px-3 text-[12.5px] font-medium text-text transition hover:bg-bg-hover disabled:opacity-60"
+          >
+            <Sparkle size={13} />
+            {sourceMoreMut.isPending ? "Sourcing…" : "Source more"}
+          </button>
+          {selectedIds.size > 0 && (
+            <button
+              onClick={() => toast("Contacting flow coming soon.")}
+              className="flex h-8 items-center gap-1.5 rounded-lg bg-text px-3 text-[12.5px] font-medium text-text-invert transition hover:opacity-90"
+            >
+              Contact ( {selectedIds.size} ) <ArrowRight size={13} />
+            </button>
+          )}
         </div>
       </div>
 
@@ -179,7 +243,19 @@ export function CandidatesPanel({
           <table className="w-full border-collapse text-[13px]">
             <thead className="sticky top-0 z-10 bg-bg">
               <tr className="border-b border-border text-left text-[11px] font-medium uppercase tracking-wide text-text-faint">
-                <th className="px-5 py-2.5 font-medium">Candidate</th>
+                <th className="w-10 pl-5 pr-2 py-2.5">
+                  <input
+                    type="checkbox"
+                    aria-label="Select all"
+                    checked={allVisibleSelected}
+                    ref={(el) => {
+                      if (el) el.indeterminate = someVisibleSelected;
+                    }}
+                    onChange={toggleAllVisible}
+                    className="h-3.5 w-3.5 cursor-pointer accent-text"
+                  />
+                </th>
+                <th className="px-2 py-2.5 font-medium">Candidate</th>
                 <th className="px-3 py-2.5 font-medium">Stage</th>
                 <th className="px-3 py-2.5 font-medium">Match</th>
                 <th className="px-3 py-2.5 font-medium">Source</th>
@@ -194,7 +270,16 @@ export function CandidatesPanel({
                   onClick={() => setOpenId(c.id)}
                   className="cursor-pointer border-b border-border transition hover:bg-bg-hover"
                 >
-                  <td className="px-5 py-2.5">
+                  <td className="w-10 pl-5 pr-2 py-2.5" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      aria-label={`Select ${c.name}`}
+                      checked={selectedIds.has(c.id)}
+                      onChange={() => toggleOne(c.id)}
+                      className="h-3.5 w-3.5 cursor-pointer accent-text"
+                    />
+                  </td>
+                  <td className="px-2 py-2.5">
                     <div className="flex items-center gap-3">
                       <div className="flex h-8 w-8 items-center justify-center rounded-full bg-bg-input text-[12px] font-semibold text-text">
                         {c.avatar}
