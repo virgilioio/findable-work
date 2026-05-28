@@ -17,6 +17,7 @@ export type Database = {
       candidates: {
         Row: {
           activity: Json
+          apollo_id: string | null
           avatar: string
           company: string
           conversation_id: string
@@ -26,10 +27,12 @@ export type Database = {
           experience: Json
           id: string
           linkedin: string | null
+          linkedin_slug: string | null
           location: string | null
           match: number
           match_breakdown: Json
           name: string
+          pdl_id: string | null
           phone: string | null
           role: string
           source: string
@@ -43,6 +46,7 @@ export type Database = {
         }
         Insert: {
           activity?: Json
+          apollo_id?: string | null
           avatar?: string
           company?: string
           conversation_id: string
@@ -52,10 +56,12 @@ export type Database = {
           experience?: Json
           id?: string
           linkedin?: string | null
+          linkedin_slug?: string | null
           location?: string | null
           match?: number
           match_breakdown?: Json
           name: string
+          pdl_id?: string | null
           phone?: string | null
           role?: string
           source?: string
@@ -69,6 +75,7 @@ export type Database = {
         }
         Update: {
           activity?: Json
+          apollo_id?: string | null
           avatar?: string
           company?: string
           conversation_id?: string
@@ -78,10 +85,12 @@ export type Database = {
           experience?: Json
           id?: string
           linkedin?: string | null
+          linkedin_slug?: string | null
           location?: string | null
           match?: number
           match_breakdown?: Json
           name?: string
+          pdl_id?: string | null
           phone?: string | null
           role?: string
           source?: string
@@ -231,12 +240,134 @@ export type Database = {
         }
         Relationships: []
       }
+      sourcing_credits_usage: {
+        Row: {
+          collect_credits_used: number
+          created_at: string
+          id: string
+          period: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          collect_credits_used?: number
+          created_at?: string
+          id?: string
+          period: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          collect_credits_used?: number
+          created_at?: string
+          id?: string
+          period?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      sourcing_preview_candidates: {
+        Row: {
+          collected_at: string | null
+          created_at: string
+          display_source: string
+          external_id: string
+          id: string
+          keyword_score: number
+          linkedin_slug: string | null
+          preview: Json
+          project_id: string
+          source: string
+          user_id: string
+        }
+        Insert: {
+          collected_at?: string | null
+          created_at?: string
+          display_source?: string
+          external_id: string
+          id?: string
+          keyword_score?: number
+          linkedin_slug?: string | null
+          preview?: Json
+          project_id: string
+          source: string
+          user_id: string
+        }
+        Update: {
+          collected_at?: string | null
+          created_at?: string
+          display_source?: string
+          external_id?: string
+          id?: string
+          keyword_score?: number
+          linkedin_slug?: string | null
+          preview?: Json
+          project_id?: string
+          source?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sourcing_preview_candidates_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "sourcing_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sourcing_projects: {
+        Row: {
+          conversation_id: string | null
+          created_at: string
+          id: string
+          last_searched_at: string | null
+          normalized: Json
+          raw_prompt: string
+          research: Json
+          search_criteria: Json
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          conversation_id?: string | null
+          created_at?: string
+          id?: string
+          last_searched_at?: string | null
+          normalized?: Json
+          raw_prompt?: string
+          research?: Json
+          search_criteria?: Json
+          title?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          conversation_id?: string | null
+          created_at?: string
+          id?: string
+          last_searched_at?: string | null
+          normalized?: Json
+          raw_prompt?: string
+          research?: Json
+          search_criteria?: Json
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      increment_sourcing_usage: {
+        Args: { _count: number; _user_id: string }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never
