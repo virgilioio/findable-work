@@ -208,7 +208,7 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
   if (projErr) throw new Error(projErr.message);
 
   // ── 3. Search Apollo + PDL ─────────────────────────────────────
-  const tSearch = await insertTask(userId, conversationId, "search", "Searching Apollo + PDL");
+  const tSearch = await insertTask(userId, conversationId, "search", "Searching candidate pool");
   onTask(tSearch);
   const [apolloRes, pdlRes] = await Promise.allSettled([searchApollo(criteria), searchPdl(criteria)]);
   const apollo = apolloRes.status === "fulfilled" ? apolloRes.value : [];
@@ -220,12 +220,17 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
   const pdlDedup = pdl.filter((p) => !p.linkedin_slug || !apolloSlugs.has(p.linkedin_slug));
   const combined = [...apollo, ...pdlDedup];
 
-  const searchSummary = `${apollo.length} Apollo · ${pdl.length} PDL · ${combined.length} after dedupe`;
+  const searchSummary =
+    combined.length > 0
+      ? `${combined.length} matches found`
+      : apolloErr && pdlErr
+        ? "Search failed — try broadening the brief"
+        : "No matches — try broadening the brief";
   onTask(
     await finishTask(
       tSearch,
       combined.length > 0 ? "done" : "failed",
-      combined.length > 0 ? searchSummary : (apolloErr || pdlErr || "No results"),
+      searchSummary,
       { apollo: apollo.length, pdl: pdl.length, deduped: combined.length, apollo_error: apolloErr, pdl_error: pdlErr },
     ),
   );
@@ -233,7 +238,7 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
   // Persist previews (best-effort, ignore errors)
   if (combined.length > 0) {
     const rows = combined.map((c) => {
-      const { keyword_score, ...preview } = c as any;
+      const { keyword_score, raw: _raw, ...preview } = c as any;
       return {
         project_id: project.id,
         user_id: userId,
@@ -256,26 +261,36 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
   const tCollect = await insertTask(userId, conversationId, "collect", `Collecting top ${limit}`);
   onTask(tCollect);
 
-  // Sort by score, prefer Apollo (enrichable), take top N
+  // Merge top-N across both providers by score so we always fill the quota
+  // even when one provider is degraded.
   const sorted = [...combined].sort((a: any, b: any) => (b.keyword_score ?? 0) - (a.keyword_score ?? 0));
-  const apolloTop = sorted.filter((c) => c.source === "apollo").slice(0, limit);
-  const apolloIds = apolloTop.map((c: any) => c.external_id);
-
-  // Skip already-collected
-  const { data: alreadyRows } = await supabaseAdmin
-    .from("candidates")
-    .select("apollo_id")
-    .eq("user_id", userId)
-    .in("apollo_id", apolloIds.length ? apolloIds : ["__none__"]);
-  const already = new Set((alreadyRows ?? []).map((r: any) => r.apollo_id));
-  const toEnrich = apolloIds.filter((id) => !already.has(id));
+  const top = sorted.slice(0, limit);
+  const topApollo = top.filter((c) => c.source === "apollo");
+  const topPdl = top.filter((c) => c.source === "pdl");
 
   let added = 0;
-  let skipped = apolloIds.length - toEnrich.length;
+  let skipped = 0;
   let collectErr: string | null = null;
-  if (toEnrich.length > 0) {
+
+  // Dedupe against already-collected rows
+  const apolloIds = topApollo.map((c: any) => c.external_id).filter(Boolean);
+  const pdlIds = topPdl.map((c: any) => c.external_id).filter(Boolean);
+  const [{ data: aRows }, { data: pRows }] = await Promise.all([
+    supabaseAdmin.from("candidates").select("apollo_id").eq("user_id", userId)
+      .in("apollo_id", apolloIds.length ? apolloIds : ["__none__"]),
+    supabaseAdmin.from("candidates").select("pdl_id").eq("user_id", userId)
+      .in("pdl_id", pdlIds.length ? pdlIds : ["__none__"]),
+  ]);
+  const apolloAlready = new Set((aRows ?? []).map((r: any) => r.apollo_id));
+  const pdlAlready = new Set((pRows ?? []).map((r: any) => r.pdl_id));
+  const apolloToFetch = apolloIds.filter((id) => !apolloAlready.has(id));
+  const pdlToInsert = topPdl.filter((c: any) => c.external_id && !pdlAlready.has(c.external_id));
+  skipped = (apolloIds.length - apolloToFetch.length) + (topPdl.length - pdlToInsert.length);
+
+  // ── Apollo: enrich + insert ────────────────────────────────────
+  if (apolloToFetch.length > 0) {
     try {
-      const enriched = await enrichApolloProfiles(toEnrich);
+      const enriched = await enrichApolloProfiles(apolloToFetch);
       for (const e of enriched) {
         const slug = linkedinSlug(e.linkedin_url);
         const { error: insErr } = await supabaseAdmin.from("candidates").insert({
@@ -285,7 +300,7 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
           role: e.title,
           company: e.organization_name ?? "",
           stage: "Sourced",
-          source: "Apollo",
+          source: "Sourced",
           match: 80,
           tags: [],
           starred: false,
@@ -309,25 +324,75 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
           linkedin_slug: slug,
         });
         if (insErr) {
-          console.error("candidate insert failed:", insErr.message);
+          console.error("apollo candidate insert failed:", insErr.message);
           skipped++;
-        } else {
-          added++;
-        }
-      }
-      if (added > 0) {
-        await supabaseAdmin.rpc("increment_sourcing_usage", { _user_id: userId, _count: added });
+        } else added++;
       }
     } catch (e: any) {
-      collectErr = e?.message ?? "Enrichment failed";
+      collectErr = e?.message ?? "Apollo enrichment failed";
     }
+  }
+
+  // ── PDL: insert directly from search payload ──────────────────
+  for (const c of pdlToInsert) {
+    const raw: any = (c as any).raw ?? {};
+    const fn = raw.first_name ?? "";
+    const ln = raw.last_name ?? "";
+    const fullName = (raw.full_name ?? `${fn} ${ln}`).trim() || "Unknown";
+    const slug = linkedinSlug(raw.linkedin_url);
+    const exp = Array.isArray(raw.experience)
+      ? raw.experience.slice(0, 10).map((h: any, idx: number) => ({
+          id: idx + 1,
+          role: h.title?.name ?? "",
+          company: h.company?.name ?? "",
+          period: `${h.start_date ?? ""} — ${h.end_date ?? "Present"}`,
+          desc: h.summary ?? "",
+        }))
+      : [];
+    const { error: insErr } = await supabaseAdmin.from("candidates").insert({
+      user_id: userId,
+      conversation_id: conversationId,
+      name: fullName,
+      role: raw.job_title ?? c.title ?? "",
+      company: raw.job_company_name ?? c.company ?? "",
+      stage: "Sourced",
+      source: "Sourced",
+      match: 75,
+      tags: [],
+      starred: false,
+      avatar: (fn[0] ?? "") + (ln[0] ?? ""),
+      email: raw.work_email ?? raw.personal_emails?.[0] ?? null,
+      phone: raw.mobile_phone ?? raw.phone_numbers?.[0] ?? null,
+      linkedin: raw.linkedin_url ?? null,
+      location: [raw.location_locality, raw.location_region, raw.location_country].filter(Boolean).join(", ") || null,
+      summary: raw.job_title
+        ? `${raw.job_title}${raw.job_company_name ? ` at ${raw.job_company_name}` : ""}.`
+        : null,
+      experience: exp as any,
+      education: [] as any,
+      activity: [] as any,
+      match_breakdown: [] as any,
+      pdl_id: c.external_id,
+      linkedin_slug: slug,
+    });
+    if (insErr) {
+      console.error("pdl candidate insert failed:", insErr.message);
+      skipped++;
+    } else added++;
+  }
+
+  if (added > 0) {
+    await supabaseAdmin.rpc("increment_sourcing_usage", { _user_id: userId, _count: added });
+  }
+  if (added === 0 && !collectErr && (apolloToFetch.length + pdlToInsert.length) === 0) {
+    collectErr = combined.length === 0 ? "No matches — try broadening the brief" : null;
   }
 
   onTask(
     await finishTask(
       tCollect,
-      collectErr ? "failed" : "done",
-      collectErr ?? `${added} added · ${skipped} skipped`,
+      collectErr ? "failed" : added > 0 ? "done" : "failed",
+      collectErr ?? (added > 0 ? `${added} candidate${added === 1 ? "" : "s"} sourced` : "No new candidates"),
       { added, skipped, period: currentPeriod() },
     ),
   );
