@@ -277,6 +277,15 @@ function ConversationPage() {
               pulse={candidatesPulse && tab !== "candidates"}
             />
           )}
+          {outreach && (
+            <TabButton
+              active={tab === "outreach"}
+              onClick={() => setTab("outreach")}
+              icon={<SendIcon size={14} />}
+              label="Outreach"
+              pulse={outreachPulse && tab !== "outreach"}
+            />
+          )}
         </div>
         <div className="flex items-center gap-3 pr-1">
           <span className="max-w-[280px] truncate text-[12.5px] font-medium text-text">{title}</span>
@@ -335,6 +344,8 @@ function ConversationPage() {
           </div>
         ) : tab === "candidates" && job ? (
           <CandidatesPanel conversationId={id} onAskFindable={askFindable} />
+        ) : tab === "outreach" ? (
+          <OutreachPanel conversationId={id} />
         ) : null}
       </div>
     </div>
