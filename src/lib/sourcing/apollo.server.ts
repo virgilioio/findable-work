@@ -238,3 +238,18 @@ export async function enrichApolloProfiles(
   }
   return out;
 }
+
+/**
+ * Reveal phone number for a single Apollo profile. This DOES consume
+ * Apollo export credits — only call when the user explicitly opts in.
+ */
+export async function revealApolloPhone(apolloId: string): Promise<string | null> {
+  if (!apolloId) return null;
+  const data = await apolloFetch("/people/bulk_match", {
+    details: [{ id: apolloId }],
+    reveal_phone_number: true,
+  });
+  const m = data.matches?.[0];
+  if (!m) return null;
+  return m.phone_numbers?.[0]?.sanitized_number ?? m.phone_numbers?.[0]?.raw_number ?? null;
+}

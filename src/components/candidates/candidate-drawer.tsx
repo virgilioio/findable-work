@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { updateCandidate, deleteCandidate } from "@/lib/candidates.functions";
+import { updateCandidate, deleteCandidate, revealCandidatePhone } from "@/lib/candidates.functions";
 import { cn } from "@/lib/utils";
 import {
   X,
@@ -36,6 +36,7 @@ export type Candidate = {
   avatar: string;
   email: string | null;
   phone: string | null;
+  has_direct_phone?: boolean;
   linkedin: string | null;
   location: string | null;
   summary: string | null;
@@ -258,6 +259,16 @@ function KV({ label, value, children }: { label: string; value?: string; childre
 }
 
 function Overview({ c }: { c: Candidate }) {
+  const qc = useQueryClient();
+  const reveal = useServerFn(revealCandidatePhone);
+  const revealMut = useMutation({
+    mutationFn: () => reveal({ data: { id: c.id } }),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ["candidates", c.conversation_id] });
+      toast(res.alreadyRevealed ? "Phone already on file" : "Phone revealed (1 credit)");
+    },
+    onError: (e: any) => toast.error(e?.message ?? "Couldn't reveal phone"),
+  });
   return (
     <div className="flex flex-col gap-5 px-5 pb-8 pt-4">
       {c.summary && (
@@ -293,6 +304,22 @@ function Overview({ c }: { c: Candidate }) {
           </KV>
         )}
         {c.phone && <KV label="Phone" value={c.phone} />}
+        {!c.phone && c.has_direct_phone && (
+          <KV label="Phone">
+            <button
+              onClick={() => revealMut.mutate()}
+              disabled={revealMut.isPending}
+              className="inline-flex items-center gap-1.5 rounded-md border border-border-strong bg-bg-elev px-2 py-0.5 text-[12px] text-text hover:bg-bg-hover disabled:opacity-50"
+              title="Uses 1 Apollo credit"
+            >
+              <Sparkle size={11} />
+              {revealMut.isPending ? "Revealing…" : "Reveal phone (1 credit)"}
+            </button>
+          </KV>
+        )}
+        {!c.phone && !c.has_direct_phone && (
+          <KV label="Phone" value="No direct phone available" />
+        )}
         {c.location && <KV label="Location" value={c.location} />}
       </Section>
       <Section title="Skills & tags">

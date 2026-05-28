@@ -180,7 +180,17 @@ export function CandidatesPanel({
                         {c.avatar}
                       </div>
                       <div className="min-w-0">
-                        <div className="truncate font-medium text-text">{c.name}</div>
+                        <div className="flex items-center gap-1.5 truncate font-medium text-text">
+                          <span className="truncate">{c.name}</span>
+                          {c.has_direct_phone && (
+                            <span
+                              title="Direct phone available — reveal in profile"
+                              className="inline-flex shrink-0 items-center rounded-full bg-bg-input px-1.5 py-[1px] text-[10px] font-medium text-text-mute"
+                            >
+                              📞
+                            </span>
+                          )}
+                        </div>
                         <div className="truncate text-[12px] text-text-mute">
                           {c.role} · {c.company}
                         </div>

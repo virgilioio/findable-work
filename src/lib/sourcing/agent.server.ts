@@ -292,6 +292,11 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
   // Dedupe against already-collected rows
   const apolloIds = topApollo.map((c: any) => c.external_id).filter(Boolean);
   const pdlIds = topPdl.map((c: any) => c.external_id).filter(Boolean);
+  // Map Apollo preview external_id → has_direct_phone, so we can persist the flag
+  // on the candidate row without a follow-up reveal call (which would cost credits).
+  const apolloPhoneFlag = new Map<string, boolean>(
+    topApollo.map((c: any) => [c.external_id, Boolean(c.has_direct_phone)]),
+  );
   const [{ data: aRows }, { data: pRows }] = await Promise.all([
     supabaseAdmin.from("candidates").select("apollo_id").eq("user_id", userId)
       .in("apollo_id", apolloIds.length ? apolloIds : ["__none__"]),
@@ -339,6 +344,7 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
           match_breakdown: [] as any,
           apollo_id: e.id,
           linkedin_slug: slug,
+          has_direct_phone: apolloPhoneFlag.get(e.id) ?? false,
         });
         if (insErr) {
           console.error("apollo candidate insert failed:", insErr.message);
@@ -391,6 +397,7 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
       match_breakdown: [] as any,
       pdl_id: c.external_id,
       linkedin_slug: slug,
+      has_direct_phone: Boolean(raw.mobile_phone || raw.phone_numbers?.length),
     });
     if (insErr) {
       console.error("pdl candidate insert failed:", insErr.message);
