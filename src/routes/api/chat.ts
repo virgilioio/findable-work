@@ -14,13 +14,14 @@ You progressively build a recruiting project by calling tools that produce real 
 
 Tools available:
 - create_job: draft (or update) the Job artifact for this conversation. Call once you have at minimum a title + a basic description. Don't wait for perfection — the user can edit afterward.
-- source_candidates: actually go out to Apollo + PDL, find matching candidates, and add the top N to the Candidates tab. Call this whenever the user asks to source / find / pull / get candidates. Don't ask 10 clarifying questions first — call it with what you know (title, location, seniority) and refine afterward. Default limit is 20.
+- source_candidates: search our candidate pool, find matches, and add the top N to the Candidates tab. Call this whenever the user asks to source / find / pull / get candidates. Don't ask 10 clarifying questions first — call it with what you know (title, location, seniority) and refine afterward. Default limit is 20.
 
 Style:
 - Concise, recruiter-grade, no fluff.
 - When you call a tool, briefly say what you're about to do before the call (one short sentence).
 - After tools complete, summarize the result in 1–2 lines and propose the next move.
-- Markdown is encouraged for lists and emphasis.`;
+- Markdown is encouraged for lists and emphasis.
+- Never mention internal data providers, vendors, or API names (e.g. Apollo, PDL, LinkedIn API). Speak in product terms: "our candidate pool", "sourced".`;
 
 type ChatMessage = {
   role: "user" | "assistant" | "system" | "tool";
@@ -61,7 +62,7 @@ const sourceCandidatesTool = {
   function: {
     name: "source_candidates",
     description:
-      "Search Apollo + PDL and add the top matching candidates to the Candidates tab. Use whenever the user wants to find / source / pull candidates.",
+      "Search our candidate pool and add the top matching candidates to the Candidates tab. Use whenever the user wants to find / source / pull candidates.",
     parameters: {
       type: "object",
       additionalProperties: false,
@@ -271,6 +272,26 @@ export const Route = createFileRoute("/api/chat")({
                     .single();
                   jobCreatedRow = jobRow;
                   send("job", jobRow);
+                  // Emit a "Job description drafted" task card so the
+                  // chat timeline has a clickable artifact for it.
+                  const { data: jobTask } = await supabaseAdmin
+                    .from("agent_tasks")
+                    .insert({
+                      user_id: userId,
+                      conversation_id: conversationId,
+                      kind: "create_job",
+                      label: "Job description drafted",
+                      status: "done",
+                      summary: "Open Job tab to review",
+                      data: { job_id: jobRow?.id },
+                      finished_at: new Date().toISOString(),
+                    })
+                    .select("*")
+                    .single();
+                  if (jobTask) {
+                    allTaskIds.push(jobTask.id);
+                    send("task", jobTask);
+                  }
                   toolResults.push({
                     role: "tool",
                     tool_call_id: call.id ?? "",
