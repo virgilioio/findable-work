@@ -567,7 +567,7 @@ function TimelineRow({
           pulse && "animate-pulse",
         )}
       >
-        <SearchIcon size={14} />
+        <Logo size={14} />
       </span>
       <div className="min-w-0 flex-1">{children}</div>
     </div>
