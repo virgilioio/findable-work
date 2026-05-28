@@ -14,6 +14,8 @@ import {
   listConversations,
   createConversation,
   deleteConversation,
+  renameConversation,
+  setConversationPinned,
 } from "@/lib/conversations.functions";
 import { useTheme } from "@/hooks/use-theme";
 import {
@@ -25,8 +27,17 @@ import {
   Sun,
   Moon,
   LogOut,
-  XSm,
+  Pencil,
+  Pin,
 } from "@/components/findable-icons";
+import { Trash2, PinOff } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/app")({
@@ -42,7 +53,13 @@ export const Route = createFileRoute("/app")({
   component: AppLayout,
 });
 
-type Conv = { id: string; title: string; updated_at?: string; created_at?: string };
+type Conv = {
+  id: string;
+  title: string;
+  updated_at?: string;
+  created_at?: string;
+  pinned_at?: string | null;
+};
 
 function AppLayout() {
   const navigate = useNavigate();
@@ -50,6 +67,8 @@ function AppLayout() {
   const list = useServerFn(listConversations);
   const create = useServerFn(createConversation);
   const del = useServerFn(deleteConversation);
+  const rename = useServerFn(renameConversation);
+  const setPinned = useServerFn(setConversationPinned);
 
   const { data: conversations = [] } = useQuery({
     queryKey: ["conversations"],
@@ -68,6 +87,24 @@ function AppLayout() {
     mutationFn: (id: string) => del({ data: { id } }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["conversations"] }),
   });
+
+  const renameMut = useMutation({
+    mutationFn: (vars: { id: string; title: string }) =>
+      rename({ data: vars }),
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["conversations"] });
+      qc.invalidateQueries({ queryKey: ["conversation", vars.id] });
+    },
+  });
+
+  const pinMut = useMutation({
+    mutationFn: (vars: { id: string; pinned: boolean }) =>
+      setPinned({ data: vars }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["conversations"] }),
+  });
+
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
 
   useEffect(() => {
     const {
@@ -104,7 +141,7 @@ function AppLayout() {
     return (conversations as Conv[]).filter((c) => c.title.toLowerCase().includes(q));
   }, [conversations, query]);
 
-  const groups = useMemo(() => groupByDate(filtered), [filtered]);
+  const groups = useMemo(() => groupConversations(filtered), [filtered]);
 
   async function onSignOut() {
     console.info("[auth] sign-out requested");
@@ -164,30 +201,32 @@ function AppLayout() {
               </div>
               <div className="space-y-0.5">
                 {g.items.map((c) => (
-                  <Link
+                  <ConversationRow
                     key={c.id}
-                    to="/app/c/$id"
-                    params={{ id: c.id }}
-                    className={cn(
-                      "group flex items-center gap-2 rounded-[8px] px-2.5 py-1.5 text-[13px] text-text/90 transition hover:bg-bg-hover",
-                      activeId === c.id && "bg-bg-active text-text",
-                    )}
-                  >
-                    <ChatIcon size={14} className="shrink-0 text-text-faint" />
-                    <span className="flex-1 truncate">{c.title || "Untitled"}</span>
-                    <button
-                      type="button"
-                      aria-label="Delete conversation"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        if (confirm("Delete this conversation?")) delMut.mutate(c.id);
-                      }}
-                      className="rounded p-0.5 text-text-faint opacity-0 transition hover:bg-bg-active hover:text-text group-hover:opacity-100"
-                    >
-                      <XSm />
-                    </button>
-                  </Link>
+                    conv={c}
+                    active={activeId === c.id}
+                    renaming={renamingId === c.id}
+                    renameDraft={renameDraft}
+                    setRenameDraft={setRenameDraft}
+                    onStartRename={() => {
+                      setRenamingId(c.id);
+                      setRenameDraft(c.title || "");
+                    }}
+                    onCancelRename={() => setRenamingId(null)}
+                    onCommitRename={() => {
+                      const t = renameDraft.trim();
+                      if (t && t !== c.title) {
+                        renameMut.mutate({ id: c.id, title: t });
+                      }
+                      setRenamingId(null);
+                    }}
+                    onTogglePin={() =>
+                      pinMut.mutate({ id: c.id, pinned: !c.pinned_at })
+                    }
+                    onDelete={() => {
+                      if (confirm("Delete this conversation?")) delMut.mutate(c.id);
+                    }}
+                  />
                 ))}
               </div>
             </div>
