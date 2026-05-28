@@ -174,8 +174,7 @@ function AppLayout() {
         {/* Brand */}
         <div className="flex items-center justify-between px-4 pt-4 pb-3">
           <Link to="/app" className="flex items-center gap-2 text-text">
-            <Logo size={22} />
-            <span className="text-[15px] font-semibold tracking-tight">findable</span>
+            <Wordmark height={22} />
           </Link>
         </div>
 
