@@ -1,49 +1,24 @@
 ## Problem
 
-Your latest search returned no candidates because the chat handler ran **only one tool pass**. The model called `create_job`, then in its second-pass narration said "Now I'll source candidates…" — but that pass is treated as the final summary, so `source_candidates` was never executed. No sourcing project, no previews, no candidates.
-
-Verified in DB: assistant message for conversation `1852b70a…` has `tool_calls = [create_job]` only; no `sourcing_projects` row exists for it.
+After the assistant creates the Job and sources Candidates, it just stops. It should always close a turn by proposing the natural next step — drafting the job post, then scheduling interviews — and explicitly ask the user whether to proceed.
 
 ## Fix
 
-Two small, surgical changes in `src/routes/api/chat.ts`:
+Single edit to `SYSTEM_PROMPT` in `src/routes/api/chat.ts`. Add a "Next-step proposal" rule after the existing Mandatory flow:
 
-### 1. Agent loop (primary fix)
+> **Next-step proposal (always close with one).** A complete recruiting project has four artifacts: Job → Candidates → Job Post → Interview Schedule. After every turn that finishes a stage, end your reply with a short, concrete proposal for the next missing artifact and ask for confirmation. Examples:
+> - Job + Candidates just done → "Want me to draft a job post for this role next?"
+> - Job Post just done → "Ready to set up the interview loop?"
+> - Everything in place → suggest a refinement (broaden sourcing, tweak the JD, add screening questions).
+>
+> Never end a turn with just a summary. Always end with a question or a one-line proposed next move.
 
-Replace the current "first pass → tool exec → second pass for summary" flow with a bounded loop:
+## Out of scope (per user)
 
-```text
-messages = baseMessages
-for i in 0..MAX_ITERS (5):
-  result = streamCompletion(messages)
-  if result.toolCalls is empty: break
-  execute tools, collect tool results
-  messages = [...messages, assistantMsg(result.toolCalls), ...toolResults]
-combinedText = concatenation of all streamed text segments
-persist final assistant message with the toolCalls from the FIRST pass
-  (keeps existing UI behavior — task cards still link to that message)
-```
-
-- Re-use the existing `create_job` / `source_candidates` / `ask_clarifying_questions` execution branches as-is.
-- Keep emitting `delta`, `task`, `job`, `candidates_added` SSE events unchanged.
-- Cap iterations (5) to prevent runaway loops.
-- Emit a `"\n\n"` delta between passes (same visual split we have today).
-
-### 2. Prompt nudge (belt-and-suspenders)
-
-Add one line to `SYSTEM_PROMPT` step 2:
-
-> When you call `create_job` and `source_candidates` in the same turn, emit them as **parallel tool calls in the same response** — do not narrate between them.
-
-This pushes gpt-5-mini to batch the two calls, which the loop will also cover if it doesn't.
-
-## Out of scope
-
-- No changes to `runSourcingAgent`, Apollo/PDL search, or the candidates UI.
-- No DB/schema changes.
-- No model swap.
+- No new Job Posts tab/tool.
+- No new Interviews schedule tab/tool.
+- Those land in a follow-up plan; the prompt nudge already steers the assistant to *ask* about them so we know when the user wants them built.
 
 ## Verification
 
-- New conversation: "Find GTM marketing managers in LATAM" → expect both a Job card and a Sourced-candidates card in one turn, and a `sourcing_projects` row to appear.
-- Existing flows (clarifying questions only, job-only edits) still work because the loop simply exits when there are no more tool calls.
+After a fresh "source candidates" flow, the assistant's final message should end with a question proposing the job post (and not just a recap).
