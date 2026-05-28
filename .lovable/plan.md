@@ -1,37 +1,47 @@
-## Plan
+## Plan: geo-correct locations end-to-end
 
-Replace the hover-only "X" delete button on each sidebar conversation with an ellipsis (`Dots`) icon that opens a dropdown menu with **Rename**, **Pin conversation**, and **Delete**. Add pin persistence so pinned conversations float to the top of the list.
+Make city / state-or-province / country a first-class structured field so Apollo and PDL both filter on all three.
 
-### 1. Database
+### 1. Capture state in the normalized brief
 
-New migration adds pin support to `conversations`:
+`src/lib/sourcing/normalize.functions.ts`
+- Replace the single `location: string` with a structured object:
+  ```ts
+  location: { city: string; region: string; country: string }
+  ```
+  (all strings; empty when unknown).
+- Update the LLM JSON schema/prompt to extract `city`, `region` (state/province/admin area), and `country` separately. Add few-shot examples covering: "Austin, TX, USA", "São Paulo, SP, Brasil", "Berlin, Germany", "remote EU", "Mexico City, Mexico".
+- Keep a derived display string ("Austin, TX, United States") for UI compatibility.
 
-- `pinned_at timestamptz null` (null = unpinned; timestamp = when it was pinned)
-- Index `conversations_user_pinned_idx` on `(user_id, pinned_at desc nulls last, updated_at desc)` for ordering
+### 2. Propagate the structured location
 
-### 2. Server functions (`src/lib/conversations.functions.ts`)
+- `agent.server.ts`: pass `normalized.location` (the object) into the SearchCriteria instead of `[normalized.location]`.
+- `budget.ts` `SearchCriteria.locations` type changes from `string[]` to `LocationInput[]` (object form), with a small adapter so any existing string usage still works.
 
-- `listConversations`: select `pinned_at` too; order by `pinned_at desc nulls last, updated_at desc`.
-- New `setConversationPinned({ id, pinned: boolean })` — sets `pinned_at = now()` or `null`.
-- `renameConversation` already exists — reuse it.
+### 3. Apollo: send city + state + country
 
-### 3. Sidebar UI (`src/routes/app.tsx`)
+`apollo.server.ts` + `normalizeLocationForApollo` in `budget.ts`:
+- Build `person_locations` as a deduped list of progressively-broader strings:
+  1. `"City, Region, Country"` (full)
+  2. `"City, Country"`
+  3. `"Region, Country"`
+  4. `"Country"`
+- Expand US/CA/AU/BR/MX/IN state abbreviations to full names (extend `US_STATE_ABBR_TO_NAME` map, or add per-country maps).
+- Use the broader entries only in the broadening cascade (already structured in `apollo.server.ts:132-148`), instead of re-deriving "country only" by string split.
 
-- Add `Conv.pinned_at?: string | null` to the type.
-- Grouping: split list into a **Pinned** group (any `pinned_at != null`, kept in pinned-time order) shown first, then the existing date buckets for the rest.
-- Replace the hover `XSm` button with a `Dots` icon button wrapped in `DropdownMenu` (`@/components/ui/dropdown-menu`) with three items:
-  - **Rename** — opens a small inline rename state (controlled input replaces the title in-row; Enter saves via `renameConversation`, Esc cancels).
-  - **Pin conversation** / **Unpin** — toggles via `setConversationPinned`; label and icon switch based on current `pinned_at`.
-  - **Delete** — existing confirm + `deleteConversation`.
-- The trigger button stays hidden until row hover (or menu open) to keep the list clean. Clicking the trigger must `preventDefault`/`stopPropagation` so the row `<Link>` doesn't navigate.
-- All three mutations `invalidateQueries(["conversations"])` on success; rename also invalidates `["conversation", id]`.
+### 4. PDL: include `location_region`
 
-### 4. Icons
+`pdl.server.ts` `buildEsQuery`:
+- For each location, add `term: { location_region: <region> }` to the `should` array alongside `location_locality` and `location_country`.
+- Normalize region to PDL's lowercase convention (matches the existing `locality`/`country` casing in `splitLocationForPdl`).
+- Optionally tighten with `bool.must` (`country` required, `region OR locality` should) when all three fields are present, to reduce noise.
 
-Use existing `Dots` from `@/components/findable-icons` for the trigger. For menu item glyphs use small lucide icons (`Pencil`, `Pin`, `PinOff`, `Trash2`) — keeps the menu visually consistent with the rest of the app.
+### 5. Verification
 
-### Technical notes
+- Unit-style sanity log: for a brief like "Senior data engineer, Austin, Texas, USA", log the final Apollo `person_locations` array and PDL `query` body once to confirm:
+  - Apollo gets `["Austin, Texas, United States", "Austin, United States", "Texas, United States", "United States"]`.
+  - PDL gets `should: [{location_locality:"austin"}, {location_region:"texas"}, {location_country:"united states"}]`.
+- Re-run an existing conversation that previously over-matched to confirm tighter geo filtering.
 
-- Pin ordering is done server-side in the query so the sidebar reflects it without client sorting.
-- `pinned_at` (vs a boolean) lets us preserve pin order if multiple are pinned, and keeps the schema cheap to extend later.
-- Dropdown uses the existing shadcn `dropdown-menu` component — no new deps.
+### Out of scope (for now)
+- Remote/timezone filtering ("remote EU", "remote AMER") — needs a separate field on `SearchCriteria` and a different Apollo/PDL strategy. Flag-only here; happy to plan it next.
