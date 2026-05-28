@@ -145,6 +145,18 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
     onTask(
       await finishTask(tNorm, "done", `${normalized.title ?? "Untitled"} · ${normalized.location ?? "any location"}`, normalized),
     );
+    // Rename the conversation to the normalized job title so the sidebar
+    // reflects the canonical role (e.g. "Senior React Developer").
+    if (normalized?.title && typeof normalized.title === "string") {
+      const newTitle = normalized.title.trim().slice(0, 200);
+      if (newTitle) {
+        await supabaseAdmin
+          .from("conversations")
+          .update({ title: newTitle, updated_at: new Date().toISOString() })
+          .eq("id", conversationId)
+          .eq("user_id", userId);
+      }
+    }
   } catch (e: any) {
     onTask(await finishTask(tNorm, "failed", e?.message ?? "Normalization failed"));
     throw e;
