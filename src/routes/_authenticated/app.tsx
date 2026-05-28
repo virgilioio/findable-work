@@ -16,6 +16,7 @@ import {
   renameConversation,
   setConversationPinned,
 } from "@/lib/conversations.functions";
+import { adminCheck } from "@/lib/prompts/prompts.functions";
 import { useTheme } from "@/hooks/use-theme";
 import {
   Logo,
@@ -132,6 +133,18 @@ function AppLayout() {
   const [query, setQuery] = useState("");
   const [email, setEmail] = useState<string>("");
   const { theme, toggle } = useTheme();
+  const adminCheckFn = useServerFn(adminCheck);
+  const { data: isAdmin } = useQuery({
+    queryKey: ["is-admin"],
+    queryFn: async () => {
+      try {
+        await adminCheckFn();
+        return true;
+      } catch {
+        return false;
+      }
+    },
+  });
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? ""));
@@ -259,6 +272,15 @@ function AppLayout() {
           >
             <LogOut size={14} />
           </button>
+          {isAdmin && (
+            <Link
+              to="/admin/prompts"
+              aria-label="Admin"
+              className="rounded-md px-1.5 py-1 text-[11px] font-medium text-text-mute transition hover:bg-bg-hover hover:text-text"
+            >
+              Admin
+            </Link>
+          )}
           <button
             aria-label="More"
             className="rounded-md p-1.5 text-text-mute transition hover:bg-bg-hover hover:text-text"
