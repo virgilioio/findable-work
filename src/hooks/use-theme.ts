@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 
 type Theme = "light" | "dark";
 
-const STORAGE_KEY = "gio-theme";
+const STORAGE_KEY = "findable-theme";
 
 function readInitial(): Theme {
   if (typeof window === "undefined") return "light";

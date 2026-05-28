@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { createConversation } from "@/lib/conversations.functions";
-import { Logo, Plus } from "@/components/gio-icons";
+import { Logo, Plus } from "@/components/findable-icons";
 
 export const Route = createFileRoute("/app/")({
   component: AppHome,
@@ -25,7 +25,7 @@ function AppHome() {
           What hire can I help with?
         </h1>
         <p className="mt-2 text-[13px] text-text-mute">
-          Start a project. As you describe the role, Gio drafts a Job, then pipeline, posts, and more.
+          Start a project. As you describe the role, findable drafts a Job, then pipeline, posts, and more.
         </p>
         <button
           onClick={() => mut.mutate()}

@@ -8,7 +8,7 @@ const bodySchema = z.object({
   message: z.string().min(1).max(20000),
 });
 
-const SYSTEM_PROMPT = `You are Gio, a senior recruiting agent embedded in a workspace.
+const SYSTEM_PROMPT = `You are findable, a senior recruiting agent embedded in a workspace.
 
 You progressively build a recruiting project by calling tools that produce real artifacts: a Job draft, a candidate pipeline, etc. The user can see each tool you call as a live "task" card in the chat.
 

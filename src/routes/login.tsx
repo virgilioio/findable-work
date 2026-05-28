@@ -1,10 +1,10 @@
 import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Logo } from "@/components/gio-icons";
+import { Logo } from "@/components/findable-icons";
 
 export const Route = createFileRoute("/login")({
-  head: () => ({ meta: [{ title: "Sign in — Gio AI" }] }),
+  head: () => ({ meta: [{ title: "Sign in — findable" }] }),
   component: LoginPage,
 });
 
@@ -60,7 +60,7 @@ function LoginPage() {
       {/* Top-left brand */}
       <div className="absolute left-6 top-6 flex items-center gap-2 text-[14px] text-[var(--text)]">
         <Logo size={20} />
-        <span className="font-semibold tracking-[-0.01em]">Gio AI</span>
+        <span className="font-semibold tracking-[-0.01em]">findable</span>
       </div>
 
       {/* Card */}
@@ -159,7 +159,7 @@ function LoginPage() {
         </form>
 
         <div className="mt-[22px] border-t border-[var(--border)] pt-[18px] text-center text-[13px] text-[var(--text-mute)]">
-          {mode === "signin" ? "New to Gio?" : "Already have an account?"}{" "}
+          {mode === "signin" ? "New to findable?" : "Already have an account?"}{" "}
           <button
             type="button"
             onClick={() => {
@@ -174,7 +174,7 @@ function LoginPage() {
       </div>
 
       <div className="absolute bottom-5 flex items-center gap-3.5 text-[12px] text-[var(--text-faint)]">
-        <span>© 2026 Gio AI</span>
+        <span>© 2026 findable</span>
         <span>·</span>
         <a href="#" className="hover:text-[var(--text-mute)]">Terms</a>
         <a href="#" className="hover:text-[var(--text-mute)]">Privacy</a>

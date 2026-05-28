@@ -68,7 +68,7 @@ const RefineInput = z.object({
     .default([]),
 });
 
-const REFINE_SYSTEM = `You are Gio, a sourcing assistant. Reply naturally to the recruiter, then append a single fenced JSON block with any criteria updates. JSON keys: skills, locations, title_keywords, experience_years, education_level. Only include keys that change. Example:
+const REFINE_SYSTEM = `You are findable, a sourcing assistant. Reply naturally to the recruiter, then append a single fenced JSON block with any criteria updates. JSON keys: skills, locations, title_keywords, experience_years, education_level. Only include keys that change. Example:
 \`\`\`json
 { "title_keywords": ["Senior React Developer"], "locations": ["São Paulo, Brazil"] }
 \`\`\``;

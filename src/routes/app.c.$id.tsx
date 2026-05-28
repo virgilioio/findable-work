@@ -32,7 +32,7 @@ import {
   Pencil,
   Upload,
   Check,
-} from "@/components/gio-icons";
+} from "@/components/findable-icons";
 import { cn } from "@/lib/utils";
 import { CandidatesPanel } from "@/components/candidates/candidates-panel";
 import { TaskCard, type ChatTask } from "@/components/chat/task-card";
@@ -194,7 +194,7 @@ function ConversationPage() {
     }
   }
 
-  function askGio(prompt: string) {
+  function askFindable(prompt: string) {
     setTab("chat");
     setComposerText((prev) => (prev ? prev + "\n\n" + prompt : prompt));
   }
@@ -269,7 +269,7 @@ function ConversationPage() {
               job={job}
               conversationId={id}
               onAskRevise={() =>
-                askGio(
+                askFindable(
                   `Please revise this job. Specifically: `,
                 )
               }
@@ -279,7 +279,7 @@ function ConversationPage() {
             />
           </div>
         ) : tab === "candidates" && job ? (
-          <CandidatesPanel conversationId={id} onAskGio={askGio} />
+          <CandidatesPanel conversationId={id} onAskFindable={askFindable} />
         ) : null}
       </div>
     </div>
@@ -465,7 +465,7 @@ function Composer({
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
-        placeholder="Message Gio…"
+        placeholder="Message findable…"
         rows={1}
         className="min-h-[28px] w-full resize-none bg-transparent px-2 py-1 text-[14px] outline-none placeholder:text-text-faint"
         onKeyDown={(e) => {
@@ -806,7 +806,7 @@ function JobPanel({
 
           <div className="rounded-[14px] border border-border bg-bg-side p-4">
             <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-text-faint">
-              <Sparkle size={12} /> Suggested by Gio
+              <Sparkle size={12} /> Suggested by findable
             </div>
             <p className="text-[12.5px] leading-relaxed text-text-mute">
               Once you fill in the summary and requirements, I can suggest a salary band, a sourcing
@@ -818,7 +818,7 @@ function JobPanel({
               onClick={onAskRevise}
               className="mt-3 h-8 w-full border-border bg-bg text-[12.5px]"
             >
-              Ask Gio to revise
+              Ask findable to revise
             </Button>
           </div>
         </aside>

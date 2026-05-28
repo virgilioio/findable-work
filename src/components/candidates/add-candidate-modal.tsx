@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { createCandidate } from "@/lib/candidates.functions";
-import { X, Doc, Edit, Sparkle, ArrowRight } from "@/components/gio-icons";
+import { X, Doc, Edit, Sparkle, ArrowRight } from "@/components/findable-icons";
 import { cn } from "@/lib/utils";
 
 export function AddCandidateModal({
@@ -108,7 +108,7 @@ export function AddCandidateModal({
               >
                 <Doc size={28} className="text-text-mute" />
                 <div className="mt-3 text-[14px] font-medium text-text">Drop a resume here</div>
-                <div className="mt-1 text-[12.5px] text-text-mute">PDF, DOC, or DOCX · Gio will parse name, role, skills and history</div>
+                <div className="mt-1 text-[12.5px] text-text-mute">PDF, DOC, or DOCX · findable will parse name, role, skills and history</div>
                 <button className="mt-3.5 h-[34px] rounded-lg border border-border-strong bg-bg-elev px-3.5 text-[13px] text-text">
                   Or browse files…
                 </button>
@@ -121,7 +121,7 @@ export function AddCandidateModal({
                   <span className="thinking-dot" />
                   <span className="thinking-dot" />
                 </div>
-                <div className="mt-3.5 text-[13.5px] text-text">Gio is parsing the resume…</div>
+                <div className="mt-3.5 text-[13.5px] text-text">findable is parsing the resume…</div>
                 <div className="mt-1 text-[12px] text-text-mute">Extracting experience, skills and contact details</div>
               </div>
             )}

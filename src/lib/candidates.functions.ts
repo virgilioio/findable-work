@@ -38,8 +38,8 @@ function enrich(input: {
       { label: "Industry fit", score: 78, note: input.tags.includes("Fintech") ? "Fintech background, SaaS adjacent" : "Direct SaaS background" },
     ],
     activity: [
-      { id: 1, type: "added", by: "Gio AI", when: "Just now", text: "Added to project" },
-      { id: 2, type: "matched", by: "Gio AI", when: "Just now", text: `Match score calculated: ${input.match}%` },
+      { id: 1, type: "added", by: "findable", when: "Just now", text: "Added to project" },
+      { id: 2, type: "matched", by: "findable", when: "Just now", text: `Match score calculated: ${input.match}%` },
     ],
   };
 }

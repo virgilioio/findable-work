@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { Check, Sparkle, Users, Search, Briefcase } from "@/components/gio-icons";
+import { Check, Sparkle, Users, Search, Briefcase } from "@/components/findable-icons";
 
 export type ChatTask = {
   id: string;
