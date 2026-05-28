@@ -17,7 +17,7 @@ import {
   Send,
   Calendar,
   Doc,
-} from "@/components/gio-icons";
+} from "@/components/findable-icons";
 
 const STAGES = ["Sourced", "Contacted", "Screening", "Interview", "Offer"] as const;
 type Stage = (typeof STAGES)[number];

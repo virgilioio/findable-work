@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { createConversation } from "@/lib/conversations.functions";
-import { Logo, Plus } from "@/components/gio-icons";
+import { Logo, Plus } from "@/components/findable-icons";
 
 export const Route = createFileRoute("/app/")({
   component: AppHome,

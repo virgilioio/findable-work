@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { createCandidate } from "@/lib/candidates.functions";
-import { X, Doc, Edit, Sparkle, ArrowRight } from "@/components/gio-icons";
+import { X, Doc, Edit, Sparkle, ArrowRight } from "@/components/findable-icons";
 import { cn } from "@/lib/utils";
 
 export function AddCandidateModal({

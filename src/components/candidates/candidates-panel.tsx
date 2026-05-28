@@ -9,7 +9,7 @@ import {
   Sparkle,
   Users,
   ChevDown,
-} from "@/components/gio-icons";
+} from "@/components/findable-icons";
 import { cn } from "@/lib/utils";
 import { CandidateDrawer, type Candidate } from "./candidate-drawer";
 import { AddCandidateModal } from "./add-candidate-modal";

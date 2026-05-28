@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Logo } from "@/components/gio-icons";
+import { Logo } from "@/components/findable-icons";
 
 export const Route = createFileRoute("/login")({
   head: () => ({ meta: [{ title: "Sign in — findable" }] }),

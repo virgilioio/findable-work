@@ -32,7 +32,7 @@ import {
   Pencil,
   Upload,
   Check,
-} from "@/components/gio-icons";
+} from "@/components/findable-icons";
 import { cn } from "@/lib/utils";
 import { CandidatesPanel } from "@/components/candidates/candidates-panel";
 import { TaskCard, type ChatTask } from "@/components/chat/task-card";

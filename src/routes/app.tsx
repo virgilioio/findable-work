@@ -19,7 +19,7 @@ import {
   Moon,
   LogOut,
   XSm,
-} from "@/components/gio-icons";
+} from "@/components/findable-icons";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/app")({
