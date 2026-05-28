@@ -38,6 +38,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/app")({
@@ -105,6 +115,7 @@ function AppLayout() {
 
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     const {
@@ -142,6 +153,11 @@ function AppLayout() {
   }, [conversations, query]);
 
   const groups = useMemo(() => groupConversations(filtered), [filtered]);
+
+  const deletingConv = useMemo(
+    () => (conversations as Conv[]).find((c) => c.id === deletingId),
+    [conversations, deletingId],
+  );
 
   async function onSignOut() {
     console.info("[auth] sign-out requested");
@@ -223,9 +239,7 @@ function AppLayout() {
                     onTogglePin={() =>
                       pinMut.mutate({ id: c.id, pinned: !c.pinned_at })
                     }
-                    onDelete={() => {
-                      if (confirm("Delete this conversation?")) delMut.mutate(c.id);
-                    }}
+                    onDelete={() => setDeletingId(c.id)}
                   />
                 ))}
               </div>
@@ -267,6 +281,29 @@ function AppLayout() {
       <main className="flex flex-1 flex-col overflow-hidden bg-bg">
         <Outlet />
       </main>
+
+      <AlertDialog open={Boolean(deletingId)} onOpenChange={(open) => { if (!open) setDeletingId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete conversation?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently eliminate <strong>"{deletingConv?.title || "Untitled"}"</strong>. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeletingId(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (deletingId) delMut.mutate(deletingId);
+                setDeletingId(null);
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
