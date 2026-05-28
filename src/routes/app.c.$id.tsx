@@ -331,6 +331,8 @@ function ChatPanel({
   onSend,
   text,
   setText,
+  persistedTasks,
+  liveTasks,
 }: {
   messages: Message[];
   streaming: string;
@@ -338,6 +340,8 @@ function ChatPanel({
   onSend: (text: string) => void;
   text: string;
   setText: (v: string) => void;
+  persistedTasks: ChatTask[];
+  liveTasks: ChatTask[];
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -400,10 +404,33 @@ function ChatPanel({
     <div className="flex flex-1 flex-col overflow-hidden">
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-[720px] space-y-5 px-4 py-8">
-          {messages.map((m) => (
-            <MessageBubble key={m.id} role={m.role} content={m.content} />
-          ))}
-          {streaming && <MessageBubble role="assistant" content={streaming} streaming />}
+          {messages.map((m) => {
+            const msgTasks = persistedTasks.filter((t) => t.message_id === m.id);
+            return (
+              <div key={m.id} className="space-y-2">
+                <MessageBubble role={m.role} content={m.content} />
+                {msgTasks.length > 0 && m.role === "assistant" && (
+                  <div className="ml-1 space-y-1.5">
+                    {msgTasks.map((t) => (
+                      <TaskCard key={t.id} task={t} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {(streaming || liveTasks.length > 0) && (
+            <div className="space-y-2">
+              {streaming && <MessageBubble role="assistant" content={streaming} streaming />}
+              {liveTasks.length > 0 && (
+                <div className="ml-1 space-y-1.5">
+                  {liveTasks.map((t) => (
+                    <TaskCard key={t.id} task={t} />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           {sending && !streaming && (
             <div className="flex items-center gap-1.5 pl-1 text-text-mute">
               <span className="thinking-dot" />
