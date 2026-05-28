@@ -4,7 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { createConversation } from "@/lib/conversations.functions";
 import { Logo, Plus } from "@/components/findable-icons";
 
-export const Route = createFileRoute("/app/")({
+export const Route = createFileRoute("/_authenticated/app/")({
   component: AppHome,
 });
 

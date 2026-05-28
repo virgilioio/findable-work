@@ -10,21 +10,16 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
-import { Route as AppRouteImport } from './routes/app'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as AppIndexRouteImport } from './routes/app.index'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
-import { Route as AppCIdRouteImport } from './routes/app.c.$id'
+import { Route as AuthenticatedAppRouteImport } from './routes/_authenticated/app'
+import { Route as AuthenticatedAppIndexRouteImport } from './routes/_authenticated/app.index'
 import { Route as ApiPublicGuestChatRouteImport } from './routes/api/public/guest-chat'
+import { Route as AuthenticatedAppCIdRouteImport } from './routes/_authenticated/app.c.$id'
 
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AppRoute = AppRouteImport.update({
-  id: '/app',
-  path: '/app',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -32,87 +27,92 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AppIndexRoute = AppIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => AppRoute,
-} as any)
 const ApiChatRoute = ApiChatRouteImport.update({
   id: '/api/chat',
   path: '/api/chat',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AppCIdRoute = AppCIdRouteImport.update({
-  id: '/c/$id',
-  path: '/c/$id',
-  getParentRoute: () => AppRoute,
+const AuthenticatedAppRoute = AuthenticatedAppRouteImport.update({
+  id: '/_authenticated/app',
+  path: '/app',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedAppIndexRoute = AuthenticatedAppIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AuthenticatedAppRoute,
 } as any)
 const ApiPublicGuestChatRoute = ApiPublicGuestChatRouteImport.update({
   id: '/api/public/guest-chat',
   path: '/api/public/guest-chat',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedAppCIdRoute = AuthenticatedAppCIdRouteImport.update({
+  id: '/c/$id',
+  path: '/c/$id',
+  getParentRoute: () => AuthenticatedAppRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
+  '/app': typeof AuthenticatedAppRouteWithChildren
   '/api/chat': typeof ApiChatRoute
-  '/app/': typeof AppIndexRoute
   '/api/public/guest-chat': typeof ApiPublicGuestChatRoute
-  '/app/c/$id': typeof AppCIdRoute
+  '/app/': typeof AuthenticatedAppIndexRoute
+  '/app/c/$id': typeof AuthenticatedAppCIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/api/chat': typeof ApiChatRoute
-  '/app': typeof AppIndexRoute
   '/api/public/guest-chat': typeof ApiPublicGuestChatRoute
-  '/app/c/$id': typeof AppCIdRoute
+  '/app': typeof AuthenticatedAppIndexRoute
+  '/app/c/$id': typeof AuthenticatedAppCIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
+  '/_authenticated/app': typeof AuthenticatedAppRouteWithChildren
   '/api/chat': typeof ApiChatRoute
-  '/app/': typeof AppIndexRoute
   '/api/public/guest-chat': typeof ApiPublicGuestChatRoute
-  '/app/c/$id': typeof AppCIdRoute
+  '/_authenticated/app/': typeof AuthenticatedAppIndexRoute
+  '/_authenticated/app/c/$id': typeof AuthenticatedAppCIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/app'
     | '/login'
+    | '/app'
     | '/api/chat'
-    | '/app/'
     | '/api/public/guest-chat'
+    | '/app/'
     | '/app/c/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/login'
     | '/api/chat'
-    | '/app'
     | '/api/public/guest-chat'
+    | '/app'
     | '/app/c/$id'
   id:
     | '__root__'
     | '/'
-    | '/app'
     | '/login'
+    | '/_authenticated/app'
     | '/api/chat'
-    | '/app/'
     | '/api/public/guest-chat'
-    | '/app/c/$id'
+    | '/_authenticated/app/'
+    | '/_authenticated/app/c/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  AppRoute: typeof AppRouteWithChildren
   LoginRoute: typeof LoginRoute
+  AuthenticatedAppRoute: typeof AuthenticatedAppRouteWithChildren
   ApiChatRoute: typeof ApiChatRoute
   ApiPublicGuestChatRoute: typeof ApiPublicGuestChatRoute
 }
@@ -126,26 +126,12 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/app': {
-      id: '/app'
-      path: '/app'
-      fullPath: '/app'
-      preLoaderRoute: typeof AppRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/': {
       id: '/'
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
-    }
-    '/app/': {
-      id: '/app/'
-      path: '/'
-      fullPath: '/app/'
-      preLoaderRoute: typeof AppIndexRouteImport
-      parentRoute: typeof AppRoute
     }
     '/api/chat': {
       id: '/api/chat'
@@ -154,12 +140,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiChatRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/app/c/$id': {
-      id: '/app/c/$id'
-      path: '/c/$id'
-      fullPath: '/app/c/$id'
-      preLoaderRoute: typeof AppCIdRouteImport
-      parentRoute: typeof AppRoute
+    '/_authenticated/app': {
+      id: '/_authenticated/app'
+      path: '/app'
+      fullPath: '/app'
+      preLoaderRoute: typeof AuthenticatedAppRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/app/': {
+      id: '/_authenticated/app/'
+      path: '/'
+      fullPath: '/app/'
+      preLoaderRoute: typeof AuthenticatedAppIndexRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
     }
     '/api/public/guest-chat': {
       id: '/api/public/guest-chat'
@@ -168,28 +161,46 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicGuestChatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/app/c/$id': {
+      id: '/_authenticated/app/c/$id'
+      path: '/c/$id'
+      fullPath: '/app/c/$id'
+      preLoaderRoute: typeof AuthenticatedAppCIdRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
   }
 }
 
-interface AppRouteChildren {
-  AppIndexRoute: typeof AppIndexRoute
-  AppCIdRoute: typeof AppCIdRoute
+interface AuthenticatedAppRouteChildren {
+  AuthenticatedAppIndexRoute: typeof AuthenticatedAppIndexRoute
+  AuthenticatedAppCIdRoute: typeof AuthenticatedAppCIdRoute
 }
 
-const AppRouteChildren: AppRouteChildren = {
-  AppIndexRoute: AppIndexRoute,
-  AppCIdRoute: AppCIdRoute,
+const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
+  AuthenticatedAppIndexRoute: AuthenticatedAppIndexRoute,
+  AuthenticatedAppCIdRoute: AuthenticatedAppCIdRoute,
 }
 
-const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
+const AuthenticatedAppRouteWithChildren =
+  AuthenticatedAppRoute._addFileChildren(AuthenticatedAppRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  AppRoute: AppRouteWithChildren,
   LoginRoute: LoginRoute,
+  AuthenticatedAppRoute: AuthenticatedAppRouteWithChildren,
   ApiChatRoute: ApiChatRoute,
   ApiPublicGuestChatRoute: ApiPublicGuestChatRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
