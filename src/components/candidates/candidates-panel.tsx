@@ -21,10 +21,10 @@ type Sort = "match" | "recent" | "name";
 
 export function CandidatesPanel({
   conversationId,
-  onAskGio,
+  onAskFindable,
 }: {
   conversationId: string;
-  onAskGio: (prompt: string) => void;
+  onAskFindable: (prompt: string) => void;
 }) {
   const qc = useQueryClient();
   const list = useServerFn(listCandidates);
@@ -241,9 +241,9 @@ export function CandidatesPanel({
         <CandidateDrawer
           candidate={opened}
           onClose={() => setOpenId(null)}
-          onAskGio={(c) => {
+          onAskFindable={(c) => {
             setOpenId(null);
-            onAskGio(`Tell me about ${c.name} — strengths, gaps, and a recommended next step for this role.`);
+            onAskFindable(`Tell me about ${c.name} — strengths, gaps, and a recommended next step for this role.`);
           }}
         />
       )}
@@ -273,7 +273,7 @@ function EmptyState({ onAdd, hasAny }: { onAdd: () => void; hasAny: boolean }) {
       <div className="mt-1 max-w-[360px] text-[12.5px] text-text-mute">
         {hasAny
           ? "Try a different stage or search term."
-          : "Add candidates manually, drop a resume, or ask Gio to source profiles for you."}
+          : "Add candidates manually, drop a resume, or ask findable to source profiles for you."}
       </div>
       {!hasAny && (
         <button

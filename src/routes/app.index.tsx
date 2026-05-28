@@ -25,7 +25,7 @@ function AppHome() {
           What hire can I help with?
         </h1>
         <p className="mt-2 text-[13px] text-text-mute">
-          Start a project. As you describe the role, Gio drafts a Job, then pipeline, posts, and more.
+          Start a project. As you describe the role, findable drafts a Job, then pipeline, posts, and more.
         </p>
         <button
           onClick={() => mut.mutate()}

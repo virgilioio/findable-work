@@ -2,19 +2,19 @@
 
 ## Goals
 
-1. **Agentic UI**: When Gio works, the chat shows live "task cards" inline (one per step) that animate from `running → done` (or `failed`), with a short label, optional sub-status, and a result summary. Multiple tasks can run/queue in a single assistant turn. This matches the recording feel.
+1. **Agentic UI**: When findable works, the chat shows live "task cards" inline (one per step) that animate from `running → done` (or `failed`), with a short label, optional sub-status, and a result summary. Multiple tasks can run/queue in a single assistant turn. This matches the recording feel.
 2. **Sourcing actually works**: From a normal chat ("find me 20 SDRs in Mexico City"), the agent runs the full Apollo+PDL pipeline and lands real rows in the Candidates tab — no new buttons or panels required (golden rule: no UI redesign).
 
 ## How a turn flows after this change
 
 ```text
 User: "Find 20 SDRs for the HR-Tech SDR role, Mexico, remote"
-Gio: (streams text) "On it — scoping and sourcing now."
+findable: (streams text) "On it — scoping and sourcing now."
   [task] Normalize the brief                ✓
   [task] Research titles + companies        ✓  (12 titles, 8 companies)
   [task] Search Apollo + PDL                ✓  (847 candidates, 312 after dedupe)
   [task] Collect top 20 into Candidates     ✓  (20 added, 0 skipped)
-Gio: "Added 20 candidates to the Candidates tab. Want me to filter for SaaS background?"
+findable: "Added 20 candidates to the Candidates tab. Want me to filter for SaaS background?"
 ```
 
 The Candidates tab pulse-highlights (same pattern as the Job tab today) when new rows arrive.

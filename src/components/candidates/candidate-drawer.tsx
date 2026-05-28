@@ -48,11 +48,11 @@ export type Candidate = {
 export function CandidateDrawer({
   candidate,
   onClose,
-  onAskGio,
+  onAskFindable,
 }: {
   candidate: Candidate;
   onClose: () => void;
-  onAskGio: (c: Candidate) => void;
+  onAskFindable: (c: Candidate) => void;
 }) {
   const qc = useQueryClient();
   const update = useServerFn(updateCandidate);
@@ -217,7 +217,7 @@ export function CandidateDrawer({
           {tab === "overview" && <Overview c={candidate} />}
           {tab === "resume" && <Resume c={candidate} />}
           {tab === "activity" && (
-            <Activity c={candidate} onAskGio={() => onAskGio(candidate)} />
+            <Activity c={candidate} onAskFindable={() => onAskFindable(candidate)} />
           )}
         </div>
       </aside>
@@ -397,7 +397,7 @@ function ResumeSec({ label, children }: { label: string; children: React.ReactNo
   );
 }
 
-function Activity({ c, onAskGio }: { c: Candidate; onAskGio: () => void }) {
+function Activity({ c, onAskFindable }: { c: Candidate; onAskFindable: () => void }) {
   return (
     <div className="flex flex-col gap-2 px-5 pb-8 pt-4">
       <div className="relative">
@@ -418,10 +418,10 @@ function Activity({ c, onAskGio }: { c: Candidate; onAskGio: () => void }) {
         ))}
       </div>
       <button
-        onClick={onAskGio}
+        onClick={onAskFindable}
         className="mt-2 flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-dashed border-border-strong bg-bg-elev text-[13px] text-text-mute hover:bg-bg-hover hover:text-text"
       >
-        <Sparkle size={13} /> Ask Gio about this candidate
+        <Sparkle size={13} /> Ask findable about this candidate
       </button>
     </div>
   );
