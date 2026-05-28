@@ -33,7 +33,7 @@ export function CandidatesPanel({
     queryKey: ["candidates", conversationId],
     queryFn: () => list({ data: { conversationId } }),
   });
-  const candidates = (data ?? []) as Candidate[];
+  const candidates = (data ?? []) as unknown as Candidate[];
 
   const [stage, setStage] = useState<StageFilter>("All");
   const [q, setQ] = useState("");
