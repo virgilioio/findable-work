@@ -38,6 +38,7 @@ export function CandidatesPanel({
   const [stage, setStage] = useState<StageFilter>("All");
   const [q, setQ] = useState("");
   const [sort, setSort] = useState<Sort>("match");
+  const [flaggedOnly, setFlaggedOnly] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
 
@@ -48,9 +49,15 @@ export function CandidatesPanel({
     return c;
   }, [candidates]);
 
+  const flaggedCount = useMemo(
+    () => candidates.filter((c) => c.starred).length,
+    [candidates],
+  );
+
   const filtered = useMemo(() => {
     const ql = q.trim().toLowerCase();
     let rows = candidates.filter((c) => stage === "All" || c.stage === stage);
+    if (flaggedOnly) rows = rows.filter((c) => c.starred);
     if (ql) {
       rows = rows.filter(
         (c) =>
@@ -65,7 +72,7 @@ export function CandidatesPanel({
       return 0;
     });
     return rows;
-  }, [candidates, stage, q, sort]);
+  }, [candidates, stage, q, sort, flaggedOnly]);
 
   const starMut = useMutation({
     mutationFn: (c: Candidate) => update({ data: { id: c.id, starred: !c.starred } }),
@@ -142,6 +149,19 @@ export function CandidatesPanel({
             </select>
             <ChevDown size={12} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-text-faint" />
           </div>
+          <button
+            onClick={() => setFlaggedOnly((v) => !v)}
+            className={cn(
+              "flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[12.5px] transition",
+              flaggedOnly
+                ? "border-border bg-bg-bubble text-text"
+                : "border-border bg-bg-elev text-text-mute hover:text-text",
+            )}
+          >
+            <Star size={13} fill={flaggedOnly ? "currentColor" : "none"} />
+            Flagged
+            <span className="font-mono text-[10.5px] text-text-faint">{flaggedCount}</span>
+          </button>
         </div>
       </div>
 
