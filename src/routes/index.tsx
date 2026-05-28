@@ -8,6 +8,7 @@ import { AuthDialog, type AuthReason } from "@/components/auth/auth-dialog";
 import { ClarifyCard, type ClarifyData } from "@/components/chat/clarify-card";
 import {
   Logo,
+  Wordmark,
   Send as SendIcon,
   Sparkle,
   Briefcase,
@@ -331,8 +332,7 @@ function HomePage() {
       {/* Top bar */}
       <header className="flex h-14 items-center justify-between border-b border-border px-5">
         <div className="flex items-center gap-2">
-          <Logo size={20} />
-          <span className="text-[14px] font-semibold tracking-[-0.01em]">findable</span>
+          <Wordmark height={22} />
           <span className="ml-2 rounded-full border border-border bg-bg-elev px-2 py-0.5 text-[10.5px] uppercase tracking-[0.06em] text-text-mute">
             Guest preview
           </span>

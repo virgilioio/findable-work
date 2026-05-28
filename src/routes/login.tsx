@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Logo } from "@/components/findable-icons";
+import { Wordmark } from "@/components/findable-icons";
 
 export const Route = createFileRoute("/login")({
   head: () => ({ meta: [{ title: "Sign in — findable" }] }),
@@ -59,9 +59,8 @@ function LoginPage() {
   return (
     <div className="relative flex min-h-screen flex-col items-center justify-center bg-[var(--bg)] px-6 py-10">
       {/* Top-left brand */}
-      <div className="absolute left-6 top-6 flex items-center gap-2 text-[14px] text-[var(--text)]">
-        <Logo size={20} />
-        <span className="font-semibold tracking-[-0.01em]">findable</span>
+      <div className="absolute left-6 top-6 flex items-center gap-2 text-[var(--text)]">
+        <Wordmark height={22} />
       </div>
 
       {/* Card */}

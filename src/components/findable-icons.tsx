@@ -1,4 +1,5 @@
 import * as React from "react";
+import wordmarkUrl from "@/assets/findable-wordmark.svg";
 
 type IconProps = React.SVGProps<SVGSVGElement> & {
   size?: number;
@@ -126,4 +127,19 @@ export const Pencil = (p: IconProps) => (
 );
 export const Upload = (p: IconProps) => (
   <Stroke {...p} d="M10 3v10 M5 8 L10 3 L15 8 M4 16h12" />
+);
+
+export const Wordmark = ({
+  height = 22,
+  className,
+  ...rest
+}: React.ImgHTMLAttributes<HTMLImageElement> & { height?: number }) => (
+  <img
+    src={wordmarkUrl}
+    alt="findable.work"
+    height={height}
+    style={{ height, width: "auto" }}
+    className={className}
+    {...rest}
+  />
 );
