@@ -330,6 +330,113 @@ export type Database = {
         }
         Relationships: []
       }
+      prompt_partials: {
+        Row: {
+          body: string
+          created_at: string
+          description: string
+          id: string
+          slug: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          body?: string
+          created_at?: string
+          description?: string
+          id?: string
+          slug: string
+          title?: string
+          updated_at?: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          description?: string
+          id?: string
+          slug?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      prompt_revisions: {
+        Row: {
+          body: string
+          created_at: string
+          description: string
+          edited_by: string | null
+          id: string
+          prompt_id: string
+          title: string
+          version: number
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          description?: string
+          edited_by?: string | null
+          id?: string
+          prompt_id: string
+          title?: string
+          version: number
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          description?: string
+          edited_by?: string | null
+          id?: string
+          prompt_id?: string
+          title?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prompt_revisions_prompt_id_fkey"
+            columns: ["prompt_id"]
+            isOneToOne: false
+            referencedRelation: "prompts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      prompts: {
+        Row: {
+          body: string
+          created_at: string
+          description: string
+          id: string
+          is_active: boolean
+          slug: string
+          title: string
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          body?: string
+          created_at?: string
+          description?: string
+          id?: string
+          is_active?: boolean
+          slug: string
+          title?: string
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          description?: string
+          id?: string
+          is_active?: boolean
+          slug?: string
+          title?: string
+          updated_at?: string
+          version?: number
+        }
+        Relationships: []
+      }
       sourcing_credits_usage: {
         Row: {
           collect_credits_used: number
@@ -449,18 +556,46 @@ export type Database = {
         }
         Relationships: []
       }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
       increment_sourcing_usage: {
         Args: { _count: number; _user_id: string }
         Returns: undefined
       }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "user"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -587,6 +722,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "user"],
+    },
   },
 } as const

@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { openaiChat } from "./openai.server";
+import { getPrompt } from "@/lib/prompts/registry.server";
 
 export type Research = {
   researched_titles: string[];
@@ -65,11 +66,7 @@ export const researchSourcingCriteria = createServerFn({ method: "POST" })
     const completion = await openaiChat({
       model: "gpt-4o-mini",
       messages: [
-        {
-          role: "system",
-          content:
-            "You are a sourcing research assistant. Use the provide_research_results tool.",
-        },
+        { role: "system", content: await getPrompt("sourcing.research") },
         { role: "user", content: userMsg },
       ],
       tools: [TOOL],

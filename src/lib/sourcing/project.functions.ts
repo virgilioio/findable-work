@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { budgetSearchCriteria, type SearchCriteria } from "./budget";
 import { extractJsonBlock, openaiChat } from "./openai.server";
+import { getPrompt } from "@/lib/prompts/registry.server";
 
 const CreateInput = z.object({
   title: z.string().min(1).max(200),
@@ -68,11 +69,6 @@ const RefineInput = z.object({
     .default([]),
 });
 
-const REFINE_SYSTEM = `You are findable, a sourcing assistant. Reply naturally to the recruiter, then append a single fenced JSON block with any criteria updates. JSON keys: skills, locations, title_keywords, experience_years, education_level. Only include keys that change. Example:
-\`\`\`json
-{ "title_keywords": ["Senior React Developer"], "locations": ["São Paulo, Brazil"] }
-\`\`\``;
-
 export const refineSourcingProject = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input) => RefineInput.parse(input))
@@ -85,10 +81,11 @@ export const refineSourcingProject = createServerFn({ method: "POST" })
       .single();
     if (error) throw new Error(error.message);
 
+    const refineSystem = await getPrompt("sourcing.refine");
     const completion = await openaiChat({
       model: "gpt-4o-mini",
       messages: [
-        { role: "system", content: REFINE_SYSTEM },
+        { role: "system", content: refineSystem },
         {
           role: "system",
           content: `Current criteria: ${JSON.stringify(project.search_criteria)}`,

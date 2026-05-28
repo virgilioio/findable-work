@@ -7,6 +7,7 @@ import { openaiChat } from "./openai.server";
 import { budgetSearchCriteria, currentPeriod, linkedinSlug, type SearchCriteria } from "./budget";
 import { searchApolloWithFallback, enrichApolloProfiles } from "./apollo.server";
 import { searchPdl, PdlQuotaError } from "./pdl.server";
+import { getPrompt } from "@/lib/prompts/registry.server";
 
 export type AgentTask = {
   id: string;
@@ -76,21 +77,6 @@ async function finishTask(
   return updated as AgentTask;
 }
 
-const NORMALIZE_SYSTEM = `You normalize a recruiter request into a sourcing brief.
-Return strict JSON:
-{
-  "title": "<single canonical job title>",
-  "skills": ["..."],
-  "location": "<City, State/Region, Country — full names, empty parts allowed, or empty>",
-  "seniorities": ["<one of: entry, senior, manager, director, vp, head, c_suite>"],
-  "keywords": ["<3-5 boost keywords>"]
-}
-Location rules:
-- Always use the full "City, State/Region, Country" form when any are known. Leave a part empty (e.g. "Berlin, , Germany") if unknown, but never drop the commas.
-- Expand abbreviations to full names: "TX" → "Texas", "SP" → "São Paulo", "USA"/"US" → "United States", "UK" → "United Kingdom".
-- Examples: "Austin, Texas, United States", "São Paulo, São Paulo, Brazil", "Berlin, , Germany". Use empty string "" for purely remote/unspecified geography.
-Output JSON only.`;
-
 const RESEARCH_TOOL = {
   type: "function",
   function: {
@@ -136,7 +122,7 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
       model: "gpt-4o-mini",
       response_format: { type: "json_object" },
       messages: [
-        { role: "system", content: NORMALIZE_SYSTEM },
+        { role: "system", content: await getPrompt("sourcing.agent_normalize") },
         { role: "user", content: promptText },
       ],
     });
@@ -175,7 +161,7 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
     const completion = await openaiChat({
       model: "gpt-4o-mini",
       messages: [
-        { role: "system", content: "You are a sourcing research assistant. Use the provide_research_results tool." },
+        { role: "system", content: await getPrompt("sourcing.research") },
         { role: "user", content: userMsg },
       ],
       tools: [RESEARCH_TOOL],
