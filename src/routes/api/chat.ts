@@ -533,6 +533,64 @@ export const Route = createFileRoute("/api/chat")({
                       }),
                     });
                   }
+                } else if (call.name === "draft_outreach") {
+                  const args = call.args ? JSON.parse(call.args) : {};
+                  const { data: jobRow } = await supabaseAdmin
+                    .from("jobs")
+                    .select("id")
+                    .eq("conversation_id", conversationId)
+                    .maybeSingle();
+                  if (!jobRow) {
+                    toolResults.push({
+                      role: "tool",
+                      tool_call_id: call.id ?? "",
+                      name: "draft_outreach",
+                      content: JSON.stringify({ ok: false, error: "No Job exists yet — call create_job first." }),
+                    });
+                  } else {
+                    const { data: orRow } = await supabaseAdmin
+                      .from("outreach_drafts")
+                      .upsert(
+                        {
+                          conversation_id: conversationId,
+                          user_id: userId,
+                          channel: "linkedin",
+                          tone: args.tone ?? "Warm",
+                          linkedin_template: DEFAULT_LINKEDIN,
+                          email_subject: DEFAULT_EMAIL_SUBJECT,
+                          email_body: DEFAULT_EMAIL_BODY,
+                          followups: DEFAULT_FOLLOWUPS,
+                        },
+                        { onConflict: "conversation_id" },
+                      )
+                      .select("*")
+                      .single();
+                    send("outreach", orRow);
+                    const { data: orTask } = await supabaseAdmin
+                      .from("agent_tasks")
+                      .insert({
+                        user_id: userId,
+                        conversation_id: conversationId,
+                        kind: "create_outreach",
+                        label: "Outreach templates drafted",
+                        status: "done",
+                        summary: "Open Outreach tab to review",
+                        data: { outreach_id: orRow?.id },
+                        finished_at: new Date().toISOString(),
+                      })
+                      .select("*")
+                      .single();
+                    if (orTask) {
+                      allTaskIds.push(orTask.id);
+                      send("task", orTask);
+                    }
+                    toolResults.push({
+                      role: "tool",
+                      tool_call_id: call.id ?? "",
+                      name: "draft_outreach",
+                      content: JSON.stringify({ ok: true }),
+                    });
+                  }
                 }
                 }
 
