@@ -344,6 +344,7 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
           match_breakdown: [] as any,
           apollo_id: e.id,
           linkedin_slug: slug,
+          has_direct_phone: apolloPhoneFlag.get(e.id) ?? false,
         });
         if (insErr) {
           console.error("apollo candidate insert failed:", insErr.message);
