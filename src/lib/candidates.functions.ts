@@ -1,6 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { revealApolloPhone } from "@/lib/sourcing/apollo.server";
+import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 const STAGES = ["Sourced", "Contacted", "Screening", "Interview", "Offer"] as const;
 
@@ -151,4 +153,48 @@ export const deleteCandidate = createServerFn({ method: "POST" })
     const { error } = await supabase.from("candidates").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };
+  });
+
+export const revealCandidatePhone = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input) => z.object({ id: z.string().uuid() }).parse(input))
+  .handler(async ({ context, data }) => {
+    const { supabase, userId } = context;
+    const { data: cand, error: loadErr } = await supabase
+      .from("candidates")
+      .select("id, apollo_id, phone, activity, has_direct_phone")
+      .eq("id", data.id)
+      .single();
+    if (loadErr) throw new Error(loadErr.message);
+    if (!cand) throw new Error("Candidate not found");
+    if (cand.phone) return { phone: cand.phone, alreadyRevealed: true };
+    if (!cand.apollo_id) throw new Error("This candidate did not come from Apollo, no phone to reveal.");
+    if (!cand.has_direct_phone) throw new Error("No direct phone available for this candidate.");
+
+    const phone = await revealApolloPhone(cand.apollo_id);
+    if (!phone) throw new Error("Apollo did not return a phone number for this profile.");
+
+    const activity = Array.isArray(cand.activity) ? [...(cand.activity as any[])] : [];
+    activity.push({
+      id: activity.length + 1,
+      type: "phone_revealed",
+      by: "you",
+      when: "Just now",
+      text: "Phone number revealed (1 Apollo credit used)",
+    });
+
+    const { error: updErr } = await supabase
+      .from("candidates")
+      .update({ phone, activity })
+      .eq("id", data.id);
+    if (updErr) throw new Error(updErr.message);
+
+    // Best-effort credit accounting (1 reveal = 1 credit on most plans).
+    const { error: rpcErr } = await supabaseAdmin.rpc("increment_sourcing_usage", {
+      _user_id: userId,
+      _count: 1,
+    });
+    if (rpcErr) console.error("increment_sourcing_usage failed:", rpcErr.message);
+
+    return { phone, alreadyRevealed: false };
   });
