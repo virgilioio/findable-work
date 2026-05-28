@@ -5,11 +5,15 @@ import { Wordmark } from "@/components/findable-icons";
 
 export const Route = createFileRoute("/login")({
   head: () => ({ meta: [{ title: "Sign in — findable" }] }),
+  validateSearch: (search: Record<string, unknown>) => ({
+    redirect: typeof search.redirect === "string" ? search.redirect : undefined,
+  }),
   component: LoginPage,
 });
 
 function LoginPage() {
   const navigate = useNavigate();
+  const search = Route.useSearch();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -18,7 +22,8 @@ function LoginPage() {
 
   function redirectToApp() {
     console.info("[auth] redirecting to app after successful auth");
-    navigate({ to: "/app" });
+    const target = search.redirect && search.redirect.startsWith("/") ? search.redirect : "/app";
+    navigate({ to: target });
   }
 
   async function onSubmit(e: React.FormEvent) {
