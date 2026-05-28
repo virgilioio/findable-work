@@ -4,7 +4,6 @@ import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { contactCandidates } from "@/lib/outreach/outreach.functions";
 import { X, Check, Linkedin, Send } from "@/components/findable-icons";
-import { cn } from "@/lib/utils";
 import type { Candidate } from "@/components/candidates/candidate-drawer";
 
 const LI_TEMPLATE = `Hi {{first_name}}, I'm helping a Series B SaaS team in CDMX hire for {{role}} — your work at {{company}} caught my eye. Open to a quick chat this week?`;
@@ -41,6 +40,12 @@ export function ContactAutomation({
   );
   const [done, setDone] = useState(false);
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  // Live mirror of progress so the tick loop can read latest values
+  // without re-creating the effect.
+  const progressRef = useRef<Progress[]>(progress);
+  useEffect(() => {
+    progressRef.current = progress;
+  }, [progress]);
 
   const persistMut = useMutation({
     mutationFn: () =>
@@ -103,13 +108,6 @@ export function ContactAutomation({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Keep a ref of latest progress so the tick loop can check completion
-  // without re-creating the effect.
-  const progressRef = useRef(progress);
-  useEffect(() => {
-    progressRef.current = progress;
-  }, [progress]);
 
   const completedCount = progress.filter((p) => p.step === 2).length;
   const pct = Math.round((completedCount / candidates.length) * 100);
