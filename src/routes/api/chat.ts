@@ -724,12 +724,14 @@ export const Route = createFileRoute("/api/chat")({
                     if (clarifyTask) {
                       allTaskIds.push(clarifyTask.id);
                       send("task", clarifyTask);
+                      clarifyEmittedThisTurn = true;
                     }
                     // Replace what the user sees with the cleaned text.
                     pass.text = leak.cleaned;
                     send("text_replace", {
                       content: (toolsRanAny ? preText + AFTER_TASKS_MARKER : "") + leak.cleaned,
                     });
+                    }
                   }
                 }
 
