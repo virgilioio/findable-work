@@ -952,6 +952,56 @@ function JobPanel({
               <span className="text-[14px] text-text-faint">No requirements yet.</span>
             )}
           </section>
+
+          <section>
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-[11px] font-medium uppercase tracking-wide text-text-faint">
+                Application questions
+              </h3>
+              <button
+                onClick={handleRegenScreening}
+                className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-bg px-2.5 text-[11.5px] text-text-mute transition hover:bg-bg-hover hover:text-text"
+              >
+                <Sparkle size={11} /> Regenerate
+              </button>
+            </div>
+            {form.screening && form.screening.length > 0 ? (
+              <ol className="space-y-2.5">
+                {form.screening.map((q, i) => (
+                  <li
+                    key={q.id}
+                    className="rounded-[10px] border border-border bg-bg-elev p-3"
+                  >
+                    <div className="flex items-start gap-2">
+                      <span className="mt-0.5 font-mono text-[11px] text-text-faint">
+                        {String(i + 1).padStart(2, "0")}
+                      </span>
+                      <div className="flex-1">
+                        <div className="text-[13px] text-text">{q.question}</div>
+                        <div className="mt-1 flex items-center gap-2 text-[11px] text-text-faint">
+                          <span className="rounded bg-bg-input px-1.5 py-0.5 font-mono">
+                            {q.type}
+                          </span>
+                          {q.required && <span>required</span>}
+                          {q.options && q.options.length > 0 && (
+                            <span className="truncate">
+                              {q.options.join(" · ")}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <div className="rounded-[10px] border border-dashed border-border bg-bg-elev p-4 text-center text-[12.5px] text-text-mute">
+                {published
+                  ? "No screening questions yet. Click Regenerate to draft them."
+                  : "Publish this job to auto-generate screening questions for applicants."}
+              </div>
+            )}
+          </section>
         </div>
 
         {/* Side */}
