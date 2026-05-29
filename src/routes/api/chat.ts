@@ -33,14 +33,32 @@ const createJobTool = {
   type: "function" as const,
   function: {
     name: "create_job",
-    description: "Create or update the Job artifact for this conversation.",
+    description:
+      "Create or update the Job artifact for this conversation. The JD MUST follow this fixed professional structure: a short `summary` paragraph (2–4 sentences, plain prose, no markdown headings, no bullets), then bulleted lists for `responsibilities` (what they'll do), `must_have` (hard requirements), and optional `nice_to_have`. Each list item is a single short sentence — no paragraphs, no nested bullets, no markdown. Do NOT dump a free-form description; the structured fields are what render in the Job tab and on the public page.",
     parameters: {
       type: "object",
       additionalProperties: false,
       properties: {
         title: { type: "string" },
-        description: { type: "string", description: "Markdown job description." },
-        requirements: { type: "array", items: { type: "string" } },
+        summary: {
+          type: "string",
+          description: "Short overview paragraph (2–4 sentences). Plain prose. No markdown, no bullets, no headings.",
+        },
+        responsibilities: {
+          type: "array",
+          items: { type: "string" },
+          description: "What the person will do day-to-day. Each item is one short sentence. Aim for 4–8 items.",
+        },
+        must_have: {
+          type: "array",
+          items: { type: "string" },
+          description: "Hard requirements (skills, experience, qualifications). Each item is one short sentence. Aim for 3–7 items.",
+        },
+        nice_to_have: {
+          type: "array",
+          items: { type: "string" },
+          description: "Optional bonus qualifications. Each item is one short sentence.",
+        },
         location: { type: "string" },
         employment_type: {
           type: "string",
@@ -50,7 +68,7 @@ const createJobTool = {
         salary_max: { type: ["number", "null"] },
         currency: { type: "string" },
       },
-      required: ["title", "description"],
+      required: ["title", "summary", "responsibilities", "must_have"],
     },
   },
 };
