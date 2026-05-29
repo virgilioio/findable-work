@@ -1,55 +1,41 @@
-# Plan — Cleaner chat formatting + markdown rendering in Job / Job Posts
+# Plan — Stop the clarify JSON from leaking into chat text
 
-Two related problems:
+The model emitted the clarify payload as **plain assistant text** instead of calling `ask_clarifying_questions`. Result: the user saw raw JSON in the chat, no pill-shaped card. Fix on both ends — make it less likely to happen (prompt), and bullet-proof it when it does (server-side guard).
 
-1. Assistant chat messages feel cramped, and very long replies blob into walls of text.
-2. AI-generated text in the **Job** tab (Summary) and **Job Posts** tab (post body) shows raw markdown like `# Heading` and `**bold**` — and the same raw markdown also appears on the public job page.
+## 1. Prompt hardening (`prompts.slug = 'chat.main'`)
 
-## 1. Chat message formatting
+Add an explicit "how to ask" rule near the existing clarify rules:
 
-File: `src/routes/_authenticated/app.c.$id.tsx` (`MessageRow`, assistant branch).
+> When you need to ask the user a structured question (countries to target, seniority levels, languages, etc.), you MUST call the `ask_clarifying_questions` tool. NEVER write the question JSON in your assistant message. NEVER paste `{"intro":...,"questions":[...]}` or any tool-shaped payload into chat text. If you find yourself about to type that JSON, stop and emit a tool call instead. Do not narrate "I sent a picker" before the tool actually runs.
 
-- Loosen vertical rhythm so line skips actually breathe:
-  - Bump base line-height (e.g. `leading-7`) on the prose container.
-  - Increase paragraph spacing (`prose-p:my-3`), list spacing (`prose-ul:my-3 prose-ol:my-3 prose-li:my-1`), heading top margin (`prose-headings:mt-5 prose-headings:mb-2`).
-  - Add small gap before/after lists and code blocks.
-- Enable GFM so the model's `-`, `*`, `1.` and tables render as real lists/tables instead of inline text. Add `remark-gfm` to `<ReactMarkdown>` (`bun add remark-gfm`).
-- Style fenced code (`prose-pre:bg-bg-bubble prose-pre:rounded-lg prose-pre:p-3 prose-code:bg-bg-bubble prose-code:px-1 prose-code:rounded`).
+Apply via a migration that appends to the chat.main body and bumps `version` (same shape as the formatting-rule migration we did earlier).
 
-Prompt-side nudge (so long responses self-format) — update the chat assistant system prompt in the `prompts` table (slug `chat.main`) with one short rule:
+## 2. Server-side safety net (`src/routes/api/chat.ts`)
 
-> When a response is longer than ~4 sentences, structure it with short paragraphs separated by blank lines, and use bullet lists (`-`) or numbered lists for any enumeration of ≥3 items. Use `**bold**` for key terms sparingly. Avoid headings unless the response has multiple distinct sections.
+When the model leaks the clarify payload as text, recover it instead of showing it.
 
-No code changes for the prompt — just a migration/update through the prompts admin path.
+After `streamCompletion` returns on each iteration, scan the assistant `text` for an embedded clarify JSON object (a `{...}` blob containing a `questions` array whose items look like `{id,label,type}`). If found:
 
-## 2. Render markdown in Job tab + Job Posts tab + public job page
+- Parse + validate it with the same normalization used in the `ask_clarifying_questions` branch (id/label/type/options/placeholder/allow_other, max 4 questions).
+- Insert a real `agent_tasks` row with `kind: 'clarify'` and emit `send("task", ...)` so the pretty card renders, exactly like a real tool call.
+- Strip the JSON blob from the assistant text before it gets accumulated into `preText` / `postText` and persisted. Also strip any adjacent "I sent a quick picker…" sentence that references it (simple: drop the line containing the JSON, and trim trailing/leading blank lines).
+- Re-emit a `delta` correction is too messy; instead, after stripping, send a new SSE event (e.g. `text_replace`) carrying the cleaned text so the client can replace what it already streamed.
 
-Currently three spots render AI markdown as plain text via `whitespace-pre-wrap`:
+To avoid client churn: simplest is to detect the leak **before** the first `delta` is forwarded — buffer text until we know whether it looks like a clarify leak. That adds latency to every message. Better trade-off: send deltas live as today, and on detection send a single `clarify_recovered` SSE event with `{ cleaned_text, task }`; the client replaces the in-flight assistant bubble's content with `cleaned_text` and inserts the task card. Persisted DB row uses the cleaned text.
 
-- `src/routes/_authenticated/app.c.$id.tsx` ~L929 — Job Summary (read mode).
-- `src/components/job-posts/job-posts-panel.tsx` ~L351 — Job post body preview.
-- `src/routes/jobs/$slug.tsx` ~L233 — public job page summary/description.
+### Detection regex / shape
 
-Approach: keep the **edit experience** unchanged (textarea with raw markdown — the user said they like seeing it), but render formatted markdown whenever we're in *read/preview* mode or publishing publicly.
+Match `\{[^{}]*"questions"\s*:\s*\[[\s\S]*?\]\s*[^{}]*\}` with brace-balance verification (count `{` / `}`). Validate parsed object has `Array.isArray(obj.questions)` and at least one item with string `id` and `label`. Reject if it doesn't validate.
 
-Changes:
+### Client change (`src/routes/_authenticated/app.c.$id.tsx`)
 
-- Extract a small shared component `src/components/ui/markdown.tsx`:
-  ```tsx
-  <Markdown className="...">{text}</Markdown>
-  ```
-  Wraps `ReactMarkdown` with `remark-gfm` and the same prose token classes used in chat (themed via `prose-invert`, semantic tokens only).
-- Job tab Summary read view: replace the `whitespace-pre-wrap` div with `<Markdown>`.
-- Job Posts panel preview pane (the right-side preview at L351, NOT the editing textarea): replace `<p className="whitespace-pre-wrap">…</p>` with `<Markdown>`. The "Copy" action keeps copying raw markdown (good for pasting into LinkedIn/etc).
-- Public job page (`/jobs/$slug`): replace the description `<p>` with `<Markdown>` so published posts look polished.
+Handle the new SSE event:
+- On `clarify_recovered`: replace the currently-streaming assistant message's content with `cleaned_text`; append the recovered task into the per-message task list (same path as `task` events).
 
-No changes to how AI generates the text, no changes to DB storage — markdown stays the source of truth.
+No new dependencies. No DB schema changes.
 
 ## Technical notes
 
-- Dependency: `bun add remark-gfm` (already have `react-markdown`).
-- New file: `src/components/ui/markdown.tsx`.
-- Edited files: `src/routes/_authenticated/app.c.$id.tsx`, `src/components/job-posts/job-posts-panel.tsx`, `src/routes/jobs/$slug.tsx`.
-- Prompt update: `prompts` row with slug `chat.main` (append the formatting rule paragraph; no schema change).
-- All styling uses semantic tokens from `src/styles.css` (`text-text`, `bg-bg-bubble`, etc.) — no raw colors.
-- No backend / business-logic changes.
+- Files touched: `src/routes/api/chat.ts` (detection + new SSE event), `src/routes/_authenticated/app.c.$id.tsx` (handle new event), plus a prompt migration row.
+- Same recovery logic applies to any future tool-shaped JSON leaks, but for now we only handle clarify (the only case observed).
+- Public guest chat (`src/routes/api/public/guest-chat.ts`) is a separate handler — out of scope unless the same leak shows up there; flag it for later if needed.
