@@ -81,7 +81,7 @@ const askClarifyingQuestionsTool = {
   function: {
     name: "ask_clarifying_questions",
     description:
-      "Surface structured clarifying questions to the user as pill-shaped multi/single-select options (with optional free-text). Use to gather info needed for great sourcing, or to broaden the brief after empty results.",
+      "Surface structured clarifying questions to the user as pill-shaped multi/single-select options (with optional free-text). ONLY call when (a) the user has asked for new sourcing or a new artifact and required info (role, location, seniority) is missing, OR (b) a previous search returned 0/limited results AND the user explicitly asked you to retry or broaden. NEVER call this in response to a follow-up question about results already on screen (e.g. 'why N candidates?', 'what's in the JD?', 'who is this person?') — answer those in prose using the conversation and tool history.",
     parameters: {
       type: "object",
       additionalProperties: false,
@@ -161,7 +161,11 @@ async function getUserFromRequest(request: Request): Promise<string | null> {
 
 type StreamedToolCall = { id?: string; name?: string; args: string };
 
-async function callGateway(messages: ChatMessage[], apiKey: string): Promise<Response> {
+async function callGateway(
+  messages: ChatMessage[],
+  apiKey: string,
+  toolChoice?: "auto" | "none",
+): Promise<Response> {
   return fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -170,8 +174,24 @@ async function callGateway(messages: ChatMessage[], apiKey: string): Promise<Res
       stream: true,
       messages,
       tools: [createJobTool, sourceCandidatesTool, askClarifyingQuestionsTool, draftJobPostsTool, draftOutreachTool],
+      ...(toolChoice ? { tool_choice: toolChoice } : {}),
     }),
   });
+}
+
+// Heuristic: looks like a follow-up question about existing results rather
+// than a request to do/produce something new. When true, we steer the model
+// away from tool-calling (especially the destructive/expensive sourcing and
+// clarifying-question tools) so it answers in prose using prior context.
+function looksLikeFollowUpQuestion(text: string): boolean {
+  const t = text.trim().toLowerCase();
+  if (t.length === 0 || t.length > 280) return false;
+  if (!/[?]/.test(t) && !/^(why|what|how|when|who|where|which|can you (explain|tell|show)|tell me)\b/.test(t))
+    return false;
+  // Imperative verbs that imply "do something new" — bail out, let tools run.
+  if (/\b(find|source|pull|search|add|create|draft|post|publish|schedule|send|reach out|outreach|generate|build|make|broaden|redo|retry|try again|do it|go ahead)\b/.test(t))
+    return false;
+  return true;
 }
 
 export const Route = createFileRoute("/api/chat")({
@@ -243,8 +263,11 @@ export const Route = createFileRoute("/api/chat")({
             };
 
             // Streams a gateway response and returns parsed { text, toolCalls }.
-            async function streamCompletion(messages: ChatMessage[]): Promise<{ text: string; toolCalls: StreamedToolCall[] }> {
-              const upstream = await callGateway(messages, apiKey!);
+            async function streamCompletion(
+              messages: ChatMessage[],
+              toolChoice?: "auto" | "none",
+            ): Promise<{ text: string; toolCalls: StreamedToolCall[] }> {
+              const upstream = await callGateway(messages, apiKey!, toolChoice);
               if (!upstream.ok || !upstream.body) {
                 const text = await upstream.text().catch(() => "");
                 const errMsg =
@@ -313,7 +336,12 @@ export const Route = createFileRoute("/api/chat")({
               const convo: ChatMessage[] = [...baseMessages];
 
               for (let iter = 0; iter < MAX_ITERS; iter++) {
-                const pass = await streamCompletion(convo);
+                // First pass only: if the user's latest turn looks like a
+                // follow-up question about existing results, disable tools so
+                // the model is forced to answer in prose from history.
+                const toolChoice =
+                  iter === 0 && looksLikeFollowUpQuestion(message) ? "none" : undefined;
+                const pass = await streamCompletion(convo, toolChoice);
                 if (iter === 0) firstToolCalls = pass.toolCalls;
                 if (!toolsRanAny) {
                   preText += (preText && pass.text ? "\n\n" : "") + pass.text;
@@ -418,13 +446,32 @@ export const Route = createFileRoute("/api/chat")({
                       name: "source_candidates",
                       content: JSON.stringify({
                         ok: true,
+                        requested: limit,
                         added: result.added,
-                        skipped: result.skipped,
+                        skipped_duplicates: result.skipped,
                         preview_total: result.preview_total,
                         apollo_count: result.apollo_count,
                         pdl_count: result.pdl_count,
                         apollo_error: result.apollo_error,
                         pdl_error: result.pdl_error,
+                        pool_limited: result.pool_limited,
+                        broadened: result.broadened,
+                        summary:
+                          result.added === 0
+                            ? result.pool_limited
+                              ? "Candidate pool was rate-limited; no new candidates added this run."
+                              : "No matches for this brief — try broadening it."
+                            : result.added < limit
+                              ? `Requested ${limit}, added ${result.added}. ${
+                                  result.skipped > 0
+                                    ? `${result.skipped} matching profile${result.skipped === 1 ? " was" : "s were"} already in your pipeline and skipped. `
+                                    : ""
+                                }${
+                                  result.preview_total < limit
+                                    ? `The pool only returned ${result.preview_total} unique matches for this brief${result.broadened ? " (search was broadened to find these)" : ""}.`
+                                    : ""
+                                }`.trim()
+                              : `Added ${result.added} candidates as requested.`,
                       }),
                     });
                   } catch (err: any) {
