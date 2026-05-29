@@ -384,6 +384,7 @@ export function OutreachPanel({ conversationId }: { conversationId: string }) {
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 }
