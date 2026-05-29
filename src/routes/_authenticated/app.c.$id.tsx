@@ -345,6 +345,9 @@ function ConversationPage() {
           <ChatPanel
             messages={messages}
             streaming={streaming}
+            reasoning={reasoning}
+            streamStart={streamStart}
+            streamEnd={streamEnd}
             sending={sending}
             onSend={sendMessage}
             text={composerText}
