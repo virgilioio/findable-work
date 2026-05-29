@@ -759,9 +759,9 @@ export const Route = createFileRoute("/api/chat")({
                   // structured fields directly.
                   const composedDescription = [
                     summary,
-                    responsibilities.length ? `## What you'll do\n${responsibilities.map((r) => `- ${r}`).join("\n")}` : "",
-                    mustHave.length ? `## Must have\n${mustHave.map((r) => `- ${r}`).join("\n")}` : "",
-                    niceToHave.length ? `## Nice to have\n${niceToHave.map((r) => `- ${r}`).join("\n")}` : "",
+                    responsibilities.length ? `## What you'll do\n${responsibilities.map((r: string) => `- ${r}`).join("\n")}` : "",
+                    mustHave.length ? `## Must have\n${mustHave.map((r: string) => `- ${r}`).join("\n")}` : "",
+                    niceToHave.length ? `## Nice to have\n${niceToHave.map((r: string) => `- ${r}`).join("\n")}` : "",
                   ].filter(Boolean).join("\n\n");
                   const jobPayload = {
                     conversation_id: conversationId,
