@@ -9,6 +9,7 @@ import { ClarifyCard, type ClarifyData } from "@/components/chat/clarify-card";
 import {
   Logo,
   AppIcon,
+  ChatGlyph,
   Wordmark,
   Send as SendIcon,
   Sparkle,

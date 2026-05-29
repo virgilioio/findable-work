@@ -21,6 +21,7 @@ import {
 import {
   Logo,
   AppIcon,
+  ChatGlyph,
   Chat as ChatIcon,
   Briefcase,
   Megaphone,
