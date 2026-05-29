@@ -495,6 +495,101 @@ export type Database = {
         }
         Relationships: []
       }
+      outreach_messages: {
+        Row: {
+          body_text: string
+          created_at: string
+          direction: string
+          from_addr: string
+          gmail_message_id: string | null
+          id: string
+          sent_at: string
+          subject: string
+          thread_id: string
+          to_addr: string
+          user_id: string
+        }
+        Insert: {
+          body_text?: string
+          created_at?: string
+          direction: string
+          from_addr?: string
+          gmail_message_id?: string | null
+          id?: string
+          sent_at?: string
+          subject?: string
+          thread_id: string
+          to_addr?: string
+          user_id: string
+        }
+        Update: {
+          body_text?: string
+          created_at?: string
+          direction?: string
+          from_addr?: string
+          gmail_message_id?: string | null
+          id?: string
+          sent_at?: string
+          subject?: string
+          thread_id?: string
+          to_addr?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "outreach_messages_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "outreach_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      outreach_threads: {
+        Row: {
+          candidate_id: string
+          conversation_id: string
+          created_at: string
+          gmail_thread_id: string | null
+          id: string
+          last_message_at: string
+          last_snippet: string
+          status: string
+          subject: string
+          unread: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          candidate_id: string
+          conversation_id: string
+          created_at?: string
+          gmail_thread_id?: string | null
+          id?: string
+          last_message_at?: string
+          last_snippet?: string
+          status?: string
+          subject?: string
+          unread?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          candidate_id?: string
+          conversation_id?: string
+          created_at?: string
+          gmail_thread_id?: string | null
+          id?: string
+          last_message_at?: string
+          last_snippet?: string
+          status?: string
+          subject?: string
+          unread?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
@@ -740,6 +835,30 @@ export type Database = {
           research?: Json
           search_criteria?: Json
           title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_gmail_connections: {
+        Row: {
+          connection_id: string
+          created_at: string
+          email: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          connection_id: string
+          created_at?: string
+          email: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          connection_id?: string
+          created_at?: string
+          email?: string
           updated_at?: string
           user_id?: string
         }
