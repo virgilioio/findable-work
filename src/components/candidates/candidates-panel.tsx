@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { listCandidates, updateCandidate } from "@/lib/candidates.functions";
+import { supabase } from "@/integrations/supabase/client";
 import { sourceMore } from "@/lib/sourcing/source-more.functions";
 import {
   Plus,
@@ -18,7 +19,7 @@ import { CandidateDrawer, type Candidate } from "./candidate-drawer";
 import { AddCandidateModal } from "./add-candidate-modal";
 import { ContactAutomation } from "@/components/outreach/contact-automation";
 
-const STAGES = ["Sourced", "Contacted", "Screening", "Interview", "Offer"] as const;
+const STAGES = ["Applied", "Sourced", "Contacted", "Screening", "Interview", "Offer"] as const;
 type Stage = (typeof STAGES)[number];
 type StageFilter = "All" | Stage;
 type Sort = "match" | "recent" | "name";
