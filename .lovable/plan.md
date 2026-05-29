@@ -1,53 +1,55 @@
-# Plan
+# Plan — Cleaner chat formatting + markdown rendering in Job / Job Posts
 
-## 1. Add "Applied" as an allowed candidate stage
+Two related problems:
 
-**Migration** — extend the `candidates_stage_check` CHECK constraint:
-```sql
-ALTER TABLE public.candidates DROP CONSTRAINT candidates_stage_check;
-ALTER TABLE public.candidates ADD CONSTRAINT candidates_stage_check
-  CHECK (stage IN ('Applied','Sourced','Contacted','Screening','Interview','Offer'));
-```
+1. Assistant chat messages feel cramped, and very long replies blob into walls of text.
+2. AI-generated text in the **Job** tab (Summary) and **Job Posts** tab (post body) shows raw markdown like `# Heading` and `**bold**` — and the same raw markdown also appears on the public job page.
 
-**Apply endpoint** — already inserts `stage: "Applied"`. Remove the silent error swallow so future constraint violations surface in logs.
+## 1. Chat message formatting
 
-**UI** — surface the new stage everywhere stages are rendered:
-- Kanban columns (add "Applied" as the leftmost column, before "Sourced")
-- Stage filter chips/dropdowns
-- Stage badge color map (assign a distinct color)
-- Stage ordering helpers
+File: `src/routes/_authenticated/app.c.$id.tsx` (`MessageRow`, assistant branch).
 
-Search points: `"Sourced"`, `STAGES`, `stageOrder`, `stageColors` across `src/components/candidates/**` and `src/lib/candidates/**`.
+- Loosen vertical rhythm so line skips actually breathe:
+  - Bump base line-height (e.g. `leading-7`) on the prose container.
+  - Increase paragraph spacing (`prose-p:my-3`), list spacing (`prose-ul:my-3 prose-ol:my-3 prose-li:my-1`), heading top margin (`prose-headings:mt-5 prose-headings:mb-2`).
+  - Add small gap before/after lists and code blocks.
+- Enable GFM so the model's `-`, `*`, `1.` and tables render as real lists/tables instead of inline text. Add `remark-gfm` to `<ReactMarkdown>` (`bun add remark-gfm`).
+- Style fenced code (`prose-pre:bg-bg-bubble prose-pre:rounded-lg prose-pre:p-3 prose-code:bg-bg-bubble prose-code:px-1 prose-code:rounded`).
 
-**Backfill** — update the existing `allan.rodriguez.90@gmail.com` candidate row back to `stage: "Applied"` once the constraint allows it.
+Prompt-side nudge (so long responses self-format) — update the chat assistant system prompt in the `prompts` table (slug `chat.main`) with one short rule:
 
-## 2. Ask user for specific countries on region acronyms (belt + suspenders)
+> When a response is longer than ~4 sentences, structure it with short paragraphs separated by blank lines, and use bullet lists (`-`) or numbered lists for any enumeration of ≥3 items. Use `**bold**` for key terms sparingly. Avoid headings unless the response has multiple distinct sections.
 
-### A. Prompt-level instruction (primary)
-Add a rule to the agent's sourcing system prompt:
+No code changes for the prompt — just a migration/update through the prompts admin path.
 
-> When the user specifies a multi-country region or acronym (LATAM, EMEA, APAC, DACH, Nordics, Benelux, MENA, SEA, Iberia, GCC, North/South/Central America, etc.) without naming specific countries, do NOT search yet. Ask which countries to target, suggest the typical country list for that region as options, and only call the sourcing tool once the user confirms an explicit country list.
+## 2. Render markdown in Job tab + Job Posts tab + public job page
 
-Locate the sourcing/agent system prompt in `prompts` table (or `src/lib/prompts/**`) and append this rule.
+Currently three spots render AI markdown as plain text via `whitespace-pre-wrap`:
 
-### B. Code-level guard (safety net)
-In `src/lib/sourcing/budget.ts`:
-- Keep `REGION_ALIASES` as a *suggestion dictionary* (used to propose countries to the user), but **remove auto-expansion** from `normalizeLocationForApollo`.
-- Add `detectAmbiguousRegion(location: string): { region: string; suggestedCountries: string[] } | null`.
+- `src/routes/_authenticated/app.c.$id.tsx` ~L929 — Job Summary (read mode).
+- `src/components/job-posts/job-posts-panel.tsx` ~L351 — Job post body preview.
+- `src/routes/jobs/$slug.tsx` ~L233 — public job page summary/description.
 
-In the sourcing server function (the one the agent's tool calls before Apollo):
-- Before querying Apollo, if `locations.length <= 1` and `detectAmbiguousRegion(locations[0])` matches, short-circuit and return:
-  ```ts
-  { status: "needs_clarification", region, suggestedCountries }
+Approach: keep the **edit experience** unchanged (textarea with raw markdown — the user said they like seeing it), but render formatted markdown whenever we're in *read/preview* mode or publishing publicly.
+
+Changes:
+
+- Extract a small shared component `src/components/ui/markdown.tsx`:
+  ```tsx
+  <Markdown className="...">{text}</Markdown>
   ```
-- The agent receives this structured response and asks the user — guaranteed even if the LLM forgets the prompt rule.
+  Wraps `ReactMarkdown` with `remark-gfm` and the same prose token classes used in chat (themed via `prose-invert`, semantic tokens only).
+- Job tab Summary read view: replace the `whitespace-pre-wrap` div with `<Markdown>`.
+- Job Posts panel preview pane (the right-side preview at L351, NOT the editing textarea): replace `<p className="whitespace-pre-wrap">…</p>` with `<Markdown>`. The "Copy" action keeps copying raw markdown (good for pasting into LinkedIn/etc).
+- Public job page (`/jobs/$slug`): replace the description `<p>` with `<Markdown>` so published posts look polished.
 
-### C. "Source more"
-Same guard applies: if the conversation's stored `search_criteria.locations` contains only a region acronym (legacy projects), short-circuit with `needs_clarification` so the agent prompts the user before re-querying.
+No changes to how AI generates the text, no changes to DB storage — markdown stays the source of truth.
 
 ## Technical notes
 
-- One migration (CHECK constraint) + one data update (backfill candidate).
-- `REGION_ALIASES` repurposed from auto-expander → suggestion source.
-- Apollo path unchanged otherwise; the earlier `country_only_location` stop still protects against cross-region leakage.
-- No new dependencies.
+- Dependency: `bun add remark-gfm` (already have `react-markdown`).
+- New file: `src/components/ui/markdown.tsx`.
+- Edited files: `src/routes/_authenticated/app.c.$id.tsx`, `src/components/job-posts/job-posts-panel.tsx`, `src/routes/jobs/$slug.tsx`.
+- Prompt update: `prompts` row with slug `chat.main` (append the formatting rule paragraph; no schema change).
+- All styling uses semantic tokens from `src/styles.css` (`text-text`, `bg-bg-bubble`, etc.) — no raw colors.
+- No backend / business-logic changes.
