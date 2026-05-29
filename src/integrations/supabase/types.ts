@@ -74,6 +74,7 @@ export type Database = {
           experience: Json
           has_direct_phone: boolean
           id: string
+          is_locked: boolean
           linkedin: string | null
           linkedin_slug: string | null
           location: string | null
@@ -106,6 +107,7 @@ export type Database = {
           experience?: Json
           has_direct_phone?: boolean
           id?: string
+          is_locked?: boolean
           linkedin?: string | null
           linkedin_slug?: string | null
           location?: string | null
@@ -138,6 +140,7 @@ export type Database = {
           experience?: Json
           has_direct_phone?: boolean
           id?: string
+          is_locked?: boolean
           linkedin?: string | null
           linkedin_slug?: string | null
           location?: string | null
@@ -181,6 +184,33 @@ export type Database = {
           pinned_at?: string | null
           title?: string
           updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      credit_ledger: {
+        Row: {
+          created_at: string
+          delta: number
+          id: string
+          reason: string
+          stripe_session_id: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          delta: number
+          id?: string
+          reason: string
+          stripe_session_id?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          delta?: number
+          id?: string
+          reason?: string
+          stripe_session_id?: string | null
           user_id?: string
         }
         Relationships: []
@@ -378,15 +408,24 @@ export type Database = {
       profiles: {
         Row: {
           created_at: string
+          credits_remaining: number
           id: string
+          plan: string
+          sourcing_projects_used: number
         }
         Insert: {
           created_at?: string
+          credits_remaining?: number
           id: string
+          plan?: string
+          sourcing_projects_used?: number
         }
         Update: {
           created_at?: string
+          credits_remaining?: number
           id?: string
+          plan?: string
+          sourcing_projects_used?: number
         }
         Relationships: []
       }
