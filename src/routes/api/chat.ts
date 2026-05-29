@@ -680,6 +680,14 @@ export const Route = createFileRoute("/api/chat")({
                 if (pass.toolCalls.length === 0) {
                   const leak = extractLeakedClarify(pass.text);
                   if (leak) {
+                    // Always strip the leaked JSON from what the user sees,
+                    // even if we suppress the duplicate card below.
+                    if (clarifyEmittedThisTurn) {
+                      pass.text = leak.cleaned;
+                      send("text_replace", {
+                        text: leak.cleaned,
+                      });
+                    } else {
                     const questions = Array.isArray(leak.payload.questions)
                       ? leak.payload.questions.slice(0, 4)
                       : [];
