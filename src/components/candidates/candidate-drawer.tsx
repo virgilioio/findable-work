@@ -3,6 +3,9 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { updateCandidate, deleteCandidate, revealCandidatePhone } from "@/lib/candidates.functions";
+import { getApplication } from "@/lib/applications.functions";
+import { useQuery } from "@tanstack/react-query";
+import { useServerFn as _useServerFn } from "@tanstack/react-start";
 import { cn } from "@/lib/utils";
 import {
   X,
@@ -44,6 +47,7 @@ export type Candidate = {
   education: Array<{ school: string; degree: string; period: string }>;
   match_breakdown: Array<{ label: string; score: number; note: string }>;
   activity: Array<{ id: number; type: string; by: string; when: string; text: string }>;
+  application_id?: string | null;
 };
 
 export function CandidateDrawer({
