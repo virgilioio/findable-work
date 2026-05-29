@@ -789,6 +789,7 @@ export const Route = createFileRoute("/api/chat")({
                     const result = await runSourcingAgent({
                       userId,
                       conversationId,
+                      messageId: assistantMessageId,
                       brief,
                       jobBrief: jobRow ?? undefined,
                       limit,
