@@ -73,6 +73,8 @@ export type Database = {
           phone: string | null
           recruiter_user_id: string
           resume_filename: string | null
+          resume_mime: string | null
+          resume_size: number | null
           resume_url: string | null
           screening: Json
           status: string
@@ -90,6 +92,8 @@ export type Database = {
           phone?: string | null
           recruiter_user_id: string
           resume_filename?: string | null
+          resume_mime?: string | null
+          resume_size?: number | null
           resume_url?: string | null
           screening?: Json
           status?: string
@@ -107,6 +111,8 @@ export type Database = {
           phone?: string | null
           recruiter_user_id?: string
           resume_filename?: string | null
+          resume_mime?: string | null
+          resume_size?: number | null
           resume_url?: string | null
           screening?: Json
           status?: string
