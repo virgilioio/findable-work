@@ -143,11 +143,16 @@ export const Route = createFileRoute("/api/public/jobs/$slug/apply")({
         const submittedAt = new Date(appRow.created_at as any).toLocaleString();
 
         // Create the candidate row at Applied stage.
+        if (!jobFull?.conversation_id) {
+          // Job somehow missing a conversation — application is saved, no candidate row.
+          return Response.json({ ok: true });
+        }
+
         const { data: candRow, error: candErr } = await supabaseAdmin
           .from("candidates")
           .insert({
             user_id: job.user_id,
-            conversation_id: jobFull?.conversation_id,
+            conversation_id: jobFull.conversation_id,
             name: input.name,
             role: "Applicant",
             company: input.location || "—",
