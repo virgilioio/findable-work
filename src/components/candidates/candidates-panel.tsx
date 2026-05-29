@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { listCandidates, updateCandidate } from "@/lib/candidates.functions";
+import { supabase } from "@/integrations/supabase/client";
 import { sourceMore } from "@/lib/sourcing/source-more.functions";
 import {
   Plus,
@@ -18,7 +19,7 @@ import { CandidateDrawer, type Candidate } from "./candidate-drawer";
 import { AddCandidateModal } from "./add-candidate-modal";
 import { ContactAutomation } from "@/components/outreach/contact-automation";
 
-const STAGES = ["Sourced", "Contacted", "Screening", "Interview", "Offer"] as const;
+const STAGES = ["Applied", "Sourced", "Contacted", "Screening", "Interview", "Offer"] as const;
 type Stage = (typeof STAGES)[number];
 type StageFilter = "All" | Stage;
 type Sort = "match" | "recent" | "name";
@@ -51,6 +52,25 @@ export function CandidatesPanel({
   useEffect(() => {
     setSelectedIds(new Set());
   }, [conversationId]);
+
+  // Realtime: refresh candidates list (and toast) when a new application lands.
+  useEffect(() => {
+    const channel = supabase
+      .channel(`apps-${conversationId}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "applications" },
+        (payload) => {
+          const row = payload.new as { name?: string };
+          qc.invalidateQueries({ queryKey: ["candidates", conversationId] });
+          toast.success(`New applicant: ${row?.name ?? "Someone"} just applied`);
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [conversationId, qc]);
 
   const counts = useMemo(() => {
     const c: Record<string, number> = { All: candidates.length };

@@ -4,7 +4,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { revealApolloPhone } from "@/lib/sourcing/apollo.server";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
-const STAGES = ["Sourced", "Contacted", "Screening", "Interview", "Offer"] as const;
+const STAGES = ["Applied", "Sourced", "Contacted", "Screening", "Interview", "Offer"] as const;
 
 function enrich(input: {
   id: number;

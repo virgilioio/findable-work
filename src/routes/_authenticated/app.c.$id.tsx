@@ -5,7 +5,14 @@ import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 import { getConversation } from "@/lib/conversations.functions";
-import { updateJob, duplicateJob } from "@/lib/jobs.functions";
+import {
+  updateJob,
+  duplicateJob,
+  publishJob,
+  unpublishJob,
+  regenerateScreening,
+} from "@/lib/jobs.functions";
+import { listApplications } from "@/lib/applications.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -73,6 +80,16 @@ type Job = {
   salary_max: number | null;
   currency: string;
   status: string;
+  slug?: string | null;
+  published?: boolean;
+  company?: string;
+  screening?: Array<{
+    id: string;
+    type: "select" | "multi" | "textarea";
+    question: string;
+    options?: string[];
+    required: boolean;
+  }>;
 };
 
 function ConversationPage() {
@@ -653,12 +670,30 @@ function JobPanel({
   const qc = useQueryClient();
   const update = useServerFn(updateJob);
   const dupe = useServerFn(duplicateJob);
+  const pub = useServerFn(publishJob);
+  const unpub = useServerFn(unpublishJob);
+  const regen = useServerFn(regenerateScreening);
+  const listApps = useServerFn(listApplications);
   const [form, setForm] = useState<Job>(job);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState<boolean>(!job.description);
   const [duplicating, setDuplicating] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [statusMenu, setStatusMenu] = useState(false);
+
+  const { data: applications } = useQuery({
+    queryKey: ["applications", conversationId],
+    queryFn: () => listApps({ data: { conversationId } }),
+    enabled: Boolean(form.published),
+    refetchInterval: 15000,
+  });
+  const applicantCount = (applications ?? []).length;
+
+  const publicUrl =
+    form.slug && typeof window !== "undefined"
+      ? `${window.location.origin}/jobs/${form.slug}`
+      : "";
 
   useEffect(() => setForm(job), [job.id]);
 
@@ -689,8 +724,8 @@ function JobPanel({
   }
 
   const reqText = useMemo(() => form.requirements.join("\n"), [form.requirements]);
-  const statusLabel = form.status.charAt(0).toUpperCase() + form.status.slice(1);
-  const published = form.status === "open";
+  const published = Boolean(form.published);
+  const statusLabel = published ? "Live" : "Draft";
 
   async function handleDuplicate() {
     setDuplicating(true);
@@ -710,10 +745,40 @@ function JobPanel({
     if (published) return;
     setPublishing(true);
     try {
-      await save({ status: "open" });
-      toast.success("Job published");
+      await pub({ data: { conversationId } });
+      await qc.invalidateQueries({ queryKey: ["conversation", conversationId] });
+      toast.success("Job is now live");
     } finally {
       setPublishing(false);
+    }
+  }
+
+  async function handleUnpublish() {
+    setPublishing(true);
+    try {
+      await unpub({ data: { conversationId } });
+      await qc.invalidateQueries({ queryKey: ["conversation", conversationId] });
+      toast("Job unpublished");
+    } finally {
+      setPublishing(false);
+      setStatusMenu(false);
+    }
+  }
+
+  function copyLink() {
+    if (!publicUrl) return;
+    navigator.clipboard.writeText(publicUrl);
+    toast.success("Link copied");
+    setStatusMenu(false);
+  }
+
+  async function handleRegenScreening() {
+    try {
+      await regen({ data: { conversationId } });
+      await qc.invalidateQueries({ queryKey: ["conversation", conversationId] });
+      toast.success("Screening questions regenerated");
+    } catch (e: any) {
+      toast.error(e?.message ?? "Couldn't regenerate questions");
     }
   }
 
@@ -737,11 +802,16 @@ function JobPanel({
                 <span
                   className={cn(
                     "inline-block h-1.5 w-1.5 rounded-full",
-                    form.status === "open" ? "bg-emerald-500" : "bg-text-faint",
+                    published ? "bg-emerald-500" : "bg-text-faint",
                   )}
                 />
                 {statusLabel}
               </span>
+              {published && applicantCount > 0 && (
+                <span className="ml-3 inline-flex items-center gap-1 rounded-full bg-bg-bubble px-2 py-0.5 text-[11px] font-medium text-text">
+                  {applicantCount} applicant{applicantCount === 1 ? "" : "s"}
+                </span>
+              )}
               {form.location && <span className="ml-3">{form.location}</span>}
               <span className="ml-3 text-text-faint">
                 {saving ? "Saving…" : savedAt ? `Saved ${savedAt}` : "Edits autosave"}
@@ -757,16 +827,75 @@ function JobPanel({
             label={editing ? "Done" : "Edit"}
             active={editing}
           />
-          <HeaderBtn
-            onClick={handlePublish}
-            disabled={published || publishing}
-            icon={published ? <Check size={13} /> : <Upload size={13} />}
-            label={published ? "Published" : "Publish"}
-            primary={!published}
-            dot={published}
-          />
+          {published ? (
+            <div className="relative">
+              <HeaderBtn
+                onClick={() => setStatusMenu((v) => !v)}
+                icon={<Check size={13} />}
+                label="Live"
+                dot
+              />
+              {statusMenu && (
+                <div className="absolute right-0 top-[calc(100%+4px)] z-20 min-w-[180px] rounded-lg border border-border-strong bg-bg-elev p-1 shadow-[var(--shadow-md)]">
+                  <a
+                    href={publicUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setStatusMenu(false)}
+                    className="block rounded-md px-2.5 py-1.5 text-left text-[13px] text-text hover:bg-bg-hover"
+                  >
+                    View public page
+                  </a>
+                  <button
+                    onClick={copyLink}
+                    className="block w-full rounded-md px-2.5 py-1.5 text-left text-[13px] text-text hover:bg-bg-hover"
+                  >
+                    Copy link
+                  </button>
+                  <button
+                    onClick={handleUnpublish}
+                    disabled={publishing}
+                    className="block w-full rounded-md px-2.5 py-1.5 text-left text-[13px] text-text hover:bg-bg-hover disabled:opacity-50"
+                  >
+                    Unpublish
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <HeaderBtn
+              onClick={handlePublish}
+              disabled={publishing}
+              icon={<Upload size={13} />}
+              label={publishing ? "Publishing…" : "Publish"}
+              primary
+            />
+          )}
         </div>
       </div>
+
+      {published && publicUrl && (
+        <div className="mt-4 flex items-center justify-between gap-3 rounded-[12px] border border-border bg-bg-side px-3.5 py-2.5">
+          <div className="flex min-w-0 items-center gap-2 text-[12.5px]">
+            <span className="inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            <span className="text-text-mute">Public application page:</span>
+            <a
+              href={publicUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="truncate font-mono text-text underline decoration-border-strong underline-offset-2"
+            >
+              {publicUrl}
+            </a>
+          </div>
+          <button
+            onClick={copyLink}
+            className="flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-border bg-bg px-2.5 text-[12px] text-text-mute hover:bg-bg-hover hover:text-text"
+          >
+            <Copy size={12} /> Copy
+          </button>
+        </div>
+      )}
 
       {/* Two columns */}
       <div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-[1fr_320px]">
@@ -819,6 +948,56 @@ function JobPanel({
               </ul>
             ) : (
               <span className="text-[14px] text-text-faint">No requirements yet.</span>
+            )}
+          </section>
+
+          <section>
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-[11px] font-medium uppercase tracking-wide text-text-faint">
+                Application questions
+              </h3>
+              <button
+                onClick={handleRegenScreening}
+                className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-bg px-2.5 text-[11.5px] text-text-mute transition hover:bg-bg-hover hover:text-text"
+              >
+                <Sparkle size={11} /> Regenerate
+              </button>
+            </div>
+            {form.screening && form.screening.length > 0 ? (
+              <ol className="space-y-2.5">
+                {form.screening.map((q, i) => (
+                  <li
+                    key={q.id}
+                    className="rounded-[10px] border border-border bg-bg-elev p-3"
+                  >
+                    <div className="flex items-start gap-2">
+                      <span className="mt-0.5 font-mono text-[11px] text-text-faint">
+                        {String(i + 1).padStart(2, "0")}
+                      </span>
+                      <div className="flex-1">
+                        <div className="text-[13px] text-text">{q.question}</div>
+                        <div className="mt-1 flex items-center gap-2 text-[11px] text-text-faint">
+                          <span className="rounded bg-bg-input px-1.5 py-0.5 font-mono">
+                            {q.type}
+                          </span>
+                          {q.required && <span>required</span>}
+                          {q.options && q.options.length > 0 && (
+                            <span className="truncate">
+                              {q.options.join(" · ")}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <div className="rounded-[10px] border border-dashed border-border bg-bg-elev p-4 text-center text-[12.5px] text-text-mute">
+                {published
+                  ? "No screening questions yet. Click Regenerate to draft them."
+                  : "Publish this job to auto-generate screening questions for applicants."}
+              </div>
             )}
           </section>
         </div>
