@@ -1,70 +1,44 @@
-# Show reasoning as a "Thinking…" ticker, keep it out of the reply
 
-## The insight you nailed
+# Why the chat goes silent after clarify answers
 
-You're right — that text *was* the model's reasoning. The bug isn't that it reasoned, it's that the reasoning landed in the user-facing reply. Other LLMs (ChatGPT, Claude, Gemini) do exactly what you're describing: stream a separate "thinking" / "reasoning" channel that the UI shows as a collapsible, fading ticker above the answer, then collapse it when the final response starts.
+After you submit the clarify card, the server runs the tools (sourcing, etc.) and the task cards arrive — but nothing lands in the bubble. That's a regression from the reasoning/leak-routing layer we just added, plus a missing "always close the turn with prose" guard.
 
-We can do the same thing — and our streaming pipeline is already 90% set up for it.
+Three concrete causes, all in `src/routes/api/chat.ts`:
 
-## How other LLMs do it (and what we get from gpt-5-mini)
+1. **Leak detector swallows the real reply.** `looksLikeLeakedReasoning` is fired on the first ~80 chars of each pass. When the second pass (after tools) starts with a short Spanish wrap-up like "Listo — añadí 20 candidatos. ¿Quieres que…", any 2 matches against its keyword list (or a `(` opener) flip `leakMode` to `"leak"` and route the entire bubble text into the reasoning channel. The user sees task cards + a blank message.
+2. **`leak` mode never recovers, and the buffered tail is never flushed.** Once in `"leak"`, recovery requires a `)\n` or `\n\n<capital letter>` break. Short single-sentence replies don't hit that, so `assistantText` stays `""`. The end-of-stream flush at line 587 only handles `leakMode === "unknown"` — not `"leak"`. So even legitimately-buffered text is lost.
+3. **No "must end with a prose turn" guard.** Even without the leak bug, the model sometimes emits only `tool_calls` and an empty `content` on the closing pass. We persist `combinedText = ""` and the UI renders a card-only message with no closing line.
 
-OpenAI's reasoning-capable models (gpt-5 family, o-series) return two distinct streams in the chat-completions delta:
-- `delta.content` → final answer tokens
-- `delta.reasoning` (a.k.a. `reasoning_content` on some gateways) → chain-of-thought tokens
+# Plan (server-only, surgical)
 
-The Lovable AI Gateway proxies these through. So the model is already separating them; we just aren't routing `reasoning` anywhere — and when the model gets confused (long messy history), it sometimes dumps reasoning into `content` as a fallback. Capturing the proper `reasoning` channel and rendering it nicely solves both problems: it gives the model a "real" place to put thoughts, and gives us a UI surface to show them.
+All edits live in `src/routes/api/chat.ts`. No UI changes, no prompt changes, no migration.
 
-## Behavior
+## 1. Make the leak detector first-pass-only and much narrower
 
-While streaming a turn:
-- A pill appears above the in-progress assistant bubble: **`✦ Thinking`** with three animated dots.
-- Below it: a single line of fading text that auto-rotates through the latest reasoning fragments (last sentence, fades to next as new chunks arrive). Subtle, low-contrast, slightly smaller than chat text.
-- The instant the first real `content` token arrives, the pill shrinks to a small collapsed chip ("Thought for 4s • show reasoning"); clicking it expands the full reasoning trace below the answer (scrollable, dimmed).
-- If the turn ran tools, the chip sits alongside the task cards in the same gap.
+- Only run `looksLikeLeakedReasoning` on the very first pass of the turn (iter === 0) AND only before any tool call has executed. Post-tool passes are short summaries — they should never be routed to reasoning.
+- Raise the trigger threshold from `2 hits` → `3 hits`, and require the head to start with `(` or with a clearly-internal English phrase. Spanish text never matches.
+- When in doubt, default to `"answer"` (fail-open), not `"leak"`.
 
-Final persisted message stores the answer only — reasoning is **not** saved to `messages.content`. (Optional follow-up: persist to a `reasoning` column if you want it visible on reload — call out below.)
+## 2. Always flush buffered text at end of stream, in every leak mode
 
-## Implementation
+Replace the end-of-stream flush so that whatever sits in `leakedSoFar` is appended to `assistantText` and sent as a `delta` unless we are 100% sure it was reasoning. This guarantees short replies survive.
 
-### Server: `src/routes/api/chat.ts`
+## 3. Guarantee a closing prose turn
 
-1. In `streamCompletion`, capture `delta.reasoning` (and the alt key `reasoning_content`) alongside `delta.content`.
-2. Forward each reasoning chunk as a new SSE event: `event: reasoning` with `{ content: "…" }`.
-3. **Safety net for leaks into `content`:** before forwarding `delta.content`, run a lightweight `looksLikeReasoning()` check on the accumulated text in the first ~200 chars (regex: starts with "(Mode [A-D]", "Let me…", "The user…", "We're in…", "Conversation shows…", or a `(` parenthetical containing 2+ trigger phrases). If it matches, redirect that chunk to the `reasoning` channel instead of `delta` — and once it switches, keep redirecting until we see a clear answer-shaped break (sentence-ending punctuation followed by a non-reasoning sentence). This is the "contain, don't force" part.
-4. Strip any final leaked-reasoning prefix from `combinedText` before persisting to `messages`.
+After the iteration loop ends, if `toolsRanAny === true` AND `postText.trim() === ""`, run one more **forced-no-tools** completion pass using `convo` (which already contains the assistant tool calls + tool results). Stream its text as `delta` after the marker and append to `postText`. This is the same pattern OpenAI cookbook uses to close a tool loop. Cap at 1 extra pass so we never loop.
 
-### Client: `src/routes/_authenticated/app.c.$id.tsx`
+Localize the fallback: if even that pass returns empty (rare), emit a one-line acknowledgement in the user's language (detect from the latest user message — Spanish if it contains `ñ`/accents or common stopwords, else English): `"Listo — revisa los resultados arriba."` / `"Done — check the results above."` Persist it so reload shows the same line.
 
-1. Add `reasoning` state alongside `streaming`. Append on `event: reasoning`.
-2. New `<ThinkingTicker>` component:
-   - Header pill: `✦ Thinking` with the existing `thinking-dot` animation.
-   - Body: the last ~80 chars of `reasoning`, key'd on a "tick" derived from the latest sentence boundary so the line fades/slides up when it changes (Tailwind `transition-opacity duration-300` + a tiny translate-y).
-   - When the answer starts streaming, animate the ticker into a collapsed chip: `✦ Thought for {Ns} · show reasoning ▾`. Click toggles a `<details>`-style panel with the full reasoning text, monospace-ish, dimmed.
-3. Render it above the streaming bubble while `streaming === ""`, then in the bubble's header once answer tokens arrive, then attached to the persisted message as a non-persistent chip that disappears on the next user turn (it's session-only unless we persist it).
-4. Once the stream ends, the chip stays attached to that turn until the user sends the next message, then disappears (matches Claude's behavior).
+## 4. Small correctness fix
 
-### Styling
+When `text_replace` fires (leaked-clarify hoist), we currently send the cleaned text but never update `pass.text` before it gets appended to `preText`/`postText`. That's already handled (`pass.text = leak.cleaned`), so no change — flagging only to confirm it stays correct after the above edits.
 
-Use existing tokens: `text-text-faint` for ticker text, a soft `bg-muted/40` rounded pill for the header, the existing `thinking-dot` keyframes. No new colors. The fade between fragments is a CSS opacity transition triggered by a React `key` change on sentence boundary.
+# Files touched
 
-## Prompt change
+- `src/routes/api/chat.ts` — narrow the leak detector, fix the end-of-stream flush, add the "force a closing prose pass" guard.
 
-Tiny nudge in `chat.main` (new migration, bump version): one line letting the model know it has a dedicated reasoning channel.
+# Out of scope
 
-> If you need to think, plan, classify the turn, or recap state, do that in your reasoning channel — never in the visible reply. The UI shows reasoning separately; the user sees only what you write to them.
-
-No "Mode A/B/C" rewriting needed. Combined with the runtime redirect, this is enough.
-
-## Optional follow-ups (call out if you want them now)
-
-- **Persist reasoning per message** (new `messages.reasoning text` column) so the collapsed chip survives reload. Without this, the chip vanishes when the user navigates away and comes back. Easy to add but a schema change.
-- **Show token/seconds count** in the chip (`Thought for 4.2s`). Trivial — we already know stream start time.
-- **Localize the chip** ("Pensando…" when the user writes Spanish). Cheap; detect from last user message.
-
-## Files touched
-
-- `src/routes/api/chat.ts` — capture `delta.reasoning`, emit `event: reasoning`, runtime redirect for leaked CoT in `delta.content`.
-- `src/routes/_authenticated/app.c.$id.tsx` — `reasoning` state, `<ThinkingTicker>`, render hooks in the streaming bubble.
-- `src/components/chat/ThinkingTicker.tsx` (new) — the pill + ticker + collapsible panel.
-- `src/styles.css` — small additions: fade-in keyframe, ticker line animation (reuse existing `thinking-dot`).
-- `supabase/migrations/<new>.sql` — append the "use the reasoning channel" line to `chat.main`, bump version.
+- UI changes to the thinking ticker or clarify card.
+- Prompt edits (no new migration).
+- Any change to how tools execute or how task cards stream.
