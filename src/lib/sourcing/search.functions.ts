@@ -250,7 +250,7 @@ export const collectCandidates = createServerFn({ method: "POST" })
             role: src.role,
             company: src.company,
             stage: "Sourced",
-            source: src.source ?? "Apollo",
+            source: "Internal",
             match: src.match ?? 80,
             tags: [],
             starred: false,
