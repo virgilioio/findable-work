@@ -272,6 +272,12 @@ function KV({ label, value, children }: { label: string; value?: string; childre
 function Overview({ c }: { c: Candidate }) {
   const qc = useQueryClient();
   const reveal = useServerFn(revealCandidatePhone);
+  const fetchApp = useServerFn(getApplication);
+  const { data: app } = useQuery({
+    queryKey: ["application", c.application_id],
+    queryFn: () => fetchApp({ data: { id: c.application_id! } }),
+    enabled: Boolean(c.application_id),
+  });
   const revealMut = useMutation({
     mutationFn: () => reveal({ data: { id: c.id } }),
     onSuccess: (res) => {
@@ -282,6 +288,33 @@ function Overview({ c }: { c: Candidate }) {
   });
   return (
     <div className="flex flex-col gap-5 px-5 pb-8 pt-4">
+      {app && (
+        <Section title="Application" icon={<Doc size={12} />}>
+          <div className="rounded-lg border border-border bg-bg-elev p-3">
+            <div className="text-[12px] text-text-mute">
+              Applied via public job post on{" "}
+              {new Date((app as any).created_at).toLocaleDateString()}
+            </div>
+            {Array.isArray((app as any).screening) &&
+              (app as any).screening.length > 0 && (
+                <div className="mt-3 flex flex-col gap-3">
+                  {(app as any).screening.map((q: any) => {
+                    const ans = (app as any).answers?.[q.id];
+                    const display = Array.isArray(ans) ? ans.join(", ") : ans;
+                    return (
+                      <div key={q.id}>
+                        <div className="text-[12px] font-medium text-text">{q.question}</div>
+                        <div className="mt-0.5 whitespace-pre-wrap text-[12.5px] text-text-mute">
+                          {display || <span className="italic text-text-faint">No answer</span>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+          </div>
+        </Section>
+      )}
       {c.summary && (
         <Section title="Summary">
           <p className="m-0 text-[13.5px] leading-relaxed text-text">{c.summary}</p>
