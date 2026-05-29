@@ -185,9 +185,9 @@ function LoginPage() {
       <div className="absolute bottom-5 flex items-center gap-3.5 text-[12px] text-[var(--text-faint)]">
         <span>© 2026 findable</span>
         <span>·</span>
-        <a href="#" className="hover:text-[var(--text-mute)]">
+        <Link to="/terms" className="hover:text-[var(--text-mute)]">
           Terms
-        </a>
+        </Link>
         <Link to="/privacy" className="hover:text-[var(--text-mute)]">
           Privacy
         </Link>
