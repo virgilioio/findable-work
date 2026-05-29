@@ -104,6 +104,9 @@ export type SourceResult = {
   apollo_error: string | null;
   pdl_error: string | null;
   project_id: string;
+  requested: number;
+  pool_limited: boolean;
+  broadened: boolean;
 };
 
 export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
