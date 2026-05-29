@@ -34,6 +34,7 @@ export type TaskEvent = AgentTask;
 type Ctx = {
   userId: string;
   conversationId: string;
+  messageId?: string | null;
   jobBrief?: { title?: string; description?: string; location?: string; requirements?: string[] };
   brief: string;
   limit: number;
@@ -45,12 +46,14 @@ async function insertTask(
   conversationId: string,
   kind: AgentTask["kind"],
   label: string,
+  messageId?: string | null,
 ): Promise<AgentTask> {
   const { data, error } = await supabaseAdmin
     .from("agent_tasks")
     .insert({
       user_id: userId,
       conversation_id: conversationId,
+      message_id: messageId ?? null,
       kind,
       label,
       status: "running",
