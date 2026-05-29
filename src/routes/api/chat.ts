@@ -741,14 +741,40 @@ export const Route = createFileRoute("/api/chat")({
                 } catch {}
 
                 if (call.name === "create_job") {
+                  const summary = String(args.summary ?? "").trim();
+                  const responsibilities = Array.isArray(args.responsibilities)
+                    ? args.responsibilities.map((r: unknown) => String(r).trim()).filter(Boolean).slice(0, 50)
+                    : [];
+                  const mustHave = Array.isArray(args.must_have)
+                    ? args.must_have.map((r: unknown) => String(r).trim()).filter(Boolean).slice(0, 50)
+                    : Array.isArray(args.requirements)
+                      ? args.requirements.map((r: unknown) => String(r).trim()).filter(Boolean).slice(0, 50)
+                      : [];
+                  const niceToHave = Array.isArray(args.nice_to_have)
+                    ? args.nice_to_have.map((r: unknown) => String(r).trim()).filter(Boolean).slice(0, 50)
+                    : [];
+                  // Compose markdown description from the structured parts so
+                  // legacy consumers (public job page fallback, exports) still
+                  // have a renderable body. The Job tab itself renders the
+                  // structured fields directly.
+                  const composedDescription = [
+                    summary,
+                    responsibilities.length ? `## What you'll do\n${responsibilities.map((r) => `- ${r}`).join("\n")}` : "",
+                    mustHave.length ? `## Must have\n${mustHave.map((r) => `- ${r}`).join("\n")}` : "",
+                    niceToHave.length ? `## Nice to have\n${niceToHave.map((r) => `- ${r}`).join("\n")}` : "",
+                  ].filter(Boolean).join("\n\n");
                   const jobPayload = {
                     conversation_id: conversationId,
                     user_id: userId,
                     title: String(args.title ?? "").slice(0, 200),
-                    description: String(args.description ?? ""),
-                    requirements: Array.isArray(args.requirements)
-                      ? args.requirements.map((r: unknown) => String(r)).slice(0, 50)
-                      : [],
+                    description: composedDescription,
+                    summary,
+                    responsibilities,
+                    must_have: mustHave,
+                    nice_to_have: niceToHave,
+                    // Mirror must_have into legacy `requirements` so screening
+                    // generation and other callers that still read it stay populated.
+                    requirements: mustHave,
                     location: String(args.location ?? ""),
                     employment_type: ["full_time", "part_time", "contract", "internship", "temporary"].includes(
                       args.employment_type,
