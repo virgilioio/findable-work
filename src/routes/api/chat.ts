@@ -161,7 +161,11 @@ async function getUserFromRequest(request: Request): Promise<string | null> {
 
 type StreamedToolCall = { id?: string; name?: string; args: string };
 
-async function callGateway(messages: ChatMessage[], apiKey: string): Promise<Response> {
+async function callGateway(
+  messages: ChatMessage[],
+  apiKey: string,
+  toolChoice?: "auto" | "none",
+): Promise<Response> {
   return fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -170,6 +174,7 @@ async function callGateway(messages: ChatMessage[], apiKey: string): Promise<Res
       stream: true,
       messages,
       tools: [createJobTool, sourceCandidatesTool, askClarifyingQuestionsTool, draftJobPostsTool, draftOutreachTool],
+      ...(toolChoice ? { tool_choice: toolChoice } : {}),
     }),
   });
 }
