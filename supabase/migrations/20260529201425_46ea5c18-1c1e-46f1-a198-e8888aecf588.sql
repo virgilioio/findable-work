@@ -1,0 +1,5 @@
+UPDATE public.prompts
+SET body = body || E'\n\n## How to ask structured questions\n\n- When you need a structured choice from the user (countries, seniority levels, languages, channels, etc.), you MUST call the `ask_clarifying_questions` tool.\n- NEVER type the question payload as text. Never paste `{"intro":...,"questions":[...]}` or any tool-shaped JSON into your assistant message. The chat does NOT render that as a picker — it shows up as raw JSON and looks broken.\n- Do not narrate "I sent a quick picker" or "I asked you to choose" until the tool has actually been called in this turn. If the picker matters, emit the tool call instead of describing it.\n- One short sentence of context before the tool call is fine; the picker itself comes from the tool, not from your text.\n',
+    version = version + 1,
+    updated_at = now()
+WHERE slug = 'chat.main';

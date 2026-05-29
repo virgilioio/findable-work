@@ -161,6 +161,73 @@ async function getUserFromRequest(request: Request): Promise<string | null> {
 
 type StreamedToolCall = { id?: string; name?: string; args: string };
 
+// Detect an `ask_clarifying_questions`-shaped JSON blob that the model
+// occasionally writes as plain assistant text instead of emitting as a
+// tool call. Returns the parsed payload + the surrounding text with the
+// blob removed, or null if nothing matches.
+function extractLeakedClarify(
+  text: string,
+): { payload: { intro?: string; questions: any[] }; cleaned: string } | null {
+  const marker = text.indexOf('"questions"');
+  if (marker === -1) return null;
+  // Walk backward to find the enclosing `{`.
+  let start = -1;
+  let close = 0;
+  for (let i = marker; i >= 0; i--) {
+    const ch = text[i];
+    if (ch === "}") close++;
+    else if (ch === "{") {
+      if (close === 0) {
+        start = i;
+        break;
+      }
+      close--;
+    }
+  }
+  if (start === -1) return null;
+  // Walk forward to the matching `}` (respect strings + escapes).
+  let depth = 0;
+  let end = -1;
+  let inStr = false;
+  let esc = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === "\\") esc = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') inStr = true;
+    else if (ch === "{") depth++;
+    else if (ch === "}") {
+      depth--;
+      if (depth === 0) {
+        end = i;
+        break;
+      }
+    }
+  }
+  if (end === -1) return null;
+  const raw = text.slice(start, end + 1);
+  let parsed: any;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!parsed || !Array.isArray(parsed.questions) || parsed.questions.length === 0) return null;
+  const ok = parsed.questions.every(
+    (q: any) => q && typeof q.id === "string" && typeof q.label === "string",
+  );
+  if (!ok) return null;
+  const cleaned = (text.slice(0, start) + text.slice(end + 1))
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return { payload: parsed, cleaned };
+}
+
 async function callGateway(
   messages: ChatMessage[],
   apiKey: string,
@@ -343,6 +410,57 @@ export const Route = createFileRoute("/api/chat")({
                   iter === 0 && looksLikeFollowUpQuestion(message) ? "none" : undefined;
                 const pass = await streamCompletion(convo, toolChoice);
                 if (iter === 0) firstToolCalls = pass.toolCalls;
+
+                // Safety net: if the model wrote the clarify payload as text
+                // instead of calling the tool, hoist it into a real clarify
+                // task and strip the JSON from what the user sees.
+                if (pass.toolCalls.length === 0) {
+                  const leak = extractLeakedClarify(pass.text);
+                  if (leak) {
+                    const questions = Array.isArray(leak.payload.questions)
+                      ? leak.payload.questions.slice(0, 4)
+                      : [];
+                    const intro =
+                      typeof leak.payload.intro === "string"
+                        ? leak.payload.intro.slice(0, 240)
+                        : "";
+                    const normalized = questions.map((q: any, i: number) => ({
+                      id: String(q?.id ?? `q${i}`).slice(0, 64),
+                      label: String(q?.label ?? "").slice(0, 240),
+                      type: ["single", "multi", "text"].includes(q?.type) ? q.type : "single",
+                      options: Array.isArray(q?.options)
+                        ? q.options.map((o: unknown) => String(o)).slice(0, 12)
+                        : [],
+                      placeholder:
+                        typeof q?.placeholder === "string" ? q.placeholder.slice(0, 120) : "",
+                      allow_other: Boolean(q?.allow_other),
+                    }));
+                    const { data: clarifyTask } = await supabaseAdmin
+                      .from("agent_tasks")
+                      .insert({
+                        user_id: userId,
+                        conversation_id: conversationId,
+                        kind: "clarify",
+                        label: intro || "A couple quick details to sharpen the search:",
+                        status: "done",
+                        summary: null,
+                        data: { intro, questions: normalized },
+                        finished_at: new Date().toISOString(),
+                      })
+                      .select("*")
+                      .single();
+                    if (clarifyTask) {
+                      allTaskIds.push(clarifyTask.id);
+                      send("task", clarifyTask);
+                    }
+                    // Replace what the user sees with the cleaned text.
+                    pass.text = leak.cleaned;
+                    send("text_replace", {
+                      content: (toolsRanAny ? preText + AFTER_TASKS_MARKER : "") + leak.cleaned,
+                    });
+                  }
+                }
+
                 if (!toolsRanAny) {
                   preText += (preText && pass.text ? "\n\n" : "") + pass.text;
                 } else {

@@ -200,6 +200,9 @@ function ConversationPage() {
           if (event === "delta" && payload.content) {
             acc += payload.content;
             setStreaming(acc);
+          } else if (event === "text_replace" && typeof payload.content === "string") {
+            acc = payload.content;
+            setStreaming(acc);
           } else if (event === "job") {
             jobCreated = true;
           } else if (event === "job_posts") {
