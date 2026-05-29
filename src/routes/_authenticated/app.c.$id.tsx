@@ -11,7 +11,6 @@ import {
   publishJob,
   unpublishJob,
   regenerateScreening,
-  updateScreening,
 } from "@/lib/jobs.functions";
 import { listApplications } from "@/lib/applications.functions";
 import { supabase } from "@/integrations/supabase/client";
@@ -674,7 +673,6 @@ function JobPanel({
   const pub = useServerFn(publishJob);
   const unpub = useServerFn(unpublishJob);
   const regen = useServerFn(regenerateScreening);
-  const saveScreening = useServerFn(updateScreening);
   const listApps = useServerFn(listApplications);
   const [form, setForm] = useState<Job>(job);
   const [savedAt, setSavedAt] = useState<string | null>(null);
