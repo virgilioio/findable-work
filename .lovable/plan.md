@@ -1,41 +1,58 @@
-# Plan — Stop the clarify JSON from leaking into chat text
+# Make each chat its own data-aware ecosystem
 
-The model emitted the clarify payload as **plain assistant text** instead of calling `ask_clarifying_questions`. Result: the user saw raw JSON in the chat, no pill-shaped card. Fix on both ends — make it less likely to happen (prompt), and bullet-proof it when it does (server-side guard).
+## Goal
 
-## 1. Prompt hardening (`prompts.slug = 'chat.main'`)
+Yes — fully possible. Today the assistant only has "do" tools (create job, source candidates, draft posts, draft outreach, ask clarifying questions). It has no way to *read* what's already in the conversation, so if you ask "what's the salary range on this job?", "who are my top 5 candidates here?", or "what did the outreach draft say?", it can only guess from the chat transcript.
 
-Add an explicit "how to ask" rule near the existing clarify rules:
+Fix: add a small set of read-only "context" tools, scoped to the current `conversation_id` + `user_id`, that the model can call on demand. The model already knows when to call tools — we just need to give it eyes into the conversation's data.
 
-> When you need to ask the user a structured question (countries to target, seniority levels, languages, etc.), you MUST call the `ask_clarifying_questions` tool. NEVER write the question JSON in your assistant message. NEVER paste `{"intro":...,"questions":[...]}` or any tool-shaped payload into chat text. If you find yourself about to type that JSON, stop and emit a tool call instead. Do not narrate "I sent a picker" before the tool actually runs.
+## What it will be able to answer (examples)
 
-Apply via a migration that appends to the chat.main body and bumps `version` (same shape as the formatting-rule migration we did earlier).
+- "What's the JD for this role again?" → reads `jobs` row for this conversation
+- "How many candidates did we source? What's the breakdown by location/seniority?" → aggregates `candidates`
+- "Tell me about Maria Lopez" → reads that `candidates` row (experience, education, match breakdown)
+- "What does the LinkedIn outreach say?" → reads `outreach_drafts`
+- "What channels is the job post going to?" → reads `job_posts`
+- "Who haven't we contacted yet?" / "Who's starred?" → filters `candidates`
 
-## 2. Server-side safety net (`src/routes/api/chat.ts`)
+## Implementation
 
-When the model leaks the clarify payload as text, recover it instead of showing it.
+### New read tools in `src/routes/api/chat.ts`
 
-After `streamCompletion` returns on each iteration, scan the assistant `text` for an embedded clarify JSON object (a `{...}` blob containing a `questions` array whose items look like `{id,label,type}`). If found:
+Add to the `tools` array (alongside the existing action tools), all scoped server-side to `conversation_id = :conv AND user_id = :user`:
 
-- Parse + validate it with the same normalization used in the `ask_clarifying_questions` branch (id/label/type/options/placeholder/allow_other, max 4 questions).
-- Insert a real `agent_tasks` row with `kind: 'clarify'` and emit `send("task", ...)` so the pretty card renders, exactly like a real tool call.
-- Strip the JSON blob from the assistant text before it gets accumulated into `preText` / `postText` and persisted. Also strip any adjacent "I sent a quick picker…" sentence that references it (simple: drop the line containing the JSON, and trim trailing/leading blank lines).
-- Re-emit a `delta` correction is too messy; instead, after stripping, send a new SSE event (e.g. `text_replace`) carrying the cleaned text so the client can replace what it already streamed.
+1. **`get_conversation_context`** — no args. Returns a compact snapshot: job (title, location, salary, must/nice/screening), candidate count + stage breakdown, whether outreach + job_post exist. Cheap, used as the model's "what's in this chat?" probe.
+2. **`get_job`** — returns the full `jobs` row for the conversation.
+3. **`list_candidates`** — args: optional `stage`, `starred`, `min_match`, `limit` (default 20, max 50). Returns name, company, role, location, match, stage, starred, tags, source, contacted_at.
+4. **`get_candidate`** — args: `candidate_id` OR `name` (fuzzy). Returns full profile incl. experience, education, match_breakdown, activity.
+5. **`get_outreach_draft`** — returns the `outreach_drafts` row (subject, body, LinkedIn template, followups, tone, settings).
+6. **`get_job_post`** — returns `job_posts` row (variants, channels, schedule, est_reach, status).
 
-To avoid client churn: simplest is to detect the leak **before** the first `delta` is forwarded — buffer text until we know whether it looks like a clarify leak. That adds latency to every message. Better trade-off: send deltas live as today, and on detection send a single `clarify_recovered` SSE event with `{ cleaned_text, task }`; the client replaces the in-flight assistant bubble's content with `cleaned_text` and inserts the task card. Persisted DB row uses the cleaned text.
+All execute via `supabaseAdmin` with explicit `eq("conversation_id", …).eq("user_id", …)` filters — never trust model-supplied ids without that scope. Results returned as the `tool` message in the existing loop, so the model can cite them in its reply.
 
-### Detection regex / shape
+### Prompt update (`chat.main`)
 
-Match `\{[^{}]*"questions"\s*:\s*\[[\s\S]*?\]\s*[^{}]*\}` with brace-balance verification (count `{` / `}`). Validate parsed object has `Array.isArray(obj.questions)` and at least one item with string `id` and `label`. Reject if it doesn't validate.
+Append a short rule via a new migration to `prompts` (bumping version):
 
-### Client change (`src/routes/_authenticated/app.c.$id.tsx`)
+> You have read-only tools to inspect this conversation's data: `get_conversation_context`, `get_job`, `list_candidates`, `get_candidate`, `get_outreach_draft`, `get_job_post`. When the user asks anything about the job, candidates, outreach, or job post in this chat — even casually ("how many?", "who is X?", "what does the post say?") — call the relevant tool first, then answer in prose grounded in real data. Never invent counts, names, or content. If a tool returns empty, say so plainly.
 
-Handle the new SSE event:
-- On `clarify_recovered`: replace the currently-streaming assistant message's content with `cleaned_text`; append the recovered task into the per-message task list (same path as `task` events).
+Also: on the *first* user message of a session where any artifact exists, the model should call `get_conversation_context` once to ground itself.
 
-No new dependencies. No DB schema changes.
+### Guard interaction
 
-## Technical notes
+The existing `looksLikeFollowUpQuestion` guard disables tools for "why/what/how" questions to keep the model from re-sourcing. These new read tools are safe and cheap — so we'll exempt them: when the guard fires, we'll pass `tools: [readTools]` (with `tool_choice: "auto"`) instead of `tools: undefined`. That way "why 12 candidates?" still won't trigger `source_candidates`, but the model *can* call `list_candidates` to actually look.
 
-- Files touched: `src/routes/api/chat.ts` (detection + new SSE event), `src/routes/_authenticated/app.c.$id.tsx` (handle new event), plus a prompt migration row.
-- Same recovery logic applies to any future tool-shaped JSON leaks, but for now we only handle clarify (the only case observed).
-- Public guest chat (`src/routes/api/public/guest-chat.ts`) is a separate handler — out of scope unless the same leak shows up there; flag it for later if needed.
+### No DB schema changes
+
+All data already lives in `jobs`, `candidates`, `outreach_drafts`, `job_posts`, scoped by `conversation_id`. RLS already protects them; the admin client + explicit user_id filter keeps the server path safe.
+
+## Out of scope (call out if you want them too)
+
+- Cross-conversation queries ("across all my jobs, who's my best PM candidate?") — would need a separate global tool set.
+- Editing data via chat ("mark Maria as contacted") — read-only for now; can add write tools in a follow-up.
+- Vector/semantic search over candidates — current filters are SQL-only.
+
+## Files touched
+
+- `src/routes/api/chat.ts` — add 6 tool definitions + 6 handler branches in the tool-execution switch; tweak the guard branch to allow read tools through.
+- `supabase/migrations/<new>.sql` — append the read-tools rule to the `chat.main` prompt and bump its version.
