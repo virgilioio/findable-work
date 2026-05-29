@@ -696,6 +696,17 @@ function JobPanel({
       : "";
 
   useEffect(() => setForm(job), [job.id]);
+  // Resync server-managed fields when the conversation query refetches
+  // (publish/unpublish updates published/slug/status without changing id).
+  useEffect(() => {
+    setForm((prev) => ({
+      ...prev,
+      published: job.published,
+      published_at: job.published_at,
+      slug: job.slug,
+      status: job.status,
+    }));
+  }, [job.published, job.published_at, job.slug, job.status]);
 
   async function save(patch: Partial<Job>) {
     setSaving(true);
