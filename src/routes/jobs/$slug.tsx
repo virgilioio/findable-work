@@ -3,6 +3,7 @@ import { useRef, useState } from "react";
 import { Logo, Folder, Check as CheckIcon, Sparkle, Doc, X } from "@/components/findable-icons";
 import { cn } from "@/lib/utils";
 import { getPublicJob } from "@/lib/public-jobs.functions";
+import { Markdown } from "@/components/ui/markdown";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 

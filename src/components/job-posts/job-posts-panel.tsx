@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Megaphone, Copy, Sparkle, Linkedin } from "@/components/findable-icons";
 import { updateJobPost, regenerateJobPosts } from "@/lib/job-posts.functions";
+import { Markdown } from "@/components/ui/markdown";
 import {
   Dialog,
   DialogContent,
