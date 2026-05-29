@@ -174,6 +174,21 @@ async function callGateway(messages: ChatMessage[], apiKey: string): Promise<Res
   });
 }
 
+// Heuristic: looks like a follow-up question about existing results rather
+// than a request to do/produce something new. When true, we steer the model
+// away from tool-calling (especially the destructive/expensive sourcing and
+// clarifying-question tools) so it answers in prose using prior context.
+function looksLikeFollowUpQuestion(text: string): boolean {
+  const t = text.trim().toLowerCase();
+  if (t.length === 0 || t.length > 280) return false;
+  if (!/[?]/.test(t) && !/^(why|what|how|when|who|where|which|can you (explain|tell|show)|tell me)\b/.test(t))
+    return false;
+  // Imperative verbs that imply "do something new" — bail out, let tools run.
+  if (/\b(find|source|pull|search|add|create|draft|post|publish|schedule|send|reach out|outreach|generate|build|make|broaden|redo|retry|try again|do it|go ahead)\b/.test(t))
+    return false;
+  return true;
+}
+
 export const Route = createFileRoute("/api/chat")({
   server: {
     handlers: {
