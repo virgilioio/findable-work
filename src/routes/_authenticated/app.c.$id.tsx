@@ -256,7 +256,6 @@ function ConversationPage() {
               icon={<Briefcase size={14} />}
               label="Job"
               pulse={pulse && tab !== "job"}
-              closable
             />
           )}
           {jobPost && (
