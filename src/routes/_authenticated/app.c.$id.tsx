@@ -748,10 +748,19 @@ function JobPanel({
   const unpub = useServerFn(unpublishJob);
   const regen = useServerFn(regenerateScreening);
   const listApps = useServerFn(listApplications);
-  const [form, setForm] = useState<Job>(job);
+  // Normalize: backfill summary/must_have from legacy description/requirements
+  // so existing jobs still render the standard structure.
+  const normalize = (j: Job): Job => ({
+    ...j,
+    summary: j.summary ?? j.description ?? "",
+    responsibilities: j.responsibilities ?? [],
+    must_have: j.must_have && j.must_have.length ? j.must_have : (j.requirements ?? []),
+    nice_to_have: j.nice_to_have ?? [],
+  });
+  const [form, setForm] = useState<Job>(() => normalize(job));
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [editing, setEditing] = useState<boolean>(!job.description);
+  const [editing, setEditing] = useState<boolean>(!(job.summary || job.description));
   const [duplicating, setDuplicating] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [statusMenu, setStatusMenu] = useState(false);
@@ -769,7 +778,7 @@ function JobPanel({
       ? `${window.location.origin}/jobs/${form.slug}`
       : "";
 
-  useEffect(() => setForm(job), [job.id]);
+  useEffect(() => setForm(normalize(job)), [job.id]);
   // Resync server-managed fields when the conversation query refetches
   // (publish/unpublish updates published/slug/status without changing id).
   useEffect(() => {
@@ -787,12 +796,20 @@ function JobPanel({
     try {
       const next = { ...form, ...patch };
       setForm(next);
+      // Mirror must_have into legacy `requirements` so screening generation
+      // and other callers that still read `requirements` stay populated.
+      const mirroredReqs =
+        patch.must_have !== undefined ? (next.must_have ?? []) : next.requirements;
       await update({
         data: {
           conversationId,
           title: next.title,
           description: next.description,
-          requirements: next.requirements,
+          requirements: mirroredReqs,
+          summary: next.summary,
+          responsibilities: next.responsibilities,
+          must_have: next.must_have,
+          nice_to_have: next.nice_to_have,
           location: next.location,
           employment_type: next.employment_type as any,
           salary_min: next.salary_min,
@@ -808,7 +825,9 @@ function JobPanel({
     }
   }
 
-  const reqText = useMemo(() => form.requirements.join("\n"), [form.requirements]);
+  const respText = useMemo(() => (form.responsibilities ?? []).join("\n"), [form.responsibilities]);
+  const mustText = useMemo(() => (form.must_have ?? []).join("\n"), [form.must_have]);
+  const niceText = useMemo(() => (form.nice_to_have ?? []).join("\n"), [form.nice_to_have]);
   const published = Boolean(form.published);
   const statusLabel = published ? "Live" : "Draft";
 
