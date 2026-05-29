@@ -4,7 +4,13 @@
 
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { openaiChat } from "./openai.server";
-import { budgetSearchCriteria, currentPeriod, linkedinSlug, type SearchCriteria } from "./budget";
+import {
+  budgetSearchCriteria,
+  currentPeriod,
+  detectAmbiguousRegion,
+  linkedinSlug,
+  type SearchCriteria,
+} from "./budget";
 import { searchApolloWithFallback, enrichApolloProfiles } from "./apollo.server";
 import { searchPdl, PdlQuotaError } from "./pdl.server";
 import { getPrompt } from "@/lib/prompts/registry.server";
@@ -107,6 +113,11 @@ export type SourceResult = {
   requested: number;
   pool_limited: boolean;
   broadened: boolean;
+  needs_clarification?: {
+    reason: "ambiguous_region";
+    region: string;
+    suggested_countries: string[];
+  };
 };
 
 export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
