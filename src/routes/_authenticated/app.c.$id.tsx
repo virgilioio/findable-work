@@ -424,6 +424,9 @@ function TabButton({
 function ChatPanel({
   messages,
   streaming,
+  reasoning,
+  streamStart,
+  streamEnd,
   sending,
   onSend,
   text,
@@ -436,6 +439,9 @@ function ChatPanel({
 }: {
   messages: Message[];
   streaming: string;
+  reasoning: string;
+  streamStart: number;
+  streamEnd: number;
   sending: boolean;
   onSend: (text: string) => void;
   text: string;
