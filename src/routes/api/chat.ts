@@ -920,6 +920,20 @@ export const Route = createFileRoute("/api/chat")({
                     });
                   }
                 } else if (call.name === "ask_clarifying_questions") {
+                  if (clarifyEmittedThisTurn) {
+                    toolResults.push({
+                      role: "tool",
+                      tool_call_id: call.id ?? "",
+                      name: "ask_clarifying_questions",
+                      content: JSON.stringify({
+                        ok: false,
+                        reason: "already_asked",
+                        message:
+                          "A clarify card was already shown this turn. Do not ask again — wait for the user's answers, then ask any follow-ups in the next turn.",
+                      }),
+                    });
+                    continue;
+                  }
                   const questions = Array.isArray(args.questions) ? args.questions.slice(0, 4) : [];
                   const intro = typeof args.intro === "string" ? args.intro.slice(0, 240) : "";
                   const normalized = questions.map((q: any, i: number) => ({
@@ -948,6 +962,7 @@ export const Route = createFileRoute("/api/chat")({
                   if (clarifyTask) {
                     allTaskIds.push(clarifyTask.id);
                     send("task", clarifyTask);
+                    clarifyEmittedThisTurn = true;
                   }
                   toolResults.push({
                     role: "tool",
