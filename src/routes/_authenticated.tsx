@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/_authenticated")({
   beforeLoad: async ({ location }) => {
+    if (typeof window === "undefined") return;
     const { data, error } = await supabase.auth.getUser();
     if (error || !data.user) {
       console.info("[auth] _authenticated guard redirecting to /login", {
