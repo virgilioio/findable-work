@@ -533,7 +533,7 @@ function TimelineRow({
           pulse && "animate-pulse",
         )}
       >
-        <Logo size={14} />
+        <ChatGlyph size={14} />
       </span>
       <div className="min-w-0 flex-1">{children}</div>
     </div>

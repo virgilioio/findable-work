@@ -160,3 +160,18 @@ export const AppIcon = ({
     {...rest}
   />
 );
+
+// Inline 4-point sparkle glyph used as the assistant marker in chat rows.
+// Uses currentColor so it inherits text color.
+export const ChatGlyph = ({ size = 14, ...rest }: IconProps) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="26 26 148 148"
+    fill="currentColor"
+    aria-hidden="true"
+    {...rest}
+  >
+    <path d="M 173.242188 99.695312 C 118.753906 123.894531 123.894531 118.75 99.695312 173.242188 C 75.5 118.75 80.640625 123.890625 26.148438 99.695312 C 80.640625 75.5 75.5 80.644531 99.695312 26.152344 C 123.894531 80.640625 118.753906 75.5 173.242188 99.695312 Z" />
+  </svg>
+);
