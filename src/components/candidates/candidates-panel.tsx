@@ -53,6 +53,25 @@ export function CandidatesPanel({
     setSelectedIds(new Set());
   }, [conversationId]);
 
+  // Realtime: refresh candidates list (and toast) when a new application lands.
+  useEffect(() => {
+    const channel = supabase
+      .channel(`apps-${conversationId}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "applications" },
+        (payload) => {
+          const row = payload.new as { name?: string };
+          qc.invalidateQueries({ queryKey: ["candidates", conversationId] });
+          toast.success(`New applicant: ${row?.name ?? "Someone"} just applied`);
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [conversationId, qc]);
+
   const counts = useMemo(() => {
     const c: Record<string, number> = { All: candidates.length };
     STAGES.forEach((s) => (c[s] = 0));
