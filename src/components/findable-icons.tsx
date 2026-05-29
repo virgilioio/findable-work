@@ -140,7 +140,7 @@ export const Wordmark = ({
     alt="findable.work"
     height={height}
     style={{ height, width: "auto" }}
-    className={className}
+    className={cn("dark:invert", className)}
     {...rest}
   />
 );
@@ -156,7 +156,7 @@ export const AppIcon = ({
     width={size}
     height={size}
     style={{ width: size, height: size }}
-    className={className}
+    className={cn("dark:invert", className)}
     {...rest}
   />
 );
