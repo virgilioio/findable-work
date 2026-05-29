@@ -1,89 +1,58 @@
-# Root cause: tasks become orphaned when the assistant-message link step is missed
+# Enforce a standard JD structure in the Job tab
 
-## What's actually happening
+Today the Job tab renders a free-form "Summary" markdown blob plus a single "Requirements" list. The database, the public job page, and the screening generator already support a proper JD structure (`summary`, `responsibilities`, `must_have`, `nice_to_have`), but the agent tool and the internal editor never use it — so every JD ends up as a wall of markdown. This plan makes the structure mandatory everywhere the JD is produced, stored, and edited internally.
 
-In `src/routes/api/chat.ts` the turn lifecycle is currently:
+## Target JD structure (fixed sections)
 
-1. Insert the user message (line 440).
-2. Stream the model. Every time a task card fires we insert into `agent_tasks` with `conversation_id` set but **`message_id = null`** (e.g. lines 659, 731, 853, 909, 973). The `id` is sent to the client via `send("task", ...)` so it renders as a live card.
-3. After the loop, insert the assistant message with the full content (lines 1232-1242).
-4. Then update every task in `allTaskIds` to point at the new `assistantMsg.id` (lines 1244-1251).
+Every Job tab and every agent-generated JD must have:
 
-The chat panel renders persisted tasks with `persistedTasks.filter(t => t.message_id === m.id)`. If step 4 is skipped or partially fails for **any** reason, the tasks stay in the DB with `message_id = null`, get fetched by `getConversation`, but match no message — so they vanish from the UI even though they're sitting right there in `agent_tasks`.
+1. **About the role** — one short paragraph (2–4 sentences), plain prose.
+2. **Responsibilities** — bulleted list ("What you'll do").
+3. **Must-have requirements** — bulleted list (hard requirements).
+4. **Nice to have** — bulleted list (optional).
+5. **Details** (right rail, unchanged) — location, employment type, compensation.
+6. **Application questions** (unchanged) — existing screening section.
 
-Step 4 silently fails or is skipped in several real situations:
-- Stream `try` throws after inserting tasks but before the message insert (any error in the closing prose pass, the forced-no-tools pass, the title update, etc. lands in the `catch` at line 1254 — linkage code never runs).
-- The assistant-message insert succeeds but returns no row (`assistantMsg` is null) — the guard `if (assistantMsg && allTaskIds.length > 0)` skips linkage.
-- The `.update().in()` call returns an error: no error check, no retry.
-- The client drops the connection partway (tab closed / refresh) — the request handler aborts mid-stream on the worker, message + linkage never happen, but the tasks are already in DB.
+No free-form markdown body. No mixed prose-and-bullets blob.
 
-This is exactly the "used to be stable, now disappears" pattern — the orphan window has always been there, but it became more exposed once we added more error-prone steps (reasoning channel, leak detector, forced closing-prose pass).
+## Changes
 
-## Fix (server, surgical)
+### 1. `src/routes/api/chat.ts` — `create_job` tool
 
-All edits in `src/routes/api/chat.ts`.
+- Replace the tool schema so the model is forced to emit the structured shape:
+  - `title` (required)
+  - `summary` (required, short paragraph)
+  - `responsibilities: string[]` (required, ≥3)
+  - `must_have: string[]` (required, ≥3)
+  - `nice_to_have: string[]` (optional)
+  - `location`, `employment_type`, `salary_min`, `salary_max`, `currency` (unchanged)
+- Drop the free-form `description` from the tool's required surface. Compose it server-side from the structured parts (markdown with `## What you'll do` / `## Must have` / `## Nice to have`) so downstream consumers (public `/jobs/$slug`, exports, anything reading `jobs.description`) keep working.
+- Persist all structured fields on the upsert (currently only `description` + `requirements` are written). Mirror `must_have` into `requirements` for back-compat with existing screening callers that still read `requirements`.
+- Update the agent system prompt section that documents `create_job` to spell out the required structure and forbid prose dumps in `summary`/`responsibilities` items.
 
-### 1. Create the assistant message FIRST, link tasks from the start
+### 2. `src/routes/_authenticated/app.c.$id.tsx` — `JobPanel`
 
-Right after we insert the user message (around line 445), insert an empty assistant row and remember its id:
+Rebuild the main column to render the fixed sections in order. Each section has the same view/edit pattern already used for Requirements (read = bulleted list, edit = textarea with one item per line; the paragraph sections use a single textarea).
 
-```ts
-const { data: assistantRow } = await supabaseAdmin
-  .from("messages")
-  .insert({
-    conversation_id: conversationId,
-    user_id: userId,
-    role: "assistant",
-    content: "",          // filled in at the end
-    tool_calls: null,
-  })
-  .select("id")
-  .single();
-const assistantMessageId = assistantRow?.id ?? null;
-```
+- **About the role** — bind to `form.summary`. View = paragraph. Edit = `<Textarea rows={4}>`. Autosave via existing `save({ summary })`. Remove the current Markdown render of `description`.
+- **Responsibilities** — bind to `form.responsibilities`. Same pattern as Requirements.
+- **Must-have requirements** — bind to `form.must_have`. Rename the existing "Requirements" section to this; keep the underlying list logic. On save, also mirror to `requirements` so legacy reads stay populated.
+- **Nice to have** — bind to `form.nice_to_have`. New section, identical pattern, hidden in view mode when empty (with a subtle "Add nice-to-haves" affordance in edit mode).
+- Empty-state copy for each section ("No responsibilities yet — ask the assistant to draft them, or click Edit to add your own.").
+- Keep the sub-header, right rail, publish controls, and Application Questions section exactly as they are.
 
-If `assistantMessageId` is null (rare DB failure), keep current behavior — but log loudly.
+### 3. `src/lib/jobs.functions.ts`
 
-### 2. Set `message_id` on every `agent_tasks` insert during the turn
+Already accepts `summary`, `responsibilities`, `must_have`, `nice_to_have` in the update schema — no schema change needed. Just confirm the `save()` calls from the new editor land cleanly (they will, since the zod schema is already permissive).
 
-Each of the 5 task inserts at lines 659, 731, 853, 909, 973 currently passes `{ user_id, conversation_id, kind, label, ... }`. Add `message_id: assistantMessageId` to every one of those payloads. This guarantees the task is bound to the assistant message at the moment it's created — no "later linkage" step needed.
+## Backward compatibility
 
-### 3. Replace the "insert assistant message" block at the end with an UPDATE
-
-At lines 1232-1251, instead of `insert`, do:
-
-```ts
-await supabaseAdmin
-  .from("messages")
-  .update({ content: combinedText, tool_calls: toolCallsForDb })
-  .eq("id", assistantMessageId);
-// Linkage step is no longer needed — tasks were inserted with message_id already set.
-send("done", { ok: true, candidates_added: candidatesAddedTotal, job: jobCreatedRow });
-```
-
-Drop the post-hoc `agent_tasks` UPDATE entirely. The `tasks_linked` SSE event also becomes unnecessary — the client doesn't need it once tasks are pre-linked.
-
-### 4. Make the error path safe
-
-Inside the existing `catch` at line 1254, also flush whatever prose has been accumulated so far into the assistant message UPDATE (don't leave it empty). Today an exception means the assistant row has `content = ""` and the user sees "no reply" — even if tasks succeeded. This costs us nothing and rescues partial turns.
-
-## Why this fixes "tasks disappear"
-
-- Tasks are linked atomically at creation, so any later failure cannot orphan them.
-- The assistant row exists from the start, so even a fatal mid-stream error leaves a real message + linked tasks that render correctly on refetch.
-- The "tasks_linked" race window goes to zero — no period where DB has tasks with `message_id = null`.
-
-## Frontend safety net (one tiny render-only change)
-
-In `src/routes/_authenticated/app.c.$id.tsx`, in the `messages.map` render, render any `persistedTasks` whose `message_id` matches OR (as a defensive fallback for any pre-existing orphan rows from before the fix) tasks with `message_id === null` attached to the **last** assistant message in the list. This is read-only, doesn't change DB, and immediately rescues any pre-existing orphans in the user's current conversations.
-
-## Files touched
-
-- `src/routes/api/chat.ts` — pre-create assistant message, set `message_id` on every task insert, switch end-of-stream insert → update, drop the linkage step.
-- `src/routes/_authenticated/app.c.$id.tsx` — render orphan tasks under the most recent assistant message as a safety net.
+- Existing jobs that only have `description` + `requirements` populated: the new editor falls back to showing `description` as the **About the role** paragraph if `summary` is empty, and treats `requirements` as **Must-have** if `must_have` is empty. Once the user edits and saves, the structured fields take over.
+- Public job page (`src/routes/jobs/$slug.tsx`) already prefers `must_have` over `requirements` and renders `responsibilities` / `nice_to_have` — no change needed.
 
 ## Out of scope
 
-- Prompt/migration changes.
-- Any change to ThinkingTicker, WorkingPill, TaskCard, ClarifyCard.
-- Stream protocol changes beyond removing the now-redundant `tasks_linked` event.
+- DB migrations (all columns already exist).
+- Public job page redesign.
+- Screening question generation (already reads `must_have` / `nice_to_have`).
+- ThinkingTicker / WorkingPill / task-card persistence (untouched).
