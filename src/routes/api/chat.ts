@@ -99,7 +99,7 @@ const askClarifyingQuestionsTool = {
   function: {
     name: "ask_clarifying_questions",
     description:
-      "Surface structured clarifying questions to the user as pill-shaped multi/single-select options (with optional free-text). ONLY call when (a) the user has asked for new sourcing or a new artifact and required info (role, location, seniority) is missing, OR (b) a previous search returned 0/limited results AND the user explicitly asked you to retry or broaden. NEVER call this in response to a follow-up question about results already on screen (e.g. 'why N candidates?', 'what's in the JD?', 'who is this person?') — answer those in prose using the conversation and tool history.",
+      "Surface structured clarifying questions to the user as pill-shaped multi/single-select options (with optional free-text). ONLY call when (a) the user has asked for new sourcing or a new artifact and required info (role, location, seniority) is missing, OR (b) a previous search returned 0/limited results AND the user explicitly asked you to retry or broaden. NEVER call this in response to a follow-up question about results already on screen (e.g. 'why N candidates?', 'what's in the JD?', 'who is this person?') — answer those in prose using the conversation and tool history. Call AT MOST ONCE per turn: bundle every question you need into a single call. If you need follow-ups after the user answers, ask them in the next turn.",
     parameters: {
       type: "object",
       additionalProperties: false,
@@ -639,6 +639,8 @@ export const Route = createFileRoute("/api/chat")({
               let markerSent = false;
               let firstToolCalls: StreamedToolCall[] = [];
               const convo: ChatMessage[] = [...baseMessages];
+              // Hard cap: at most one clarify card per assistant turn.
+              let clarifyEmittedThisTurn = false;
 
               // Pre-create the assistant message row so every agent_task we
               // insert during this turn can be linked to it from the start.
@@ -678,6 +680,14 @@ export const Route = createFileRoute("/api/chat")({
                 if (pass.toolCalls.length === 0) {
                   const leak = extractLeakedClarify(pass.text);
                   if (leak) {
+                    // Always strip the leaked JSON from what the user sees,
+                    // even if we suppress the duplicate card below.
+                    if (clarifyEmittedThisTurn) {
+                      pass.text = leak.cleaned;
+                      send("text_replace", {
+                        text: leak.cleaned,
+                      });
+                    } else {
                     const questions = Array.isArray(leak.payload.questions)
                       ? leak.payload.questions.slice(0, 4)
                       : [];
@@ -714,12 +724,14 @@ export const Route = createFileRoute("/api/chat")({
                     if (clarifyTask) {
                       allTaskIds.push(clarifyTask.id);
                       send("task", clarifyTask);
+                      clarifyEmittedThisTurn = true;
                     }
                     // Replace what the user sees with the cleaned text.
                     pass.text = leak.cleaned;
                     send("text_replace", {
                       content: (toolsRanAny ? preText + AFTER_TASKS_MARKER : "") + leak.cleaned,
                     });
+                    }
                   }
                 }
 
@@ -908,6 +920,20 @@ export const Route = createFileRoute("/api/chat")({
                     });
                   }
                 } else if (call.name === "ask_clarifying_questions") {
+                  if (clarifyEmittedThisTurn) {
+                    toolResults.push({
+                      role: "tool",
+                      tool_call_id: call.id ?? "",
+                      name: "ask_clarifying_questions",
+                      content: JSON.stringify({
+                        ok: false,
+                        reason: "already_asked",
+                        message:
+                          "A clarify card was already shown this turn. Do not ask again — wait for the user's answers, then ask any follow-ups in the next turn.",
+                      }),
+                    });
+                    continue;
+                  }
                   const questions = Array.isArray(args.questions) ? args.questions.slice(0, 4) : [];
                   const intro = typeof args.intro === "string" ? args.intro.slice(0, 240) : "";
                   const normalized = questions.map((q: any, i: number) => ({
@@ -936,6 +962,7 @@ export const Route = createFileRoute("/api/chat")({
                   if (clarifyTask) {
                     allTaskIds.push(clarifyTask.id);
                     send("task", clarifyTask);
+                    clarifyEmittedThisTurn = true;
                   }
                   toolResults.push({
                     role: "tool",
