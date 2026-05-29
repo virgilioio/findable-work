@@ -82,6 +82,7 @@ type Job = {
   status: string;
   slug?: string | null;
   published?: boolean;
+  published_at?: string | null;
   company?: string;
   screening?: Array<{
     id: string;
