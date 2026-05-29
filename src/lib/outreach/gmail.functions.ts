@@ -350,8 +350,8 @@ export const replyInThread = createServerFn({ method: "POST" })
       to: cand.email,
       subject,
       body: data.body,
-      inReplyTo: lastInbound?.gmail_message_id,
-      references: lastInbound?.gmail_message_id,
+      inReplyTo: lastInbound?.gmail_message_id ?? undefined,
+      references: lastInbound?.gmail_message_id ?? undefined,
     });
 
     const res = await callAsAppUser({
