@@ -1,6 +1,7 @@
 import * as React from "react";
 import wordmarkUrl from "@/assets/findable-wordmark.svg";
 import appIconUrl from "@/assets/findable-app-icon.svg";
+import { cn } from "@/lib/utils";
 
 type IconProps = React.SVGProps<SVGSVGElement> & {
   size?: number;
@@ -140,7 +141,7 @@ export const Wordmark = ({
     alt="findable.work"
     height={height}
     style={{ height, width: "auto" }}
-    className={className}
+    className={cn("dark:invert", className)}
     {...rest}
   />
 );
@@ -156,7 +157,7 @@ export const AppIcon = ({
     width={size}
     height={size}
     style={{ width: size, height: size }}
-    className={className}
+    className={cn("dark:invert", className)}
     {...rest}
   />
 );
