@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable";
@@ -188,9 +188,9 @@ function LoginPage() {
         <a href="#" className="hover:text-[var(--text-mute)]">
           Terms
         </a>
-        <a href="#" className="hover:text-[var(--text-mute)]">
+        <Link to="/privacy" className="hover:text-[var(--text-mute)]">
           Privacy
-        </a>
+        </Link>
       </div>
     </div>
   );
