@@ -671,12 +671,31 @@ function JobPanel({
   const qc = useQueryClient();
   const update = useServerFn(updateJob);
   const dupe = useServerFn(duplicateJob);
+  const pub = useServerFn(publishJob);
+  const unpub = useServerFn(unpublishJob);
+  const regen = useServerFn(regenerateScreening);
+  const saveScreening = useServerFn(updateScreening);
+  const listApps = useServerFn(listApplications);
   const [form, setForm] = useState<Job>(job);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState<boolean>(!job.description);
   const [duplicating, setDuplicating] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [statusMenu, setStatusMenu] = useState(false);
+
+  const { data: applications } = useQuery({
+    queryKey: ["applications", conversationId],
+    queryFn: () => listApps({ data: { conversationId } }),
+    enabled: Boolean(form.published),
+    refetchInterval: 15000,
+  });
+  const applicantCount = (applications ?? []).length;
+
+  const publicUrl =
+    form.slug && typeof window !== "undefined"
+      ? `${window.location.origin}/jobs/${form.slug}`
+      : "";
 
   useEffect(() => setForm(job), [job.id]);
 
@@ -707,8 +726,8 @@ function JobPanel({
   }
 
   const reqText = useMemo(() => form.requirements.join("\n"), [form.requirements]);
-  const statusLabel = form.status.charAt(0).toUpperCase() + form.status.slice(1);
-  const published = form.status === "open";
+  const published = Boolean(form.published);
+  const statusLabel = published ? "Live" : "Draft";
 
   async function handleDuplicate() {
     setDuplicating(true);
@@ -728,10 +747,40 @@ function JobPanel({
     if (published) return;
     setPublishing(true);
     try {
-      await save({ status: "open" });
-      toast.success("Job published");
+      await pub({ data: { conversationId } });
+      await qc.invalidateQueries({ queryKey: ["conversation", conversationId] });
+      toast.success("Job is now live");
     } finally {
       setPublishing(false);
+    }
+  }
+
+  async function handleUnpublish() {
+    setPublishing(true);
+    try {
+      await unpub({ data: { conversationId } });
+      await qc.invalidateQueries({ queryKey: ["conversation", conversationId] });
+      toast("Job unpublished");
+    } finally {
+      setPublishing(false);
+      setStatusMenu(false);
+    }
+  }
+
+  function copyLink() {
+    if (!publicUrl) return;
+    navigator.clipboard.writeText(publicUrl);
+    toast.success("Link copied");
+    setStatusMenu(false);
+  }
+
+  async function handleRegenScreening() {
+    try {
+      await regen({ data: { conversationId } });
+      await qc.invalidateQueries({ queryKey: ["conversation", conversationId] });
+      toast.success("Screening questions regenerated");
+    } catch (e: any) {
+      toast.error(e?.message ?? "Couldn't regenerate questions");
     }
   }
 
