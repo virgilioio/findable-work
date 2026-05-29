@@ -4,6 +4,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { Markdown } from "@/components/ui/markdown";
 import { getConversation } from "@/lib/conversations.functions";
 import {
   updateJob,
@@ -649,8 +651,8 @@ function MessageRow({
   }
   return (
     <TimelineRow pulse={streaming && !content}>
-      <div className="prose prose-sm max-w-none text-[14px] text-text dark:prose-invert prose-p:my-2 prose-headings:mb-2 prose-headings:mt-4 prose-code:text-text">
-        <ReactMarkdown>{content || "…"}</ReactMarkdown>
+      <div className="prose prose-sm max-w-none text-[14px] text-text dark:prose-invert leading-7 prose-p:my-3 prose-p:leading-7 prose-headings:mt-5 prose-headings:mb-2 prose-ul:my-3 prose-ol:my-3 prose-li:my-1 prose-li:marker:text-text-faint prose-strong:text-text prose-code:text-text prose-code:bg-bg-bubble prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none prose-pre:bg-bg-bubble prose-pre:text-text prose-pre:rounded-lg prose-pre:p-3">
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{content || "…"}</ReactMarkdown>
         {streaming && content && <span className="caret" />}
       </div>
     </TimelineRow>
@@ -926,9 +928,11 @@ function JobPanel({
                 className="border-border bg-bg-elev text-[14px] leading-relaxed"
               />
             ) : (
-              <div className="whitespace-pre-wrap text-[14px] leading-relaxed text-text">
-                {form.description || <span className="text-text-faint">No summary yet.</span>}
-              </div>
+              form.description ? (
+                <Markdown className="text-[14px]">{form.description}</Markdown>
+              ) : (
+                <div className="text-[14px] leading-relaxed text-text-faint">No summary yet.</div>
+              )
             )}
           </section>
 
