@@ -81,7 +81,7 @@ const askClarifyingQuestionsTool = {
   function: {
     name: "ask_clarifying_questions",
     description:
-      "Surface structured clarifying questions to the user as pill-shaped multi/single-select options (with optional free-text). Use to gather info needed for great sourcing, or to broaden the brief after empty results.",
+      "Surface structured clarifying questions to the user as pill-shaped multi/single-select options (with optional free-text). ONLY call when (a) the user has asked for new sourcing or a new artifact and required info (role, location, seniority) is missing, OR (b) a previous search returned 0/limited results AND the user explicitly asked you to retry or broaden. NEVER call this in response to a follow-up question about results already on screen (e.g. 'why N candidates?', 'what's in the JD?', 'who is this person?') — answer those in prose using the conversation and tool history.",
     parameters: {
       type: "object",
       additionalProperties: false,
