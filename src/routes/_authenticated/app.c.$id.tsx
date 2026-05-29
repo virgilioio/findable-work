@@ -555,10 +555,12 @@ function ChatPanel({
               )}
               {(() => {
                 const { before, after } = splitAroundTasks(streaming);
+                const persistedIds = new Set(persistedTasks.map((p) => p.id));
+                const visibleLive = liveTasks.filter((t) => !persistedIds.has(t.id));
                 return (
                   <>
                     {before && <MessageRow role="assistant" content={before} streaming />}
-                    {liveTasks.map((t) => (
+                    {visibleLive.map((t) => (
                       <TimelineRow key={t.id}>
                         <TaskCard
                           task={t}
@@ -573,6 +575,15 @@ function ChatPanel({
                   </>
                 );
               })()}
+              {sending && (
+                <TimelineRow>
+                  <WorkingPill
+                    label={
+                      liveTasks.find((t) => t.status === "running")?.label ?? "Working"
+                    }
+                  />
+                </TimelineRow>
+              )}
             </div>
           )}
         </div>
