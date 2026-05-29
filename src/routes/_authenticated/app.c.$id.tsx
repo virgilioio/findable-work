@@ -542,12 +542,12 @@ function ChatPanel({
           })}
           {(streaming || liveTasks.length > 0 || sending || reasoning) && (
             <div className="space-y-4">
-              {(sending || reasoning) && (
+              {(reasoning || (sending && liveTasks.length === 0)) && (
                 <TimelineRow>
                   <ThinkingTicker
                     reasoning={reasoning}
                     active={sending}
-                    answered={Boolean(streaming)}
+                    answered={Boolean(streaming) || liveTasks.length > 0}
                     startedAt={streamStart}
                     endedAt={streamEnd || undefined}
                   />
@@ -575,7 +575,7 @@ function ChatPanel({
                   </>
                 );
               })()}
-              {sending && (
+              {sending && liveTasks.length > 0 && (
                 <TimelineRow>
                   <WorkingPill
                     label={
