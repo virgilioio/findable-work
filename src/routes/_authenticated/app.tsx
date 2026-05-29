@@ -17,7 +17,6 @@ import {
   setConversationPinned,
 } from "@/lib/conversations.functions";
 import { adminCheck } from "@/lib/prompts/prompts.functions";
-import { useTheme } from "@/hooks/use-theme";
 import {
   Logo,
   Wordmark,
