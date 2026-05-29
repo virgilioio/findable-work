@@ -81,6 +81,16 @@ type Job = {
   salary_max: number | null;
   currency: string;
   status: string;
+  slug?: string | null;
+  published?: boolean;
+  company?: string;
+  screening?: Array<{
+    id: string;
+    type: "select" | "multi" | "textarea";
+    question: string;
+    options?: string[];
+    required: boolean;
+  }>;
 };
 
 function ConversationPage() {
