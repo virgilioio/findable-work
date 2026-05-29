@@ -9,6 +9,7 @@ import { ClarifyCard, type ClarifyData } from "@/components/chat/clarify-card";
 import {
   Logo,
   AppIcon,
+  ChatGlyph,
   Wordmark,
   Send as SendIcon,
   Sparkle,
@@ -533,7 +534,7 @@ function TimelineRow({
           pulse && "animate-pulse",
         )}
       >
-        <Logo size={14} />
+        <ChatGlyph size={14} />
       </span>
       <div className="min-w-0 flex-1">{children}</div>
     </div>

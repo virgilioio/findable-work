@@ -21,6 +21,7 @@ import {
 import {
   Logo,
   AppIcon,
+  ChatGlyph,
   Chat as ChatIcon,
   Briefcase,
   Megaphone,
@@ -602,7 +603,7 @@ function TimelineRow({
           pulse && "animate-pulse",
         )}
       >
-        <Logo size={14} />
+        <ChatGlyph size={14} />
       </span>
       <div className="min-w-0 flex-1">{children}</div>
     </div>
