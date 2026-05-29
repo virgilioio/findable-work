@@ -1,29 +1,28 @@
-## Add footer to the `/` (homepage) route
+## Fix Google OAuth returning to landing page
 
-### Problem
-Google OAuth verification requires the homepage to include a visible link to the privacy policy. The current `/` page (guest preview) has no footer.
+### Root cause
+After Google OAuth, the browser redirects to `window.location.origin` (the `/` landing page). At that moment Supabase has not yet processed the OAuth code in the URL, so:
+- `beforeLoad` calls `getUser()` → returns null → no redirect
+- The component mounts and listens for a `CLAIM_PENDING_KEY` flag that is never set
+- When Supabase finally completes the code exchange and fires `SIGNED_IN`, **nothing is listening** → user is stuck on landing page
 
-### Solution
-Add a minimal single-line footer at the bottom of the `HomePage` component in `src/routes/index.tsx`.
+### Fix
 
-### Changes
-1. **Import `Link`** from `@tanstack/react-router` (already imported for privacy/terms pages).
-2. **Add a `<Footer />` component** inside `src/routes/index.tsx` placed right before the closing `</div>` of the main container (after `<AuthDialog>`).
-3. **Footer content** (centered, minimal):
-   - `Wordmark` logo (height 20px)
-   - Separator dot
-   - `Link to="/privacy"` — Privacy Policy
-   - `Link to="/terms"` — Terms of Service
-   - Separator dot  
-   - `mailto:support@findable.work` — Contact
-   - Separator dot
-   - `© 2026 Virgilio Technologies LLC`
-4. **Styling** using existing design tokens:
-   - `border-t border-border`
-   - `bg-bg`
-   - `text-[12px] text-text-faint`
-   - `py-4 px-5`
-   - centered flex row with `gap-3` and `items-center`
-   - links hover to `text-text-mute`
+**1. `src/components/auth/auth-dialog.tsx` + `src/routes/login.tsx`:** Before calling `lovable.auth.signInWithOAuth("google", ...)`, set `sessionStorage.setItem("findable:claim-pending", "1")` so the landing page knows to act on the returning session. (auth-dialog already runs claim flow on success; just need the flag set for the OAuth return round-trip.)
 
-### No other files changed.
+**2. `src/routes/index.tsx` (HomePage):** Add a `supabase.auth.onAuthStateChange` listener inside the hydrated effect. When `SIGNED_IN` fires:
+   - If `CLAIM_PENDING_KEY` is set AND there are messages in guest state → run `runClaim()` (existing function, navigates to `/app/c/$id`)
+   - Otherwise → `navigate({ to: "/app" })`
+   - Clear `CLAIM_PENDING_KEY` after handling
+
+This catches the late session hydration that happens after the OAuth redirect lands on `/`.
+
+**3. `src/routes/login.tsx`:** Same listener pattern — after OAuth returns to `/login`, navigate to redirect target on `SIGNED_IN`. (Currently only happens synchronously via `redirectToApp()` after `signInWithOAuth` returns, but that path is skipped when `result.redirected` is true.)
+
+### Files changed
+- `src/routes/index.tsx` — add `onAuthStateChange` listener for post-OAuth navigation
+- `src/routes/login.tsx` — set claim-pending flag before OAuth + listen for `SIGNED_IN` after return
+- `src/components/auth/auth-dialog.tsx` — set claim-pending flag before OAuth
+
+### Out of scope
+No backend / RLS / schema changes. No change to the OAuth provider config.
