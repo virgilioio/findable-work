@@ -2,6 +2,7 @@ import { createFileRoute, notFound } from "@tanstack/react-router";
 import { useState } from "react";
 import { Logo, Folder, Check as CheckIcon, Sparkle } from "@/components/findable-icons";
 import { cn } from "@/lib/utils";
+import { getPublicJob } from "@/lib/public-jobs.functions";
 
 type Screening = Array<{
   id: string;
@@ -32,22 +33,9 @@ type PublicJob = {
   published_at: string | null;
 };
 
-async function fetchPublicJob(slug: string, baseUrl: string): Promise<PublicJob | null> {
-  const url = `${baseUrl}/api/public/jobs/${encodeURIComponent(slug)}`;
-  const res = await fetch(url);
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error(`Failed to load job (${res.status})`);
-  return (await res.json()) as PublicJob;
-}
-
 export const Route = createFileRoute("/jobs/$slug")({
-  loader: async ({ params, location }) => {
-    // On the server, location.href is a full URL. On the client, derive origin.
-    const base =
-      typeof window === "undefined"
-        ? new URL(location.href).origin
-        : window.location.origin;
-    const job = await fetchPublicJob(params.slug, base);
+  loader: async ({ params }) => {
+    const job = (await getPublicJob({ data: { slug: params.slug } })) as PublicJob | null;
     if (!job) throw notFound();
     return { job };
   },
