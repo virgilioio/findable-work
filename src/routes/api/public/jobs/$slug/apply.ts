@@ -17,6 +17,21 @@ const baseSchema = z.object({
   linkedin: z.string().trim().max(300).optional().or(z.literal("")),
   location: z.string().trim().max(200).optional().or(z.literal("")),
   resume_filename: z.string().trim().max(255).optional().or(z.literal("")),
+  resume_path: z
+    .string()
+    .trim()
+    .max(300)
+    .regex(/^pending\/[A-Za-z0-9._-]+$/, "invalid path")
+    .optional()
+    .or(z.literal("")),
+  resume_size: z.number().int().min(1).max(10 * 1024 * 1024).optional(),
+  resume_mime: z
+    .enum([
+      "application/pdf",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ])
+    .optional(),
   answers: z.record(z.string().max(64), z.union([z.string().max(4000), z.array(z.string().max(120)).max(20)])),
 });
 
@@ -85,6 +100,34 @@ export const Route = createFileRoute("/api/public/jobs/$slug/apply")({
         }
         const input = parsed.data;
 
+        // If a resume_path was provided, verify the object actually exists in storage
+        // and re-read its real size before trusting any client-reported size.
+        let verifiedPath: string | null = null;
+        let verifiedSize: number | null = null;
+        let verifiedMime: string | null = null;
+        if (input.resume_path) {
+          const folder = "pending";
+          const filename = input.resume_path.slice(folder.length + 1);
+          const { data: objs, error: lsErr } = await supabaseAdmin.storage
+            .from("resumes")
+            .list(folder, { search: filename, limit: 1 });
+          if (lsErr) {
+            return Response.json({ error: "resume_lookup_failed" }, { status: 400 });
+          }
+          const obj = (objs || []).find((o) => o.name === filename);
+          if (!obj) {
+            return Response.json({ error: "resume_missing" }, { status: 400 });
+          }
+          const sz = (obj.metadata as any)?.size as number | undefined;
+          const mt = (obj.metadata as any)?.mimetype as string | undefined;
+          if (typeof sz === "number" && sz > 10 * 1024 * 1024) {
+            return Response.json({ error: "resume_too_large" }, { status: 400 });
+          }
+          verifiedPath = input.resume_path;
+          verifiedSize = typeof sz === "number" ? sz : input.resume_size ?? null;
+          verifiedMime = mt || input.resume_mime || null;
+        }
+
         // Enforce required screening fields server-side.
         const screening = (Array.isArray(job.screening) ? (job.screening as unknown as Screening) : []) ?? [];
         for (const q of screening) {
@@ -120,6 +163,9 @@ export const Route = createFileRoute("/api/public/jobs/$slug/apply")({
             linkedin: input.linkedin || null,
             location: input.location || null,
             resume_filename: input.resume_filename || null,
+            resume_url: verifiedPath,
+            resume_size: verifiedSize,
+            resume_mime: verifiedMime,
             answers: input.answers as any,
             screening: screening as any,
             status: "applied",
@@ -129,6 +175,23 @@ export const Route = createFileRoute("/api/public/jobs/$slug/apply")({
         if (insErr || !appRow) {
           console.error("[apply] insert failed", insErr?.message);
           return new Response("Error", { status: 500 });
+        }
+
+        // Move the resume from pending/ to applications/<id>/ for easier cleanup.
+        if (verifiedPath) {
+          const filename = verifiedPath.slice("pending/".length);
+          const finalPath = `applications/${appRow.id}/${filename}`;
+          const { error: mvErr } = await supabaseAdmin.storage
+            .from("resumes")
+            .move(verifiedPath, finalPath);
+          if (!mvErr) {
+            await supabaseAdmin
+              .from("applications")
+              .update({ resume_url: finalPath })
+              .eq("id", appRow.id);
+          } else {
+            console.warn("[apply] resume move failed", mvErr.message);
+          }
         }
 
         // Resolve recruiter's conversation for this job so the candidate is reachable from chat.

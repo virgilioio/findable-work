@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { updateCandidate, deleteCandidate, revealCandidatePhone } from "@/lib/candidates.functions";
-import { getApplication } from "@/lib/applications.functions";
+import { getApplication, getResumeSignedUrl } from "@/lib/applications.functions";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import {
@@ -295,6 +295,13 @@ function Overview({ c }: { c: Candidate }) {
               Applied via public job post on{" "}
               {new Date((app as any).created_at).toLocaleDateString()}
             </div>
+            {(app as any).resume_url && (
+              <ResumeRow
+                applicationId={(app as any).id}
+                filename={(app as any).resume_filename || "Resume"}
+                size={(app as any).resume_size || 0}
+              />
+            )}
             {Array.isArray((app as any).screening) &&
               (app as any).screening.length > 0 && (
                 <div className="mt-3 flex flex-col gap-3">
@@ -408,17 +415,33 @@ function Overview({ c }: { c: Candidate }) {
 }
 
 function Resume({ c }: { c: Candidate }) {
+  const fetchApp = useServerFn(getApplication);
+  const { data: app } = useQuery({
+    queryKey: ["application", c.application_id],
+    queryFn: () => fetchApp({ data: { id: c.application_id! } }),
+    enabled: Boolean(c.application_id),
+  });
+  const filename =
+    (app as any)?.resume_filename || `${c.name.replace(/\s+/g, "_")}_Resume.pdf`;
+  const size = (app as any)?.resume_size as number | undefined;
+  const hasFile = Boolean((app as any)?.resume_url);
   return (
     <div className="flex flex-col gap-4 px-5 pb-8 pt-4">
       <div className="flex items-center justify-between rounded-lg border border-border bg-bg-elev px-3.5 py-2.5">
         <div className="flex items-center gap-2">
           <Doc size={14} />
-          <span className="text-[13px] text-text">{c.name.replace(/\s+/g, "_")}_Resume.pdf</span>
-          <span className="font-mono text-[11.5px] text-text-faint">· 2 pages · 184 KB</span>
+          <span className="text-[13px] text-text">{filename}</span>
+          {size ? (
+            <span className="font-mono text-[11.5px] text-text-faint">
+              · {formatFileSize(size)}
+            </span>
+          ) : null}
         </div>
-        <button className="h-7 rounded-md border border-border-strong bg-bg-elev px-2.5 text-[12px] text-text">
-          Download
-        </button>
+        {hasFile && c.application_id ? (
+          <DownloadResumeButton applicationId={c.application_id} />
+        ) : (
+          <span className="text-[11.5px] text-text-faint">No file uploaded</span>
+        )}
       </div>
       <div className="relative min-h-[600px] rounded-md border border-border bg-white p-8 text-[#111] shadow-[0_4px_20px_rgba(0,0,0,0.06)]">
         <div className="text-[22px] font-bold tracking-tight text-[#111]">{c.name}</div>
@@ -456,6 +479,66 @@ function Resume({ c }: { c: Candidate }) {
         </ResumeSec>
       </div>
     </div>
+  );
+}
+
+function formatFileSize(n: number): string {
+  if (!n) return "";
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function ResumeRow({
+  applicationId,
+  filename,
+  size,
+}: {
+  applicationId: string;
+  filename: string;
+  size: number;
+}) {
+  return (
+    <div className="mt-3 flex items-center gap-2 rounded-md border border-border bg-bg-side px-2.5 py-2">
+      <Doc size={13} className="text-text-mute" />
+      <span className="flex-1 truncate text-[12.5px] text-text">{filename}</span>
+      {size > 0 && (
+        <span className="font-mono text-[11px] text-text-faint">{formatFileSize(size)}</span>
+      )}
+      <DownloadResumeButton applicationId={applicationId} label="Open" />
+    </div>
+  );
+}
+
+function DownloadResumeButton({
+  applicationId,
+  label = "Download",
+}: {
+  applicationId: string;
+  label?: string;
+}) {
+  const sign = useServerFn(getResumeSignedUrl);
+  const [loading, setLoading] = useState(false);
+  async function openIt() {
+    setLoading(true);
+    try {
+      const { url } = await sign({ data: { applicationId } });
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (e: any) {
+      toast.error(e?.message || "Couldn't open resume");
+    } finally {
+      setLoading(false);
+    }
+  }
+  return (
+    <button
+      type="button"
+      onClick={openIt}
+      disabled={loading}
+      className="h-7 rounded-md border border-border-strong bg-bg-elev px-2.5 text-[12px] text-text hover:bg-bg-hover disabled:opacity-60"
+    >
+      {loading ? "Opening…" : label}
+    </button>
   );
 }
 
