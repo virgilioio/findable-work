@@ -1,4 +1,4 @@
-import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, redirect, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import ReactMarkdown from "react-markdown";
@@ -470,7 +470,31 @@ function HomePage() {
           await runClaim();
         }}
       />
+      <Footer />
     </div>
+  );
+}
+
+function Footer() {
+  return (
+    <footer className="border-t border-border bg-bg px-5 py-4">
+      <div className="mx-auto flex max-w-[760px] flex-wrap items-center justify-center gap-x-3 gap-y-2 text-[12px] text-text-faint">
+        <Wordmark height={18} />
+        <span aria-hidden>·</span>
+        <Link to="/privacy" className="transition hover:text-text-mute">
+          Privacy
+        </Link>
+        <Link to="/terms" className="transition hover:text-text-mute">
+          Terms
+        </Link>
+        <span aria-hidden>·</span>
+        <a href="mailto:support@findable.work" className="transition hover:text-text-mute">
+          Contact
+        </a>
+        <span aria-hidden>·</span>
+        <span>© 2026 Virgilio Technologies LLC</span>
+      </div>
+    </footer>
   );
 }
 
