@@ -82,8 +82,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "twitter:card", content: "summary" },
       { name: "twitter:title", content: "findable | Agentic AI for finding talent" },
       { name: "twitter:description", content: "Build recruiting projects in seconds with findable. Use agentic AI to create JDs, source candidates, post jobs, schedule interviews, and hire faster." },
-      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/iM05FhWwZITw5zQUP1QfNJjzeoj1/social-images/social-1780002865862-findable_cover.webp" },
-      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/iM05FhWwZITw5zQUP1QfNJjzeoj1/social-images/social-1780002865862-findable_cover.webp" },
+      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/iM05FhWwZITw5zQUP1QfNJjzeoj1/social-images/social-1780072698882-findable_cover(1).webp" },
+      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/iM05FhWwZITw5zQUP1QfNJjzeoj1/social-images/social-1780072698882-findable_cover(1).webp" },
     ],
     links: [
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
