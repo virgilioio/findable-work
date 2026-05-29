@@ -608,17 +608,39 @@ export const Route = createFileRoute("/api/chat")({
               return { text: assistantText, toolCalls: Object.values(toolCalls) };
             }
 
+            // Hoisted so the catch block can flush partial state on error.
+            let preText = "";
+            let postText = "";
+            let assistantMessageId: string | null = null;
             try {
               const MAX_ITERS = 5;
               const allTaskIds: string[] = [];
               let candidatesAddedTotal = 0;
               let jobCreatedRow: any = null;
-              let preText = "";
-              let postText = "";
               let toolsRanAny = false;
               let markerSent = false;
               let firstToolCalls: StreamedToolCall[] = [];
               const convo: ChatMessage[] = [...baseMessages];
+
+              // Pre-create the assistant message row so every agent_task we
+              // insert during this turn can be linked to it from the start.
+              // This eliminates the orphan window where tasks would have
+              // message_id=null if the post-stream linkage step failed.
+              const { data: assistantRowPre, error: assistantPreErr } = await supabaseAdmin
+                .from("messages")
+                .insert({
+                  conversation_id: conversationId,
+                  user_id: userId,
+                  role: "assistant",
+                  content: "",
+                  tool_calls: null,
+                })
+                .select("id")
+                .single();
+              if (assistantPreErr) {
+                console.error("pre-create assistant message failed", assistantPreErr);
+              }
+              assistantMessageId = assistantRowPre?.id ?? null;
 
               for (let iter = 0; iter < MAX_ITERS; iter++) {
                 // First pass only: if the user's latest turn looks like a
@@ -661,6 +683,7 @@ export const Route = createFileRoute("/api/chat")({
                       .insert({
                         user_id: userId,
                         conversation_id: conversationId,
+                        message_id: assistantMessageId,
                         kind: "clarify",
                         label: intro || "A couple quick details to sharpen the search:",
                         status: "done",
@@ -733,6 +756,7 @@ export const Route = createFileRoute("/api/chat")({
                     .insert({
                       user_id: userId,
                       conversation_id: conversationId,
+                      message_id: assistantMessageId,
                       kind: "create_job",
                       label: "Job description drafted",
                       status: "done",
@@ -767,6 +791,7 @@ export const Route = createFileRoute("/api/chat")({
                     const result = await runSourcingAgent({
                       userId,
                       conversationId,
+                      messageId: assistantMessageId,
                       brief,
                       jobBrief: jobRow ?? undefined,
                       limit,
@@ -854,6 +879,7 @@ export const Route = createFileRoute("/api/chat")({
                     .insert({
                       user_id: userId,
                       conversation_id: conversationId,
+                      message_id: assistantMessageId,
                       kind: "clarify",
                       label: intro || "A couple quick details to sharpen the search:",
                       status: "done",
@@ -910,6 +936,7 @@ export const Route = createFileRoute("/api/chat")({
                       .insert({
                         user_id: userId,
                         conversation_id: conversationId,
+                        message_id: assistantMessageId,
                         kind: "create_job_posts",
                         label: `${artifact.variants.length} job post variants drafted`,
                         status: "done",
@@ -974,6 +1001,7 @@ export const Route = createFileRoute("/api/chat")({
                       .insert({
                         user_id: userId,
                         conversation_id: conversationId,
+                        message_id: assistantMessageId,
                         kind: "create_outreach",
                         label: "Outreach templates drafted",
                         status: "done",
@@ -1229,30 +1257,51 @@ export const Route = createFileRoute("/api/chat")({
               const combinedText = postText
                 ? `${preText}${AFTER_TASKS_MARKER}${postText}`
                 : preText;
-              const { data: assistantMsg } = await supabaseAdmin
-                .from("messages")
-                .insert({
-                  conversation_id: conversationId,
-                  user_id: userId,
-                  role: "assistant",
-                  content: combinedText,
-                  tool_calls: toolCallsForDb,
-                })
-                .select("id")
-                .single();
-
-              // Link all agent_tasks to this assistant message
-              if (assistantMsg && allTaskIds.length > 0) {
-                await supabaseAdmin
-                  .from("agent_tasks")
-                  .update({ message_id: assistantMsg.id })
-                  .in("id", allTaskIds);
-                send("tasks_linked", { message_id: assistantMsg.id, task_ids: allTaskIds });
+              if (assistantMessageId) {
+                const { error: updErr } = await supabaseAdmin
+                  .from("messages")
+                  .update({ content: combinedText, tool_calls: toolCallsForDb })
+                  .eq("id", assistantMessageId);
+                if (updErr) console.error("update assistant message failed", updErr);
+              } else {
+                // Fallback: pre-create failed earlier — insert now so the
+                // user still sees a reply, and best-effort link tasks.
+                const { data: assistantMsg } = await supabaseAdmin
+                  .from("messages")
+                  .insert({
+                    conversation_id: conversationId,
+                    user_id: userId,
+                    role: "assistant",
+                    content: combinedText,
+                    tool_calls: toolCallsForDb,
+                  })
+                  .select("id")
+                  .single();
+                if (assistantMsg && allTaskIds.length > 0) {
+                  await supabaseAdmin
+                    .from("agent_tasks")
+                    .update({ message_id: assistantMsg.id })
+                    .in("id", allTaskIds);
+                }
               }
 
               send("done", { ok: true, candidates_added: candidatesAddedTotal, job: jobCreatedRow });
             } catch (err) {
               console.error("chat stream error", err);
+              // Best-effort: flush whatever prose we accumulated so the user
+              // sees a partial reply instead of a blank assistant bubble.
+              if (assistantMessageId) {
+                const partial = postText
+                  ? `${preText}${AFTER_TASKS_MARKER}${postText}`
+                  : preText;
+                if (partial.trim()) {
+                  await supabaseAdmin
+                    .from("messages")
+                    .update({ content: partial })
+                    .eq("id", assistantMessageId)
+                    .then(undefined, (e) => console.error("partial flush failed", e));
+                }
+              }
               send("error", { message: err instanceof Error ? err.message : "stream error" });
             } finally {
               controller.close();

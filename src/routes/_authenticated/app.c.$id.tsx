@@ -513,8 +513,18 @@ function ChatPanel({
     <div className="flex flex-1 flex-col overflow-hidden">
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-[760px] space-y-6 px-4 py-10">
-          {messages.map((m) => {
-            const msgTasks = persistedTasks.filter((t) => t.message_id === m.id);
+          {(() => {
+            // Defensive: any persisted tasks whose message_id is null get
+            // pinned to the most recent assistant message so they still
+            // render instead of vanishing.
+            const lastAssistantId =
+              [...messages].reverse().find((m) => m.role === "assistant")?.id ?? null;
+            return messages.map((m) => {
+            const msgTasks = persistedTasks.filter(
+              (t) =>
+                t.message_id === m.id ||
+                (t.message_id === null && m.id === lastAssistantId && m.role === "assistant"),
+            );
             const { before, after } =
               m.role === "assistant"
                 ? splitAroundTasks(m.content)
@@ -539,7 +549,8 @@ function ChatPanel({
                 )}
               </div>
             );
-          })}
+            });
+          })()}
           {(streaming || liveTasks.length > 0 || sending || reasoning) && (
             <div className="space-y-4">
               {(reasoning || (sending && liveTasks.length === 0)) && (
