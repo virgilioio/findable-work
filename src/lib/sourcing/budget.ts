@@ -229,10 +229,21 @@ const REGION_ALIASES: Record<string, string[]> = {
 // Backfill aliases that reference others
 REGION_ALIASES["latin america"] = REGION_ALIASES.latam;
 
-function expandRegion(raw: string): string[] | null {
+/**
+ * If `raw` is a multi-country region acronym (LATAM, EMEA, APAC, ...), return
+ * the canonical region label + the typical country list to suggest to the
+ * user. Returns null for single-country / city / state inputs. The app must
+ * ask the user to pick countries instead of silently expanding — different
+ * countries inside a region have very different talent pools.
+ */
+export function detectAmbiguousRegion(
+  raw: string,
+): { region: string; suggestedCountries: string[] } | null {
   const key = raw.trim().toLowerCase();
   const hit = REGION_ALIASES[key];
-  return hit && hit.length > 0 ? hit : null;
+  if (!hit || hit.length === 0) return null;
+  // Canonical label = the input as the user wrote it, trimmed.
+  return { region: raw.trim(), suggestedCountries: hit };
 }
 
 /**
@@ -259,12 +270,12 @@ export function normalizeLocationForApollo(raw: string): string[] {
   if (parts.length === 0) return [];
 
   // Multi-country region (LATAM, EMEA, APAC, Nordics, DACH, ...).
-  // Only expand when the whole string is a region name — `parts.length === 1`
-  // catches "LATAM" but not "Mexico City, LATAM" (which is malformed anyway).
-  if (parts.length === 1) {
-    const region = expandRegion(parts[0]);
-    if (region) return region;
-  }
+  // We deliberately do NOT auto-expand here. Region acronyms are ambiguous
+  // (LATAM = 18 countries with very different markets) and silently expanding
+  // them led to wrong-region results. The sourcing entry points call
+  // `detectAmbiguousRegion` upfront and ask the user to pick countries
+  // instead. If a raw acronym still reaches Apollo it returns no matches —
+  // which is the right failure mode (better than wrong-country results).
 
   // Single token: could be city alias, country code, country name, or city
   if (parts.length === 1) {

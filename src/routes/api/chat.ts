@@ -440,6 +440,23 @@ export const Route = createFileRoute("/api/chat")({
                       candidatesAddedTotal += result.added;
                       send("candidates_added", { count: result.added });
                     }
+                    if (result.needs_clarification) {
+                      toolResults.push({
+                        role: "tool",
+                        tool_call_id: call.id ?? "",
+                        name: "source_candidates",
+                        content: JSON.stringify({
+                          ok: false,
+                          needs_clarification: result.needs_clarification,
+                          summary:
+                            `Region "${result.needs_clarification.region}" is ambiguous — ` +
+                            `it spans many countries. Ask the user which specific countries to target ` +
+                            `via ask_clarifying_questions (suggest the typical countries for this region as a multi-select). ` +
+                            `Do not retry source_candidates until they answer.`,
+                        }),
+                      });
+                      continue;
+                    }
                     toolResults.push({
                       role: "tool",
                       tool_call_id: call.id ?? "",
