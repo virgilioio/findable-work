@@ -162,6 +162,45 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
     throw e;
   }
 
+  // ── Guard: ambiguous multi-country region acronym ──────────────
+  // If the user (or LLM) gave only a region acronym (LATAM, EMEA, APAC, ...)
+  // as the location, refuse to search. Different countries inside a region
+  // have very different talent pools — the agent must ask the user which
+  // specific countries to target.
+  const candidateRegionTokens: string[] = [];
+  if (typeof normalized.location === "string" && normalized.location.trim()) {
+    // The normalize prompt may emit "City, State, Country" — scan each part.
+    for (const part of normalized.location.split(",")) candidateRegionTokens.push(part);
+  }
+  // Backstop: also scan the raw brief in case the LLM dropped the location
+  // (per the location.rules partial it should leave region acronyms empty).
+  for (const tok of brief.split(/[\s,/\-—–|()]+/)) candidateRegionTokens.push(tok);
+  let ambiguous: { region: string; suggestedCountries: string[] } | null = null;
+  for (const tok of candidateRegionTokens) {
+    const hit = detectAmbiguousRegion(tok);
+    if (hit) { ambiguous = hit; break; }
+  }
+  if (ambiguous) {
+    return {
+      preview_total: 0,
+      added: 0,
+      skipped: 0,
+      apollo_count: 0,
+      pdl_count: 0,
+      apollo_error: null,
+      pdl_error: null,
+      project_id: "",
+      requested: limit,
+      pool_limited: false,
+      broadened: false,
+      needs_clarification: {
+        reason: "ambiguous_region",
+        region: ambiguous.region,
+        suggested_countries: ambiguous.suggestedCountries,
+      },
+    };
+  }
+
   // ── 2. Research ─────────────────────────────────────────────────
   const tRes = await insertTask(userId, conversationId, "research", "Researching titles & companies");
   onTask(tRes);
