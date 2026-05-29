@@ -14,6 +14,7 @@ import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as JobsSlugRouteImport } from './routes/jobs/$slug'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
 import { Route as AuthenticatedAppRouteImport } from './routes/_authenticated/app'
 import { Route as AuthenticatedAppIndexRouteImport } from './routes/_authenticated/app.index'
@@ -46,6 +47,11 @@ const AuthenticatedRoute = AuthenticatedRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const JobsSlugRoute = JobsSlugRouteImport.update({
+  id: '/jobs/$slug',
+  path: '/jobs/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiChatRoute = ApiChatRouteImport.update({
@@ -102,6 +108,7 @@ export interface FileRoutesByFullPath {
   '/terms': typeof TermsRoute
   '/app': typeof AuthenticatedAppRouteWithChildren
   '/api/chat': typeof ApiChatRoute
+  '/jobs/$slug': typeof JobsSlugRoute
   '/admin/prompts': typeof AuthenticatedAdminPromptsRoute
   '/api/public/guest-chat': typeof ApiPublicGuestChatRoute
   '/app/': typeof AuthenticatedAppIndexRoute
@@ -116,6 +123,7 @@ export interface FileRoutesByTo {
   '/privacy': typeof PrivacyRoute
   '/terms': typeof TermsRoute
   '/api/chat': typeof ApiChatRoute
+  '/jobs/$slug': typeof JobsSlugRoute
   '/admin/prompts': typeof AuthenticatedAdminPromptsRoute
   '/api/public/guest-chat': typeof ApiPublicGuestChatRoute
   '/app': typeof AuthenticatedAppIndexRoute
@@ -133,6 +141,7 @@ export interface FileRoutesById {
   '/terms': typeof TermsRoute
   '/_authenticated/app': typeof AuthenticatedAppRouteWithChildren
   '/api/chat': typeof ApiChatRoute
+  '/jobs/$slug': typeof JobsSlugRoute
   '/_authenticated/admin/prompts': typeof AuthenticatedAdminPromptsRoute
   '/api/public/guest-chat': typeof ApiPublicGuestChatRoute
   '/_authenticated/app/': typeof AuthenticatedAppIndexRoute
@@ -150,6 +159,7 @@ export interface FileRouteTypes {
     | '/terms'
     | '/app'
     | '/api/chat'
+    | '/jobs/$slug'
     | '/admin/prompts'
     | '/api/public/guest-chat'
     | '/app/'
@@ -164,6 +174,7 @@ export interface FileRouteTypes {
     | '/privacy'
     | '/terms'
     | '/api/chat'
+    | '/jobs/$slug'
     | '/admin/prompts'
     | '/api/public/guest-chat'
     | '/app'
@@ -180,6 +191,7 @@ export interface FileRouteTypes {
     | '/terms'
     | '/_authenticated/app'
     | '/api/chat'
+    | '/jobs/$slug'
     | '/_authenticated/admin/prompts'
     | '/api/public/guest-chat'
     | '/_authenticated/app/'
@@ -196,6 +208,7 @@ export interface RootRouteChildren {
   PrivacyRoute: typeof PrivacyRoute
   TermsRoute: typeof TermsRoute
   ApiChatRoute: typeof ApiChatRoute
+  JobsSlugRoute: typeof JobsSlugRoute
   ApiPublicGuestChatRoute: typeof ApiPublicGuestChatRoute
   ApiPublicAuthEmailHookRoute: typeof ApiPublicAuthEmailHookRoute
   ApiPublicJobsSlugRoute: typeof ApiPublicJobsSlugRouteWithChildren
@@ -236,6 +249,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/jobs/$slug': {
+      id: '/jobs/$slug'
+      path: '/jobs/$slug'
+      fullPath: '/jobs/$slug'
+      preLoaderRoute: typeof JobsSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/chat': {
@@ -349,6 +369,7 @@ const rootRouteChildren: RootRouteChildren = {
   PrivacyRoute: PrivacyRoute,
   TermsRoute: TermsRoute,
   ApiChatRoute: ApiChatRoute,
+  JobsSlugRoute: JobsSlugRoute,
   ApiPublicGuestChatRoute: ApiPublicGuestChatRoute,
   ApiPublicAuthEmailHookRoute: ApiPublicAuthEmailHookRoute,
   ApiPublicJobsSlugRoute: ApiPublicJobsSlugRouteWithChildren,
