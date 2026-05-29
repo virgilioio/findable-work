@@ -150,6 +150,97 @@ const draftOutreachTool = {
   },
 };
 
+// ============================================================
+// Read-only context tools — scoped to the current conversation.
+// Safe to call any time; do not spend credits or create artifacts.
+// ============================================================
+
+const getConversationContextTool = {
+  type: "function" as const,
+  function: {
+    name: "get_conversation_context",
+    description:
+      "Snapshot of what exists in THIS conversation: whether a job/outreach/job_post has been created, candidate count + stage breakdown, and the job's title/location/salary. Call this first when the user asks a general question about the chat's state.",
+    parameters: { type: "object", additionalProperties: false, properties: {} },
+  },
+};
+
+const getJobTool = {
+  type: "function" as const,
+  function: {
+    name: "get_job",
+    description:
+      "Return the full Job for this conversation (title, description, requirements, must_have, nice_to_have, location, employment_type, salary, screening). Use when the user asks about the JD.",
+    parameters: { type: "object", additionalProperties: false, properties: {} },
+  },
+};
+
+const listCandidatesTool = {
+  type: "function" as const,
+  function: {
+    name: "list_candidates",
+    description:
+      "List candidates sourced in this conversation. Use to answer 'how many', 'who's starred', 'who haven't we contacted', breakdowns by stage/location, etc.",
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        stage: { type: "string", description: "Filter by stage (e.g. 'Sourced', 'Contacted', 'Replied')." },
+        starred: { type: "boolean", description: "Only starred candidates." },
+        contacted: { type: "boolean", description: "true = only contacted, false = only not contacted." },
+        min_match: { type: "number", description: "Minimum match score (0-100)." },
+        limit: { type: "number", description: "Default 25, max 100." },
+      },
+    },
+  },
+};
+
+const getCandidateTool = {
+  type: "function" as const,
+  function: {
+    name: "get_candidate",
+    description:
+      "Return one candidate's full profile (experience, education, match_breakdown, activity, contact info) by id OR fuzzy name match. Use when the user asks about a specific person.",
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        candidate_id: { type: "string", description: "UUID of the candidate, if known." },
+        name: { type: "string", description: "Full or partial name; case-insensitive substring match." },
+      },
+    },
+  },
+};
+
+const getOutreachDraftTool = {
+  type: "function" as const,
+  function: {
+    name: "get_outreach_draft",
+    description:
+      "Return the outreach draft for this conversation (LinkedIn template, email subject/body, follow-ups, tone, send settings).",
+    parameters: { type: "object", additionalProperties: false, properties: {} },
+  },
+};
+
+const getJobPostTool = {
+  type: "function" as const,
+  function: {
+    name: "get_job_post",
+    description:
+      "Return the job-post artifact for this conversation (3 variants, selected channels, schedule, estimated reach, status).",
+    parameters: { type: "object", additionalProperties: false, properties: {} },
+  },
+};
+
+const READ_TOOL_NAMES = new Set([
+  "get_conversation_context",
+  "get_job",
+  "list_candidates",
+  "get_candidate",
+  "get_outreach_draft",
+  "get_job_post",
+]);
+
 async function getUserFromRequest(request: Request): Promise<string | null> {
   const auth = request.headers.get("authorization");
   if (!auth?.startsWith("Bearer ")) return null;
@@ -231,8 +322,31 @@ function extractLeakedClarify(
 async function callGateway(
   messages: ChatMessage[],
   apiKey: string,
-  toolChoice?: "auto" | "none",
+  mode?: "all" | "read_only",
 ): Promise<Response> {
+  const tools =
+    mode === "read_only"
+      ? [
+          getConversationContextTool,
+          getJobTool,
+          listCandidatesTool,
+          getCandidateTool,
+          getOutreachDraftTool,
+          getJobPostTool,
+        ]
+      : [
+          createJobTool,
+          sourceCandidatesTool,
+          askClarifyingQuestionsTool,
+          draftJobPostsTool,
+          draftOutreachTool,
+          getConversationContextTool,
+          getJobTool,
+          listCandidatesTool,
+          getCandidateTool,
+          getOutreachDraftTool,
+          getJobPostTool,
+        ];
   return fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -240,8 +354,7 @@ async function callGateway(
       model: "openai/gpt-5-mini",
       stream: true,
       messages,
-      tools: [createJobTool, sourceCandidatesTool, askClarifyingQuestionsTool, draftJobPostsTool, draftOutreachTool],
-      ...(toolChoice ? { tool_choice: toolChoice } : {}),
+      tools,
     }),
   });
 }
@@ -336,9 +449,9 @@ export const Route = createFileRoute("/api/chat")({
             // Streams a gateway response and returns parsed { text, toolCalls }.
             async function streamCompletion(
               messages: ChatMessage[],
-              toolChoice?: "auto" | "none",
+              mode?: "all" | "read_only",
             ): Promise<{ text: string; toolCalls: StreamedToolCall[] }> {
-              const upstream = await callGateway(messages, apiKey!, toolChoice);
+              const upstream = await callGateway(messages, apiKey!, mode);
               if (!upstream.ok || !upstream.body) {
                 const text = await upstream.text().catch(() => "");
                 const errMsg =
@@ -410,9 +523,9 @@ export const Route = createFileRoute("/api/chat")({
                 // First pass only: if the user's latest turn looks like a
                 // follow-up question about existing results, disable tools so
                 // the model is forced to answer in prose from history.
-                const toolChoice =
-                  iter === 0 && looksLikeFollowUpQuestion(message) ? "none" : undefined;
-                const pass = await streamCompletion(convo, toolChoice);
+                const mode: "all" | "read_only" =
+                  iter === 0 && looksLikeFollowUpQuestion(message) ? "read_only" : "all";
+                const pass = await streamCompletion(convo, mode);
                 if (iter === 0) firstToolCalls = pass.toolCalls;
 
                 // Safety net: if the model wrote the clarify payload as text
@@ -777,6 +890,166 @@ export const Route = createFileRoute("/api/chat")({
                       content: JSON.stringify({ ok: true }),
                     });
                   }
+                } else if (call.name === "get_conversation_context") {
+                  const [{ data: job }, { data: outreach }, { data: jobPost }, { data: cands }] =
+                    await Promise.all([
+                      supabaseAdmin
+                        .from("jobs")
+                        .select("id,title,location,employment_type,salary_min,salary_max,currency,status")
+                        .eq("conversation_id", conversationId)
+                        .eq("user_id", userId)
+                        .maybeSingle(),
+                      supabaseAdmin
+                        .from("outreach_drafts")
+                        .select("id,channel,tone")
+                        .eq("conversation_id", conversationId)
+                        .eq("user_id", userId)
+                        .maybeSingle(),
+                      supabaseAdmin
+                        .from("job_posts")
+                        .select("id,status,est_reach")
+                        .eq("conversation_id", conversationId)
+                        .eq("user_id", userId)
+                        .maybeSingle(),
+                      supabaseAdmin
+                        .from("candidates")
+                        .select("stage,starred,contacted_at,location,match")
+                        .eq("conversation_id", conversationId)
+                        .eq("user_id", userId),
+                    ]);
+                  const stageBreakdown: Record<string, number> = {};
+                  let starredCount = 0;
+                  let contactedCount = 0;
+                  for (const c of cands ?? []) {
+                    stageBreakdown[c.stage] = (stageBreakdown[c.stage] ?? 0) + 1;
+                    if (c.starred) starredCount++;
+                    if (c.contacted_at) contactedCount++;
+                  }
+                  toolResults.push({
+                    role: "tool",
+                    tool_call_id: call.id ?? "",
+                    name: "get_conversation_context",
+                    content: JSON.stringify({
+                      ok: true,
+                      job: job ?? null,
+                      outreach_draft: outreach ?? null,
+                      job_post: jobPost ?? null,
+                      candidates: {
+                        total: cands?.length ?? 0,
+                        starred: starredCount,
+                        contacted: contactedCount,
+                        not_contacted: (cands?.length ?? 0) - contactedCount,
+                        by_stage: stageBreakdown,
+                      },
+                    }),
+                  });
+                } else if (call.name === "get_job") {
+                  const { data: job } = await supabaseAdmin
+                    .from("jobs")
+                    .select("*")
+                    .eq("conversation_id", conversationId)
+                    .eq("user_id", userId)
+                    .maybeSingle();
+                  toolResults.push({
+                    role: "tool",
+                    tool_call_id: call.id ?? "",
+                    name: "get_job",
+                    content: JSON.stringify(
+                      job ? { ok: true, job } : { ok: true, job: null, note: "No Job created in this conversation yet." },
+                    ),
+                  });
+                } else if (call.name === "list_candidates") {
+                  const limit = Math.min(Math.max(Number(args.limit) || 25, 1), 100);
+                  let q = supabaseAdmin
+                    .from("candidates")
+                    .select(
+                      "id,name,company,role,location,match,stage,starred,tags,source,contacted_at,contact_channel,email,phone,linkedin",
+                    )
+                    .eq("conversation_id", conversationId)
+                    .eq("user_id", userId)
+                    .order("match", { ascending: false })
+                    .limit(limit);
+                  if (typeof args.stage === "string") q = q.eq("stage", args.stage);
+                  if (typeof args.starred === "boolean") q = q.eq("starred", args.starred);
+                  if (typeof args.min_match === "number") q = q.gte("match", Math.round(args.min_match));
+                  if (args.contacted === true) q = q.not("contacted_at", "is", null);
+                  if (args.contacted === false) q = q.is("contacted_at", null);
+                  const { data: rows } = await q;
+                  toolResults.push({
+                    role: "tool",
+                    tool_call_id: call.id ?? "",
+                    name: "list_candidates",
+                    content: JSON.stringify({
+                      ok: true,
+                      count: rows?.length ?? 0,
+                      candidates: rows ?? [],
+                    }),
+                  });
+                } else if (call.name === "get_candidate") {
+                  let row: any = null;
+                  if (typeof args.candidate_id === "string" && args.candidate_id) {
+                    const { data } = await supabaseAdmin
+                      .from("candidates")
+                      .select("*")
+                      .eq("id", args.candidate_id)
+                      .eq("conversation_id", conversationId)
+                      .eq("user_id", userId)
+                      .maybeSingle();
+                    row = data;
+                  } else if (typeof args.name === "string" && args.name.trim()) {
+                    const { data } = await supabaseAdmin
+                      .from("candidates")
+                      .select("*")
+                      .eq("conversation_id", conversationId)
+                      .eq("user_id", userId)
+                      .ilike("name", `%${args.name.trim()}%`)
+                      .limit(1);
+                    row = data?.[0] ?? null;
+                  }
+                  toolResults.push({
+                    role: "tool",
+                    tool_call_id: call.id ?? "",
+                    name: "get_candidate",
+                    content: JSON.stringify(
+                      row
+                        ? { ok: true, candidate: row }
+                        : { ok: true, candidate: null, note: "No candidate matched." },
+                    ),
+                  });
+                } else if (call.name === "get_outreach_draft") {
+                  const { data: row } = await supabaseAdmin
+                    .from("outreach_drafts")
+                    .select("*")
+                    .eq("conversation_id", conversationId)
+                    .eq("user_id", userId)
+                    .maybeSingle();
+                  toolResults.push({
+                    role: "tool",
+                    tool_call_id: call.id ?? "",
+                    name: "get_outreach_draft",
+                    content: JSON.stringify(
+                      row
+                        ? { ok: true, outreach: row }
+                        : { ok: true, outreach: null, note: "No outreach draft on this chat yet." },
+                    ),
+                  });
+                } else if (call.name === "get_job_post") {
+                  const { data: row } = await supabaseAdmin
+                    .from("job_posts")
+                    .select("*")
+                    .eq("conversation_id", conversationId)
+                    .eq("user_id", userId)
+                    .maybeSingle();
+                  toolResults.push({
+                    role: "tool",
+                    tool_call_id: call.id ?? "",
+                    name: "get_job_post",
+                    content: JSON.stringify(
+                      row
+                        ? { ok: true, job_post: row }
+                        : { ok: true, job_post: null, note: "No job post drafted on this chat yet." },
+                    ),
+                  });
                 }
                 }
 
@@ -791,9 +1064,15 @@ export const Route = createFileRoute("/api/chat")({
                   })),
                 };
                 convo.push(assistantToolCallMsg, ...toolResults);
-                // Tools just executed in this pass. Emit the splitter marker
-                // once so the UI can render the "after tasks" text below the
-                // task cards rather than above them.
+                // Read-only tools don't emit task cards, so don't split the
+                // assistant message around them — only emit the marker when
+                // an action tool (one that produced a task card) ran.
+                const onlyReadTools = pass.toolCalls.every((c) =>
+                  c.name ? READ_TOOL_NAMES.has(c.name) : false,
+                );
+                if (onlyReadTools) {
+                  continue;
+                }
                 toolsRanAny = true;
                 if (!markerSent) {
                   send("delta", { content: AFTER_TASKS_MARKER });
