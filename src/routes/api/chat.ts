@@ -418,13 +418,32 @@ export const Route = createFileRoute("/api/chat")({
                       name: "source_candidates",
                       content: JSON.stringify({
                         ok: true,
+                        requested: limit,
                         added: result.added,
-                        skipped: result.skipped,
+                        skipped_duplicates: result.skipped,
                         preview_total: result.preview_total,
                         apollo_count: result.apollo_count,
                         pdl_count: result.pdl_count,
                         apollo_error: result.apollo_error,
                         pdl_error: result.pdl_error,
+                        pool_limited: result.pool_limited,
+                        broadened: result.broadened,
+                        summary:
+                          result.added === 0
+                            ? result.pool_limited
+                              ? "Candidate pool was rate-limited; no new candidates added this run."
+                              : "No matches for this brief — try broadening it."
+                            : result.added < limit
+                              ? `Requested ${limit}, added ${result.added}. ${
+                                  result.skipped > 0
+                                    ? `${result.skipped} matching profile${result.skipped === 1 ? " was" : "s were"} already in your pipeline and skipped. `
+                                    : ""
+                                }${
+                                  result.preview_total < limit
+                                    ? `The pool only returned ${result.preview_total} unique matches for this brief${result.broadened ? " (search was broadened to find these)" : ""}.`
+                                    : ""
+                                }`.trim()
+                              : `Added ${result.added} candidates as requested.`,
                       }),
                     });
                   } catch (err: any) {
