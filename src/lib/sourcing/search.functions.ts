@@ -4,7 +4,12 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { enrichApolloProfiles, searchApollo } from "./apollo.server";
 import { searchPdl } from "./pdl.server";
-import { currentPeriod, linkedinSlug, type SearchCriteria } from "./budget";
+import {
+  currentPeriod,
+  detectAmbiguousRegion,
+  linkedinSlug,
+  type SearchCriteria,
+} from "./budget";
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -42,6 +47,24 @@ export const runSourcingSearch = createServerFn({ method: "POST" })
     }
 
     const criteria = (project.search_criteria ?? {}) as SearchCriteria;
+
+    // Guard: refuse to search when the only location is a multi-country region
+    // acronym (LATAM, EMEA, APAC, ...). The agent must ask the user which
+    // specific countries to target instead of us silently expanding.
+    const locs = (criteria.locations ?? []).filter(Boolean);
+    if (locs.length === 1) {
+      const ambiguous = detectAmbiguousRegion(locs[0]);
+      if (ambiguous) {
+        return {
+          status: "needs_clarification" as const,
+          reason: "ambiguous_region" as const,
+          region: ambiguous.region,
+          suggested_countries: ambiguous.suggestedCountries,
+          from_cache: false,
+          previews: [] as any[],
+        };
+      }
+    }
 
     // Stage 4: parallel Apollo + PDL
     const [apolloRes, pdlRes] = await Promise.allSettled([
