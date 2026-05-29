@@ -449,9 +449,9 @@ export const Route = createFileRoute("/api/chat")({
             // Streams a gateway response and returns parsed { text, toolCalls }.
             async function streamCompletion(
               messages: ChatMessage[],
-              toolChoice?: "auto" | "none",
+              mode?: "all" | "read_only",
             ): Promise<{ text: string; toolCalls: StreamedToolCall[] }> {
-              const upstream = await callGateway(messages, apiKey!, toolChoice);
+              const upstream = await callGateway(messages, apiKey!, mode);
               if (!upstream.ok || !upstream.body) {
                 const text = await upstream.text().catch(() => "");
                 const errMsg =
@@ -523,9 +523,9 @@ export const Route = createFileRoute("/api/chat")({
                 // First pass only: if the user's latest turn looks like a
                 // follow-up question about existing results, disable tools so
                 // the model is forced to answer in prose from history.
-                const toolChoice =
-                  iter === 0 && looksLikeFollowUpQuestion(message) ? "none" : undefined;
-                const pass = await streamCompletion(convo, toolChoice);
+                const mode: "all" | "read_only" =
+                  iter === 0 && looksLikeFollowUpQuestion(message) ? "read_only" : "all";
+                const pass = await streamCompletion(convo, mode);
                 if (iter === 0) firstToolCalls = pass.toolCalls;
 
                 // Safety net: if the model wrote the clarify payload as text
