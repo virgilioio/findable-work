@@ -255,10 +255,14 @@ function looksLikeFollowUpQuestion(text: string): boolean {
   if (t.length === 0 || t.length > 280) return false;
   if (!/[?]/.test(t) && !/^(why|what|how|when|who|where|which|can you (explain|tell|show)|tell me)\b/.test(t))
     return false;
-  // Imperative verbs that imply "do something new" — bail out, let tools run.
-  if (/\b(find|source|pull|search|add|create|draft|post|publish|schedule|send|reach out|outreach|generate|build|make|broaden|redo|retry|try again|do it|go ahead)\b/.test(t))
+  // Requests to do/refine sourcing must keep tools enabled so clarify cards can render.
+  if (/\b(find|source|pull|search|sourcing|candidate|candidates|add|create|draft|post|publish|schedule|send|reach out|outreach|generate|build|make|broaden|refine|sharpen|narrow|redo|retry|try again|do it|go ahead)\b/.test(t))
     return false;
-  return true;
+  if (/\b(buscar|busqueda|búsqueda|encontrar|conseguir|candidatos?|refinar|afinar|precisar|acotar|ampliar|reintentar|otra vez|hazlo|adelante)\b/.test(t))
+    return false;
+  // Only suppress tools for actual questions about existing results/artifacts.
+  return /\b(why|what|how|when|who|where|which|explain|tell me|por que|por qué|que|qué|como|cómo|cuando|cuándo|quien|quién|donde|dónde)\b/.test(t)
+    && /\b(this|that|these|those|result|results|candidate|candidates|job|post|profile|person|message|email|outreach|esto|eso|estos|esas|resultado|resultados|candidato|candidatos|vacante|puesto|perfil|persona|mensaje|correo)\b/.test(t);
 }
 
 export const Route = createFileRoute("/api/chat")({
