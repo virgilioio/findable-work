@@ -27,7 +27,6 @@ import {
   Attach,
   Sparkle,
   Dots,
-  XSm,
   Users,
   Copy,
   Pencil,
