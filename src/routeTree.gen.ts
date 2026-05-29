@@ -19,6 +19,7 @@ import { Route as AuthenticatedAppRouteImport } from './routes/_authenticated/ap
 import { Route as AuthenticatedAppIndexRouteImport } from './routes/_authenticated/app.index'
 import { Route as ApiPublicGuestChatRouteImport } from './routes/api/public/guest-chat'
 import { Route as AuthenticatedAdminPromptsRouteImport } from './routes/_authenticated/admin.prompts'
+import { Route as ApiPublicAuthEmailHookRouteImport } from './routes/api/public/auth/email-hook'
 import { Route as AuthenticatedAppCIdRouteImport } from './routes/_authenticated/app.c.$id'
 
 const TermsRoute = TermsRouteImport.update({
@@ -71,6 +72,11 @@ const AuthenticatedAdminPromptsRoute =
     path: '/admin/prompts',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const ApiPublicAuthEmailHookRoute = ApiPublicAuthEmailHookRouteImport.update({
+  id: '/api/public/auth/email-hook',
+  path: '/api/public/auth/email-hook',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedAppCIdRoute = AuthenticatedAppCIdRouteImport.update({
   id: '/c/$id',
   path: '/c/$id',
@@ -88,6 +94,7 @@ export interface FileRoutesByFullPath {
   '/api/public/guest-chat': typeof ApiPublicGuestChatRoute
   '/app/': typeof AuthenticatedAppIndexRoute
   '/app/c/$id': typeof AuthenticatedAppCIdRoute
+  '/api/public/auth/email-hook': typeof ApiPublicAuthEmailHookRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -99,6 +106,7 @@ export interface FileRoutesByTo {
   '/api/public/guest-chat': typeof ApiPublicGuestChatRoute
   '/app': typeof AuthenticatedAppIndexRoute
   '/app/c/$id': typeof AuthenticatedAppCIdRoute
+  '/api/public/auth/email-hook': typeof ApiPublicAuthEmailHookRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -113,6 +121,7 @@ export interface FileRoutesById {
   '/api/public/guest-chat': typeof ApiPublicGuestChatRoute
   '/_authenticated/app/': typeof AuthenticatedAppIndexRoute
   '/_authenticated/app/c/$id': typeof AuthenticatedAppCIdRoute
+  '/api/public/auth/email-hook': typeof ApiPublicAuthEmailHookRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -127,6 +136,7 @@ export interface FileRouteTypes {
     | '/api/public/guest-chat'
     | '/app/'
     | '/app/c/$id'
+    | '/api/public/auth/email-hook'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -138,6 +148,7 @@ export interface FileRouteTypes {
     | '/api/public/guest-chat'
     | '/app'
     | '/app/c/$id'
+    | '/api/public/auth/email-hook'
   id:
     | '__root__'
     | '/'
@@ -151,6 +162,7 @@ export interface FileRouteTypes {
     | '/api/public/guest-chat'
     | '/_authenticated/app/'
     | '/_authenticated/app/c/$id'
+    | '/api/public/auth/email-hook'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -161,6 +173,7 @@ export interface RootRouteChildren {
   TermsRoute: typeof TermsRoute
   ApiChatRoute: typeof ApiChatRoute
   ApiPublicGuestChatRoute: typeof ApiPublicGuestChatRoute
+  ApiPublicAuthEmailHookRoute: typeof ApiPublicAuthEmailHookRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -235,6 +248,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminPromptsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/api/public/auth/email-hook': {
+      id: '/api/public/auth/email-hook'
+      path: '/api/public/auth/email-hook'
+      fullPath: '/api/public/auth/email-hook'
+      preLoaderRoute: typeof ApiPublicAuthEmailHookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authenticated/app/c/$id': {
       id: '/_authenticated/app/c/$id'
       path: '/c/$id'
@@ -280,7 +300,18 @@ const rootRouteChildren: RootRouteChildren = {
   TermsRoute: TermsRoute,
   ApiChatRoute: ApiChatRoute,
   ApiPublicGuestChatRoute: ApiPublicGuestChatRoute,
+  ApiPublicAuthEmailHookRoute: ApiPublicAuthEmailHookRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
