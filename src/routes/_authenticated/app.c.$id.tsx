@@ -87,6 +87,10 @@ type Job = {
   published?: boolean;
   published_at?: string | null;
   company?: string;
+  summary?: string;
+  responsibilities?: string[];
+  must_have?: string[];
+  nice_to_have?: string[];
   screening?: Array<{
     id: string;
     type: "select" | "multi" | "textarea";
