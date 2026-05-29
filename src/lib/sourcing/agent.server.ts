@@ -432,5 +432,8 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
     apollo_error: apolloErr,
     pdl_error: pdlErr,
     project_id: project.id,
+    requested: limit,
+    pool_limited: poolLimited,
+    broadened: broadened,
   };
 }
