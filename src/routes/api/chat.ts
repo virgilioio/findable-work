@@ -620,6 +620,26 @@ export const Route = createFileRoute("/api/chat")({
               let firstToolCalls: StreamedToolCall[] = [];
               const convo: ChatMessage[] = [...baseMessages];
 
+              // Pre-create the assistant message row so every agent_task we
+              // insert during this turn can be linked to it from the start.
+              // This eliminates the orphan window where tasks would have
+              // message_id=null if the post-stream linkage step failed.
+              const { data: assistantRowPre, error: assistantPreErr } = await supabaseAdmin
+                .from("messages")
+                .insert({
+                  conversation_id: conversationId,
+                  user_id: userId,
+                  role: "assistant",
+                  content: "",
+                  tool_calls: null,
+                })
+                .select("id")
+                .single();
+              if (assistantPreErr) {
+                console.error("pre-create assistant message failed", assistantPreErr);
+              }
+              const assistantMessageId: string | null = assistantRowPre?.id ?? null;
+
               for (let iter = 0; iter < MAX_ITERS; iter++) {
                 // First pass only: if the user's latest turn looks like a
                 // follow-up question about existing results, disable tools so
