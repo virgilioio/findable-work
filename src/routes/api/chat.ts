@@ -1064,9 +1064,15 @@ export const Route = createFileRoute("/api/chat")({
                   })),
                 };
                 convo.push(assistantToolCallMsg, ...toolResults);
-                // Tools just executed in this pass. Emit the splitter marker
-                // once so the UI can render the "after tasks" text below the
-                // task cards rather than above them.
+                // Read-only tools don't emit task cards, so don't split the
+                // assistant message around them — only emit the marker when
+                // an action tool (one that produced a task card) ran.
+                const onlyReadTools = pass.toolCalls.every((c) =>
+                  c.name ? READ_TOOL_NAMES.has(c.name) : false,
+                );
+                if (onlyReadTools) {
+                  continue;
+                }
                 toolsRanAny = true;
                 if (!markerSent) {
                   send("delta", { content: AFTER_TASKS_MARKER });
