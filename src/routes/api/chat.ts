@@ -890,6 +890,166 @@ export const Route = createFileRoute("/api/chat")({
                       content: JSON.stringify({ ok: true }),
                     });
                   }
+                } else if (call.name === "get_conversation_context") {
+                  const [{ data: job }, { data: outreach }, { data: jobPost }, { data: cands }] =
+                    await Promise.all([
+                      supabaseAdmin
+                        .from("jobs")
+                        .select("id,title,location,employment_type,salary_min,salary_max,currency,status")
+                        .eq("conversation_id", conversationId)
+                        .eq("user_id", userId)
+                        .maybeSingle(),
+                      supabaseAdmin
+                        .from("outreach_drafts")
+                        .select("id,channel,tone")
+                        .eq("conversation_id", conversationId)
+                        .eq("user_id", userId)
+                        .maybeSingle(),
+                      supabaseAdmin
+                        .from("job_posts")
+                        .select("id,status,est_reach")
+                        .eq("conversation_id", conversationId)
+                        .eq("user_id", userId)
+                        .maybeSingle(),
+                      supabaseAdmin
+                        .from("candidates")
+                        .select("stage,starred,contacted_at,location,match")
+                        .eq("conversation_id", conversationId)
+                        .eq("user_id", userId),
+                    ]);
+                  const stageBreakdown: Record<string, number> = {};
+                  let starredCount = 0;
+                  let contactedCount = 0;
+                  for (const c of cands ?? []) {
+                    stageBreakdown[c.stage] = (stageBreakdown[c.stage] ?? 0) + 1;
+                    if (c.starred) starredCount++;
+                    if (c.contacted_at) contactedCount++;
+                  }
+                  toolResults.push({
+                    role: "tool",
+                    tool_call_id: call.id ?? "",
+                    name: "get_conversation_context",
+                    content: JSON.stringify({
+                      ok: true,
+                      job: job ?? null,
+                      outreach_draft: outreach ?? null,
+                      job_post: jobPost ?? null,
+                      candidates: {
+                        total: cands?.length ?? 0,
+                        starred: starredCount,
+                        contacted: contactedCount,
+                        not_contacted: (cands?.length ?? 0) - contactedCount,
+                        by_stage: stageBreakdown,
+                      },
+                    }),
+                  });
+                } else if (call.name === "get_job") {
+                  const { data: job } = await supabaseAdmin
+                    .from("jobs")
+                    .select("*")
+                    .eq("conversation_id", conversationId)
+                    .eq("user_id", userId)
+                    .maybeSingle();
+                  toolResults.push({
+                    role: "tool",
+                    tool_call_id: call.id ?? "",
+                    name: "get_job",
+                    content: JSON.stringify(
+                      job ? { ok: true, job } : { ok: true, job: null, note: "No Job created in this conversation yet." },
+                    ),
+                  });
+                } else if (call.name === "list_candidates") {
+                  const limit = Math.min(Math.max(Number(args.limit) || 25, 1), 100);
+                  let q = supabaseAdmin
+                    .from("candidates")
+                    .select(
+                      "id,name,company,role,location,match,stage,starred,tags,source,contacted_at,contact_channel,email,phone,linkedin",
+                    )
+                    .eq("conversation_id", conversationId)
+                    .eq("user_id", userId)
+                    .order("match", { ascending: false })
+                    .limit(limit);
+                  if (typeof args.stage === "string") q = q.eq("stage", args.stage);
+                  if (typeof args.starred === "boolean") q = q.eq("starred", args.starred);
+                  if (typeof args.min_match === "number") q = q.gte("match", Math.round(args.min_match));
+                  if (args.contacted === true) q = q.not("contacted_at", "is", null);
+                  if (args.contacted === false) q = q.is("contacted_at", null);
+                  const { data: rows } = await q;
+                  toolResults.push({
+                    role: "tool",
+                    tool_call_id: call.id ?? "",
+                    name: "list_candidates",
+                    content: JSON.stringify({
+                      ok: true,
+                      count: rows?.length ?? 0,
+                      candidates: rows ?? [],
+                    }),
+                  });
+                } else if (call.name === "get_candidate") {
+                  let row: any = null;
+                  if (typeof args.candidate_id === "string" && args.candidate_id) {
+                    const { data } = await supabaseAdmin
+                      .from("candidates")
+                      .select("*")
+                      .eq("id", args.candidate_id)
+                      .eq("conversation_id", conversationId)
+                      .eq("user_id", userId)
+                      .maybeSingle();
+                    row = data;
+                  } else if (typeof args.name === "string" && args.name.trim()) {
+                    const { data } = await supabaseAdmin
+                      .from("candidates")
+                      .select("*")
+                      .eq("conversation_id", conversationId)
+                      .eq("user_id", userId)
+                      .ilike("name", `%${args.name.trim()}%`)
+                      .limit(1);
+                    row = data?.[0] ?? null;
+                  }
+                  toolResults.push({
+                    role: "tool",
+                    tool_call_id: call.id ?? "",
+                    name: "get_candidate",
+                    content: JSON.stringify(
+                      row
+                        ? { ok: true, candidate: row }
+                        : { ok: true, candidate: null, note: "No candidate matched." },
+                    ),
+                  });
+                } else if (call.name === "get_outreach_draft") {
+                  const { data: row } = await supabaseAdmin
+                    .from("outreach_drafts")
+                    .select("*")
+                    .eq("conversation_id", conversationId)
+                    .eq("user_id", userId)
+                    .maybeSingle();
+                  toolResults.push({
+                    role: "tool",
+                    tool_call_id: call.id ?? "",
+                    name: "get_outreach_draft",
+                    content: JSON.stringify(
+                      row
+                        ? { ok: true, outreach: row }
+                        : { ok: true, outreach: null, note: "No outreach draft on this chat yet." },
+                    ),
+                  });
+                } else if (call.name === "get_job_post") {
+                  const { data: row } = await supabaseAdmin
+                    .from("job_posts")
+                    .select("*")
+                    .eq("conversation_id", conversationId)
+                    .eq("user_id", userId)
+                    .maybeSingle();
+                  toolResults.push({
+                    role: "tool",
+                    tool_call_id: call.id ?? "",
+                    name: "get_job_post",
+                    content: JSON.stringify(
+                      row
+                        ? { ok: true, job_post: row }
+                        : { ok: true, job_post: null, note: "No job post drafted on this chat yet." },
+                    ),
+                  });
                 }
                 }
 
