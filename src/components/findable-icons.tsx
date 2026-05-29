@@ -1,5 +1,6 @@
 import * as React from "react";
 import wordmarkUrl from "@/assets/findable-wordmark.svg";
+import appIconUrl from "@/assets/findable-app-icon.svg";
 
 type IconProps = React.SVGProps<SVGSVGElement> & {
   size?: number;
@@ -139,6 +140,22 @@ export const Wordmark = ({
     alt="findable.work"
     height={height}
     style={{ height, width: "auto" }}
+    className={className}
+    {...rest}
+  />
+);
+
+export const AppIcon = ({
+  size = 48,
+  className,
+  ...rest
+}: React.ImgHTMLAttributes<HTMLImageElement> & { size?: number }) => (
+  <img
+    src={appIconUrl}
+    alt="findable"
+    width={size}
+    height={size}
+    style={{ width: size, height: size }}
     className={className}
     {...rest}
   />

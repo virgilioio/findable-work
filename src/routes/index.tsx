@@ -8,6 +8,7 @@ import { AuthDialog, type AuthReason } from "@/components/auth/auth-dialog";
 import { ClarifyCard, type ClarifyData } from "@/components/chat/clarify-card";
 import {
   Logo,
+  AppIcon,
   Wordmark,
   Send as SendIcon,
   Sparkle,
@@ -364,9 +365,7 @@ function HomePage() {
       {empty ? (
         <div className="flex flex-1 flex-col items-center justify-center px-6">
           <div className="w-full max-w-[640px] text-center">
-            <div className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-bg-bubble text-text">
-              <Logo size={26} />
-            </div>
+            <AppIcon size={48} className="mx-auto mb-5" />
             <h1 className="text-[28px] font-semibold tracking-tight text-text">
               What hire can I help with?
             </h1>
