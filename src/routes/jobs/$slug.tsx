@@ -1,6 +1,6 @@
 import { createFileRoute, notFound } from "@tanstack/react-router";
 import { useRef, useState } from "react";
-import { Logo, Folder, Check as CheckIcon, Sparkle, Doc, X } from "@/components/findable-icons";
+import { Wordmark, Folder, Check as CheckIcon, Sparkle, Doc, X } from "@/components/findable-icons";
 import { cn } from "@/lib/utils";
 import { getPublicJob } from "@/lib/public-jobs.functions";
 import { Markdown } from "@/components/ui/markdown";
@@ -206,7 +206,7 @@ function ApplyPage() {
     <div className="min-h-screen bg-bg-side text-text">
       <header className="sticky top-0 z-10 border-b border-border bg-bg-elev/90 px-6 py-3 backdrop-blur">
         <div className="mx-auto flex max-w-[1100px] items-center justify-between">
-          <Logo className="h-5" />
+          <Wordmark height={20} />
           <span className="text-[12px] text-text-faint">Powered by findable</span>
         </div>
       </header>
