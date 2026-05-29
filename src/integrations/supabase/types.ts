@@ -59,10 +59,65 @@ export type Database = {
         }
         Relationships: []
       }
+      applications: {
+        Row: {
+          answers: Json
+          candidate_id: string | null
+          created_at: string
+          email: string
+          id: string
+          job_id: string
+          linkedin: string | null
+          location: string | null
+          name: string
+          phone: string | null
+          recruiter_user_id: string
+          resume_filename: string | null
+          resume_url: string | null
+          screening: Json
+          status: string
+        }
+        Insert: {
+          answers?: Json
+          candidate_id?: string | null
+          created_at?: string
+          email: string
+          id?: string
+          job_id: string
+          linkedin?: string | null
+          location?: string | null
+          name: string
+          phone?: string | null
+          recruiter_user_id: string
+          resume_filename?: string | null
+          resume_url?: string | null
+          screening?: Json
+          status?: string
+        }
+        Update: {
+          answers?: Json
+          candidate_id?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+          job_id?: string
+          linkedin?: string | null
+          location?: string | null
+          name?: string
+          phone?: string | null
+          recruiter_user_id?: string
+          resume_filename?: string | null
+          resume_url?: string | null
+          screening?: Json
+          status?: string
+        }
+        Relationships: []
+      }
       candidates: {
         Row: {
           activity: Json
           apollo_id: string | null
+          application_id: string | null
           avatar: string
           company: string
           contact_channel: string | null
@@ -96,6 +151,7 @@ export type Database = {
         Insert: {
           activity?: Json
           apollo_id?: string | null
+          application_id?: string | null
           avatar?: string
           company?: string
           contact_channel?: string | null
@@ -129,6 +185,7 @@ export type Database = {
         Update: {
           activity?: Json
           apollo_id?: string | null
+          application_id?: string | null
           avatar?: string
           company?: string
           contact_channel?: string | null
@@ -256,6 +313,7 @@ export type Database = {
       }
       jobs: {
         Row: {
+          company: string
           conversation_id: string
           created_at: string
           currency: string
@@ -263,15 +321,24 @@ export type Database = {
           employment_type: string
           id: string
           location: string
+          must_have: string[]
+          nice_to_have: string[]
+          published: boolean
+          published_at: string | null
           requirements: string[]
+          responsibilities: string[]
           salary_max: number | null
           salary_min: number | null
+          screening: Json
+          slug: string | null
           status: string
+          summary: string
           title: string
           updated_at: string
           user_id: string
         }
         Insert: {
+          company?: string
           conversation_id: string
           created_at?: string
           currency?: string
@@ -279,15 +346,24 @@ export type Database = {
           employment_type?: string
           id?: string
           location?: string
+          must_have?: string[]
+          nice_to_have?: string[]
+          published?: boolean
+          published_at?: string | null
           requirements?: string[]
+          responsibilities?: string[]
           salary_max?: number | null
           salary_min?: number | null
+          screening?: Json
+          slug?: string | null
           status?: string
+          summary?: string
           title?: string
           updated_at?: string
           user_id: string
         }
         Update: {
+          company?: string
           conversation_id?: string
           created_at?: string
           currency?: string
@@ -295,10 +371,18 @@ export type Database = {
           employment_type?: string
           id?: string
           location?: string
+          must_have?: string[]
+          nice_to_have?: string[]
+          published?: boolean
+          published_at?: string | null
           requirements?: string[]
+          responsibilities?: string[]
           salary_max?: number | null
           salary_min?: number | null
+          screening?: Json
+          slug?: string | null
           status?: string
+          summary?: string
           title?: string
           updated_at?: string
           user_id?: string
