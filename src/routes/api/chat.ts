@@ -1255,30 +1255,51 @@ export const Route = createFileRoute("/api/chat")({
               const combinedText = postText
                 ? `${preText}${AFTER_TASKS_MARKER}${postText}`
                 : preText;
-              const { data: assistantMsg } = await supabaseAdmin
-                .from("messages")
-                .insert({
-                  conversation_id: conversationId,
-                  user_id: userId,
-                  role: "assistant",
-                  content: combinedText,
-                  tool_calls: toolCallsForDb,
-                })
-                .select("id")
-                .single();
-
-              // Link all agent_tasks to this assistant message
-              if (assistantMsg && allTaskIds.length > 0) {
-                await supabaseAdmin
-                  .from("agent_tasks")
-                  .update({ message_id: assistantMsg.id })
-                  .in("id", allTaskIds);
-                send("tasks_linked", { message_id: assistantMsg.id, task_ids: allTaskIds });
+              if (assistantMessageId) {
+                const { error: updErr } = await supabaseAdmin
+                  .from("messages")
+                  .update({ content: combinedText, tool_calls: toolCallsForDb })
+                  .eq("id", assistantMessageId);
+                if (updErr) console.error("update assistant message failed", updErr);
+              } else {
+                // Fallback: pre-create failed earlier — insert now so the
+                // user still sees a reply, and best-effort link tasks.
+                const { data: assistantMsg } = await supabaseAdmin
+                  .from("messages")
+                  .insert({
+                    conversation_id: conversationId,
+                    user_id: userId,
+                    role: "assistant",
+                    content: combinedText,
+                    tool_calls: toolCallsForDb,
+                  })
+                  .select("id")
+                  .single();
+                if (assistantMsg && allTaskIds.length > 0) {
+                  await supabaseAdmin
+                    .from("agent_tasks")
+                    .update({ message_id: assistantMsg.id })
+                    .in("id", allTaskIds);
+                }
               }
 
               send("done", { ok: true, candidates_added: candidatesAddedTotal, job: jobCreatedRow });
             } catch (err) {
               console.error("chat stream error", err);
+              // Best-effort: flush whatever prose we accumulated so the user
+              // sees a partial reply instead of a blank assistant bubble.
+              if (assistantMessageId) {
+                const partial = postText
+                  ? `${preText}${AFTER_TASKS_MARKER}${postText}`
+                  : preText;
+                if (partial.trim()) {
+                  await supabaseAdmin
+                    .from("messages")
+                    .update({ content: partial })
+                    .eq("id", assistantMessageId)
+                    .then(undefined, (e) => console.error("partial flush failed", e));
+                }
+              }
               send("error", { message: err instanceof Error ? err.message : "stream error" });
             } finally {
               controller.close();
