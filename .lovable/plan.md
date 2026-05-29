@@ -1,44 +1,62 @@
+# Two chat-panel bugs, both in `src/routes/_authenticated/app.c.$id.tsx`
 
-# Why the chat goes silent after clarify answers
+## Bug 1 — Nothing visible after submitting a clarify card
 
-After you submit the clarify card, the server runs the tools (sourcing, etc.) and the task cards arrive — but nothing lands in the bubble. That's a regression from the reasoning/leak-routing layer we just added, plus a missing "always close the turn with prose" guard.
+The ThinkingTicker is the only "something is happening" indicator. It hides itself once the answer starts streaming (`answered = Boolean(streaming)` and `reasoning === ""` → returns `null`). Real turn shape is:
 
-Three concrete causes, all in `src/routes/api/chat.ts`:
+1. short pre-tool prose → `streaming` becomes truthy → ticker collapses/hides
+2. tools run for many seconds (task cards stream, but no text deltas)
+3. post-tool prose
 
-1. **Leak detector swallows the real reply.** `looksLikeLeakedReasoning` is fired on the first ~80 chars of each pass. When the second pass (after tools) starts with a short Spanish wrap-up like "Listo — añadí 20 candidatos. ¿Quieres que…", any 2 matches against its keyword list (or a `(` opener) flip `leakMode` to `"leak"` and route the entire bubble text into the reasoning channel. The user sees task cards + a blank message.
-2. **`leak` mode never recovers, and the buffered tail is never flushed.** Once in `"leak"`, recovery requires a `)\n` or `\n\n<capital letter>` break. Short single-sentence replies don't hit that, so `assistantText` stays `""`. The end-of-stream flush at line 587 only handles `leakMode === "unknown"` — not `"leak"`. So even legitimately-buffered text is lost.
-3. **No "must end with a prose turn" guard.** Even without the leak bug, the model sometimes emits only `tool_calls` and an empty `content` on the closing pass. We persist `combinedText = ""` and the UI renders a card-only message with no closing line.
+During step 2 there is no indicator. After the clarify card submit this is the entire visible experience for ~10s, so it looks dead.
 
-# Plan (server-only, surgical)
+## Bug 2 — Task cards "disappear suddenly" at end of stream
 
-All edits live in `src/routes/api/chat.ts`. No UI changes, no prompt changes, no migration.
+In the stream `finally`:
 
-## 1. Make the leak detector first-pass-only and much narrower
+```ts
+setStreamEnd(Date.now());
+setStreaming("");
+setLiveTasks([]);                 // ← cleared immediately
+await qc.invalidateQueries(...);  // ← refetch happens AFTER
+```
 
-- Only run `looksLikeLeakedReasoning` on the very first pass of the turn (iter === 0) AND only before any tool call has executed. Post-tool passes are short summaries — they should never be routed to reasoning.
-- Raise the trigger threshold from `2 hits` → `3 hits`, and require the head to start with `(` or with a clearly-internal English phrase. Spanish text never matches.
-- When in doubt, default to `"answer"` (fail-open), not `"leak"`.
+Live cards are wiped the instant the stream closes. The refetched messages + `persistedTasks` arrive one tick (or more) later, so the cards blink out and then back in. Previously stable because the old code refetched-then-cleared; the reasoning/leak refactor changed the order.
 
-## 2. Always flush buffered text at end of stream, in every leak mode
+# Plan (UI only, single file)
 
-Replace the end-of-stream flush so that whatever sits in `leakedSoFar` is appended to `assistantText` and sent as a `delta` unless we are 100% sure it was reasoning. This guarantees short replies survive.
+All edits in `src/routes/_authenticated/app.c.$id.tsx`. No server, prompt, or migration changes.
 
-## 3. Guarantee a closing prose turn
+## 1. Keep tasks visible across the handoff
 
-After the iteration loop ends, if `toolsRanAny === true` AND `postText.trim() === ""`, run one more **forced-no-tools** completion pass using `convo` (which already contains the assistant tool calls + tool results). Stream its text as `delta` after the marker and append to `postText`. This is the same pattern OpenAI cookbook uses to close a tool loop. Cap at 1 extra pass so we never loop.
+- Do **not** call `setLiveTasks([])` in the stream `finally`.
+- After `await qc.invalidateQueries(...)` resolves, then clear: `setLiveTasks([])`.
+- In the render block, dedupe so a task that already exists in `persistedTasks` for the just-persisted assistant message is not double-rendered. Simplest: when rendering `liveTasks`, filter out any `t.id` that already appears in `persistedTasks`. This handles the rare overlap window cleanly.
+- Also clear `liveTasks` at the top of `sendMessage` (already done) so the next turn starts fresh.
 
-Localize the fallback: if even that pass returns empty (rare), emit a one-line acknowledgement in the user's language (detect from the latest user message — Spanish if it contains `ñ`/accents or common stopwords, else English): `"Listo — revisa los resultados arriba."` / `"Done — check the results above."` Persist it so reload shows the same line.
+## 2. Always show a "working" indicator while the backend is active
 
-## 4. Small correctness fix
+Introduce a small, always-on activity row that renders whenever `sending === true`, independent of the ThinkingTicker's collapse logic:
 
-When `text_replace` fires (leaked-clarify hoist), we currently send the cleaned text but never update `pass.text` before it gets appended to `preText`/`postText`. That's already handled (`pass.text = leak.cleaned`), so no change — flagging only to confirm it stays correct after the above edits.
+- Render a compact pill ("Working" + 3 dots, reusing the existing `thinking-dot` style) at the **bottom** of the live block whenever `sending` is true and the turn is not obviously idle (i.e. always, while `sending`).
+- The ThinkingTicker keeps its current behavior for reasoning (live ticker → collapsed "Thought for Ns" chip). The new pill is a separate, smaller "still working" signal that survives across pre-text → tools → post-text transitions.
+- Hide the pill the instant `sending` flips to false (stream finished). Because of fix #1, task cards remain on screen during the brief invalidate window, so the transition looks clean.
+
+Optional polish: if `liveTasks` has a task with `status === "running"`, label the pill with that task's `label` (e.g. "Sourcing candidates…") instead of generic "Working". Falls back to "Working" when no running task is present.
+
+## 3. Confirm nothing else regressed
+
+After the edit, sanity-check the render block at lines ~541-575:
+
+- Empty-state branch (`empty`) untouched.
+- `messages.map` block untouched (persisted history rendering).
+- Live block now: ThinkingTicker (existing) → streaming `before` text → live task cards (filtered) → streaming `after` text → new "working" pill (while `sending`).
 
 # Files touched
 
-- `src/routes/api/chat.ts` — narrow the leak detector, fix the end-of-stream flush, add the "force a closing prose pass" guard.
+- `src/routes/_authenticated/app.c.$id.tsx` — reorder cleanup in `sendMessage` `finally`, dedupe `liveTasks` against `persistedTasks` in render, add persistent "Working" pill while `sending`.
 
 # Out of scope
 
-- UI changes to the thinking ticker or clarify card.
-- Prompt edits (no new migration).
-- Any change to how tools execute or how task cards stream.
+- Server stream changes, prompt edits, migrations.
+- Any change to TaskCard, ClarifyCard, or ThinkingTicker components.

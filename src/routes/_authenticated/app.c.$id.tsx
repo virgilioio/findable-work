@@ -237,10 +237,12 @@ function ConversationPage() {
 
       setStreamEnd(Date.now());
       setStreaming("");
-      setLiveTasks([]);
       // Keep `reasoning` so the collapsed "Thought for Ns" chip stays
       // visible on the last turn until the user sends the next message.
       await qc.invalidateQueries({ queryKey: ["conversation", id] });
+      // Now that the refetched messages + persistedTasks are in cache,
+      // we can safely drop liveTasks without flicker.
+      setLiveTasks([]);
       qc.invalidateQueries({ queryKey: ["conversations"] });
       if (candidatesAdded > 0) {
         qc.invalidateQueries({ queryKey: ["candidates", id] });
