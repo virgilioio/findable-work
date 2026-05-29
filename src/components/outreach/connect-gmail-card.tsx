@@ -20,7 +20,7 @@ export function ConnectGmailButton({ label = "Connect Gmail to send" }: { label?
   const start = useServerFn(startGmailConnect);
   const mut = useMutation({
     mutationFn: async () => {
-      const returnUrl = `${window.location.origin}/app/oauth/google/return`;
+      const returnUrl = `${window.location.origin}/oauth/google/return`;
       sessionStorage.setItem("gmail_return_to", window.location.pathname);
       return start({ data: { returnUrl } });
     },
