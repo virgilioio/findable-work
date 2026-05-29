@@ -106,7 +106,7 @@ export const getConversation = createServerFn({ method: "POST" })
     if (e4) throw new Error(e4.message);
     if (e5) throw new Error(e5.message);
     if (e6) throw new Error(e6.message);
-    if (!conv) throw new Error("Conversation not found");
+    if (!conv) throw notFound();
     return {
       conversation: conv,
       messages: messages ?? [],
