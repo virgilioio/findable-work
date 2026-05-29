@@ -150,6 +150,97 @@ const draftOutreachTool = {
   },
 };
 
+// ============================================================
+// Read-only context tools — scoped to the current conversation.
+// Safe to call any time; do not spend credits or create artifacts.
+// ============================================================
+
+const getConversationContextTool = {
+  type: "function" as const,
+  function: {
+    name: "get_conversation_context",
+    description:
+      "Snapshot of what exists in THIS conversation: whether a job/outreach/job_post has been created, candidate count + stage breakdown, and the job's title/location/salary. Call this first when the user asks a general question about the chat's state.",
+    parameters: { type: "object", additionalProperties: false, properties: {} },
+  },
+};
+
+const getJobTool = {
+  type: "function" as const,
+  function: {
+    name: "get_job",
+    description:
+      "Return the full Job for this conversation (title, description, requirements, must_have, nice_to_have, location, employment_type, salary, screening). Use when the user asks about the JD.",
+    parameters: { type: "object", additionalProperties: false, properties: {} },
+  },
+};
+
+const listCandidatesTool = {
+  type: "function" as const,
+  function: {
+    name: "list_candidates",
+    description:
+      "List candidates sourced in this conversation. Use to answer 'how many', 'who's starred', 'who haven't we contacted', breakdowns by stage/location, etc.",
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        stage: { type: "string", description: "Filter by stage (e.g. 'Sourced', 'Contacted', 'Replied')." },
+        starred: { type: "boolean", description: "Only starred candidates." },
+        contacted: { type: "boolean", description: "true = only contacted, false = only not contacted." },
+        min_match: { type: "number", description: "Minimum match score (0-100)." },
+        limit: { type: "number", description: "Default 25, max 100." },
+      },
+    },
+  },
+};
+
+const getCandidateTool = {
+  type: "function" as const,
+  function: {
+    name: "get_candidate",
+    description:
+      "Return one candidate's full profile (experience, education, match_breakdown, activity, contact info) by id OR fuzzy name match. Use when the user asks about a specific person.",
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        candidate_id: { type: "string", description: "UUID of the candidate, if known." },
+        name: { type: "string", description: "Full or partial name; case-insensitive substring match." },
+      },
+    },
+  },
+};
+
+const getOutreachDraftTool = {
+  type: "function" as const,
+  function: {
+    name: "get_outreach_draft",
+    description:
+      "Return the outreach draft for this conversation (LinkedIn template, email subject/body, follow-ups, tone, send settings).",
+    parameters: { type: "object", additionalProperties: false, properties: {} },
+  },
+};
+
+const getJobPostTool = {
+  type: "function" as const,
+  function: {
+    name: "get_job_post",
+    description:
+      "Return the job-post artifact for this conversation (3 variants, selected channels, schedule, estimated reach, status).",
+    parameters: { type: "object", additionalProperties: false, properties: {} },
+  },
+};
+
+const READ_TOOL_NAMES = new Set([
+  "get_conversation_context",
+  "get_job",
+  "list_candidates",
+  "get_candidate",
+  "get_outreach_draft",
+  "get_job_post",
+]);
+
 async function getUserFromRequest(request: Request): Promise<string | null> {
   const auth = request.headers.get("authorization");
   if (!auth?.startsWith("Bearer ")) return null;
