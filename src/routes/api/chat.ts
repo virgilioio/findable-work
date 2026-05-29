@@ -933,6 +933,7 @@ export const Route = createFileRoute("/api/chat")({
                       .insert({
                         user_id: userId,
                         conversation_id: conversationId,
+                        message_id: assistantMessageId,
                         kind: "create_job_posts",
                         label: `${artifact.variants.length} job post variants drafted`,
                         status: "done",
