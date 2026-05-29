@@ -608,13 +608,15 @@ export const Route = createFileRoute("/api/chat")({
               return { text: assistantText, toolCalls: Object.values(toolCalls) };
             }
 
+            // Hoisted so the catch block can flush partial state on error.
+            let preText = "";
+            let postText = "";
+            let assistantMessageId: string | null = null;
             try {
               const MAX_ITERS = 5;
               const allTaskIds: string[] = [];
               let candidatesAddedTotal = 0;
               let jobCreatedRow: any = null;
-              let preText = "";
-              let postText = "";
               let toolsRanAny = false;
               let markerSent = false;
               let firstToolCalls: StreamedToolCall[] = [];
@@ -638,7 +640,7 @@ export const Route = createFileRoute("/api/chat")({
               if (assistantPreErr) {
                 console.error("pre-create assistant message failed", assistantPreErr);
               }
-              const assistantMessageId: string | null = assistantRowPre?.id ?? null;
+              assistantMessageId = assistantRowPre?.id ?? null;
 
               for (let iter = 0; iter < MAX_ITERS; iter++) {
                 // First pass only: if the user's latest turn looks like a
