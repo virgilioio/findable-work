@@ -1,6 +1,7 @@
 import * as React from "react";
 import wordmarkUrl from "@/assets/findable-wordmark.svg";
 import appIconUrl from "@/assets/findable-app-icon.svg";
+import { cn } from "@/lib/utils";
 
 type IconProps = React.SVGProps<SVGSVGElement> & {
   size?: number;
