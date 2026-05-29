@@ -287,3 +287,17 @@
 .thinking-dot:nth-child(3) {
   animation-delay: 0.3s;
 }
+
+@keyframes gio-ticker-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.ticker-line {
+  animation: gio-ticker-in 320ms ease-out;
+}
