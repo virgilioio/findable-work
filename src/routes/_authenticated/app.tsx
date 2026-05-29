@@ -307,7 +307,24 @@ function AppLayout() {
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => {
-                if (deletingId) delMut.mutate(deletingId);
+                if (deletingId) {
+                  // Only redirect when deleting the currently-open chat.
+                  // Pick the chat immediately above it in the sidebar; if it's
+                  // the first one, fall back to the next; if it's the only
+                  // one, fall back to /app.
+                  if (deletingId === activeId) {
+                    const list = conversations as Conv[];
+                    const idx = list.findIndex((c) => c.id === deletingId);
+                    const neighbor =
+                      idx > 0 ? list[idx - 1] : list[idx + 1] ?? null;
+                    if (neighbor) {
+                      navigate({ to: "/app/c/$id", params: { id: neighbor.id } });
+                    } else {
+                      navigate({ to: "/app" });
+                    }
+                  }
+                  delMut.mutate(deletingId);
+                }
                 setDeletingId(null);
               }}
             >
