@@ -513,7 +513,6 @@ function ChatPanel({
     <div className="flex flex-1 flex-col overflow-hidden">
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-[760px] space-y-6 px-4 py-10">
-          {(() => null)()}
           {(() => {
             // Defensive: any persisted tasks whose message_id is null get
             // pinned to the most recent assistant message so they still
