@@ -237,10 +237,12 @@ function ConversationPage() {
 
       setStreamEnd(Date.now());
       setStreaming("");
-      setLiveTasks([]);
       // Keep `reasoning` so the collapsed "Thought for Ns" chip stays
       // visible on the last turn until the user sends the next message.
       await qc.invalidateQueries({ queryKey: ["conversation", id] });
+      // Now that the refetched messages + persistedTasks are in cache,
+      // we can safely drop liveTasks without flicker.
+      setLiveTasks([]);
       qc.invalidateQueries({ queryKey: ["conversations"] });
       if (candidatesAdded > 0) {
         qc.invalidateQueries({ queryKey: ["candidates", id] });
@@ -553,10 +555,12 @@ function ChatPanel({
               )}
               {(() => {
                 const { before, after } = splitAroundTasks(streaming);
+                const persistedIds = new Set(persistedTasks.map((p) => p.id));
+                const visibleLive = liveTasks.filter((t) => !persistedIds.has(t.id));
                 return (
                   <>
                     {before && <MessageRow role="assistant" content={before} streaming />}
-                    {liveTasks.map((t) => (
+                    {visibleLive.map((t) => (
                       <TimelineRow key={t.id}>
                         <TaskCard
                           task={t}
@@ -571,6 +575,15 @@ function ChatPanel({
                   </>
                 );
               })()}
+              {sending && (
+                <TimelineRow>
+                  <WorkingPill
+                    label={
+                      liveTasks.find((t) => t.status === "running")?.label ?? "Working"
+                    }
+                  />
+                </TimelineRow>
+              )}
             </div>
           )}
         </div>
@@ -656,6 +669,19 @@ function TimelineRow({
         <ChatGlyph size={14} />
       </span>
       <div className="min-w-0 flex-1">{children}</div>
+    </div>
+  );
+}
+
+function WorkingPill({ label }: { label: string }) {
+  return (
+    <div className="inline-flex items-center gap-2 rounded-full bg-muted/40 px-2.5 py-1 text-[11.5px] text-text-mute">
+      <span className="truncate max-w-[260px]">{label}</span>
+      <span className="flex items-center">
+        <span className="thinking-dot" />
+        <span className="thinking-dot" />
+        <span className="thinking-dot" />
+      </span>
     </div>
   );
 }
