@@ -230,9 +230,9 @@ function ApplyPage() {
               <h2 className="mb-2 text-[11px] font-medium uppercase tracking-wide text-text-faint">
                 About the role
               </h2>
-              <p className="whitespace-pre-wrap text-[14.5px] leading-relaxed">
-                {job.summary || job.description}
-              </p>
+              <Markdown className="text-[14.5px]">
+                {job.summary || job.description || ""}
+              </Markdown>
             </section>
           )}
 

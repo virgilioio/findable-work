@@ -348,9 +348,9 @@ export function JobPostsPanel({
             <p className="mt-3 text-[14.5px] font-semibold leading-snug text-text">
               {active?.title}
             </p>
-            <p className="mt-2 whitespace-pre-wrap text-[13.5px] leading-relaxed text-text">
-              {active?.body}
-            </p>
+            <div className="mt-2">
+              <Markdown className="text-[13.5px]">{active?.body ?? ""}</Markdown>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
