@@ -322,8 +322,31 @@ function extractLeakedClarify(
 async function callGateway(
   messages: ChatMessage[],
   apiKey: string,
-  toolChoice?: "auto" | "none",
+  mode?: "all" | "read_only",
 ): Promise<Response> {
+  const tools =
+    mode === "read_only"
+      ? [
+          getConversationContextTool,
+          getJobTool,
+          listCandidatesTool,
+          getCandidateTool,
+          getOutreachDraftTool,
+          getJobPostTool,
+        ]
+      : [
+          createJobTool,
+          sourceCandidatesTool,
+          askClarifyingQuestionsTool,
+          draftJobPostsTool,
+          draftOutreachTool,
+          getConversationContextTool,
+          getJobTool,
+          listCandidatesTool,
+          getCandidateTool,
+          getOutreachDraftTool,
+          getJobPostTool,
+        ];
   return fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -331,8 +354,7 @@ async function callGateway(
       model: "openai/gpt-5-mini",
       stream: true,
       messages,
-      tools: [createJobTool, sourceCandidatesTool, askClarifyingQuestionsTool, draftJobPostsTool, draftOutreachTool],
-      ...(toolChoice ? { tool_choice: toolChoice } : {}),
+      tools,
     }),
   });
 }
