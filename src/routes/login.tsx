@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable";
 import { Wordmark } from "@/components/findable-icons";
@@ -21,12 +21,30 @@ function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const redirectedRef = useRef(false);
 
   function redirectToApp() {
+    if (redirectedRef.current) return;
+    redirectedRef.current = true;
     console.info("[auth] redirecting to app after successful auth");
     const target = search.redirect && search.redirect.startsWith("/") ? search.redirect : "/app";
     navigate({ to: target });
   }
+
+  // After Google OAuth, Supabase processes the code asynchronously. If the
+  // user lands back on /login (or the session hydrates late), navigate as
+  // soon as SIGNED_IN fires.
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.auth.getUser();
+      if (data.user) redirectToApp();
+    })();
+    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_IN") redirectToApp();
+    });
+    return () => sub.subscription.unsubscribe();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function onGoogle() {
     setError(null);

@@ -52,6 +52,13 @@ export function AuthDialog({
     setError(null);
     setLoading(true);
     try {
+      // Set a flag so the landing page knows to either claim or navigate
+      // when Supabase finishes the OAuth code exchange after the redirect.
+      try {
+        sessionStorage.setItem("findable:claim-pending", "1");
+      } catch {
+        /* ignore */
+      }
       const result = await lovable.auth.signInWithOAuth("google", {
         redirect_uri: window.location.origin,
       });

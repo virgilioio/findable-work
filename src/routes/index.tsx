@@ -156,24 +156,47 @@ function HomePage() {
     });
   }, [state.messages.length, sending]);
 
-  // After a Google-OAuth round-trip we may land here already signed in
-  // with a pending claim flag. Detect, run the claim, and navigate.
+  // After a Google-OAuth round-trip we land back on `/` and Supabase
+  // processes the code in the URL asynchronously. The route's beforeLoad
+  // already ran (with no session yet), so we listen for SIGNED_IN here and
+  // either claim the guest conversation or navigate into the app.
   useEffect(() => {
     if (!hydrated) return;
-    let cancelled = false;
-    (async () => {
+    let handled = false;
+
+    const handleSignedIn = async () => {
+      if (handled) return;
+      handled = true;
+      const s = loadGuestState();
+      const hasGuestChat = s.messages.length > 0;
       const pending = sessionStorage.getItem(CLAIM_PENDING_KEY);
-      if (!pending) return;
-      const { data } = await supabase.auth.getUser();
-      if (!data.user || cancelled) return;
       try {
-        await runClaim();
+        if (hasGuestChat && pending) {
+          await runClaim();
+        } else {
+          sessionStorage.removeItem(CLAIM_PENDING_KEY);
+          navigate({ to: "/app" });
+        }
       } catch {
-        /* ignore */
+        sessionStorage.removeItem(CLAIM_PENDING_KEY);
+        navigate({ to: "/app" });
       }
+    };
+
+    // Cover the case where the session is already hydrated by the time
+    // this effect runs (e.g. fast OAuth round-trip).
+    (async () => {
+      const { data } = await supabase.auth.getUser();
+      if (data.user) await handleSignedIn();
     })();
+
+    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_IN") {
+        void handleSignedIn();
+      }
+    });
     return () => {
-      cancelled = true;
+      sub.subscription.unsubscribe();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated]);
