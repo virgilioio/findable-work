@@ -673,6 +673,19 @@ function TimelineRow({
   );
 }
 
+function WorkingPill({ label }: { label: string }) {
+  return (
+    <div className="inline-flex items-center gap-2 rounded-full bg-muted/40 px-2.5 py-1 text-[11.5px] text-text-mute">
+      <span className="truncate max-w-[260px]">{label}</span>
+      <span className="flex items-center">
+        <span className="thinking-dot" />
+        <span className="thinking-dot" />
+        <span className="thinking-dot" />
+      </span>
+    </div>
+  );
+}
+
 function MessageRow({
   role,
   content,
