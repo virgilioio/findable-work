@@ -25,13 +25,17 @@ import {
   Search as SearchIcon,
   Dots,
   Chat as ChatIcon,
-  Sun,
-  Moon,
-  LogOut,
   Pencil,
   Pin,
+  Sparkle,
 } from "@/components/findable-icons";
-import { Trash2, PinOff } from "lucide-react";
+import {
+  Trash2,
+  PinOff,
+  Settings as SettingsIcon,
+  LifeBuoy,
+  LogOut as LogOutIcon,
+} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,6 +43,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  SettingsDialog,
+  type SettingsSection,
+} from "@/components/settings/settings-dialog";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -108,6 +116,9 @@ function AppLayout() {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [settingsSection, setSettingsSection] = useState<SettingsSection | null>(
+    null,
+  );
 
   useEffect(() => {
     const {
@@ -132,7 +143,6 @@ function AppLayout() {
   const activeId = useActiveConversationId();
   const [query, setQuery] = useState("");
   const [email, setEmail] = useState<string>("");
-  const { theme, toggle } = useTheme();
   const adminCheckFn = useServerFn(adminCheck);
   const { data: isAdmin } = useQuery({
     queryKey: ["is-admin"],
