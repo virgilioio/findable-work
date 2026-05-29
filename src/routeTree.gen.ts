@@ -19,6 +19,7 @@ import { Route as AuthenticatedAppRouteImport } from './routes/_authenticated/ap
 import { Route as AuthenticatedAppIndexRouteImport } from './routes/_authenticated/app.index'
 import { Route as ApiPublicGuestChatRouteImport } from './routes/api/public/guest-chat'
 import { Route as AuthenticatedAdminPromptsRouteImport } from './routes/_authenticated/admin.prompts'
+import { Route as ApiPublicJobsSlugRouteImport } from './routes/api/public/jobs/$slug'
 import { Route as ApiPublicAuthEmailHookRouteImport } from './routes/api/public/auth/email-hook'
 import { Route as AuthenticatedAppCIdRouteImport } from './routes/_authenticated/app.c.$id'
 
@@ -72,6 +73,11 @@ const AuthenticatedAdminPromptsRoute =
     path: '/admin/prompts',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const ApiPublicJobsSlugRoute = ApiPublicJobsSlugRouteImport.update({
+  id: '/api/public/jobs/$slug',
+  path: '/api/public/jobs/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicAuthEmailHookRoute = ApiPublicAuthEmailHookRouteImport.update({
   id: '/api/public/auth/email-hook',
   path: '/api/public/auth/email-hook',
@@ -95,6 +101,7 @@ export interface FileRoutesByFullPath {
   '/app/': typeof AuthenticatedAppIndexRoute
   '/app/c/$id': typeof AuthenticatedAppCIdRoute
   '/api/public/auth/email-hook': typeof ApiPublicAuthEmailHookRoute
+  '/api/public/jobs/$slug': typeof ApiPublicJobsSlugRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -107,6 +114,7 @@ export interface FileRoutesByTo {
   '/app': typeof AuthenticatedAppIndexRoute
   '/app/c/$id': typeof AuthenticatedAppCIdRoute
   '/api/public/auth/email-hook': typeof ApiPublicAuthEmailHookRoute
+  '/api/public/jobs/$slug': typeof ApiPublicJobsSlugRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -122,6 +130,7 @@ export interface FileRoutesById {
   '/_authenticated/app/': typeof AuthenticatedAppIndexRoute
   '/_authenticated/app/c/$id': typeof AuthenticatedAppCIdRoute
   '/api/public/auth/email-hook': typeof ApiPublicAuthEmailHookRoute
+  '/api/public/jobs/$slug': typeof ApiPublicJobsSlugRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -137,6 +146,7 @@ export interface FileRouteTypes {
     | '/app/'
     | '/app/c/$id'
     | '/api/public/auth/email-hook'
+    | '/api/public/jobs/$slug'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -149,6 +159,7 @@ export interface FileRouteTypes {
     | '/app'
     | '/app/c/$id'
     | '/api/public/auth/email-hook'
+    | '/api/public/jobs/$slug'
   id:
     | '__root__'
     | '/'
@@ -163,6 +174,7 @@ export interface FileRouteTypes {
     | '/_authenticated/app/'
     | '/_authenticated/app/c/$id'
     | '/api/public/auth/email-hook'
+    | '/api/public/jobs/$slug'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -174,6 +186,7 @@ export interface RootRouteChildren {
   ApiChatRoute: typeof ApiChatRoute
   ApiPublicGuestChatRoute: typeof ApiPublicGuestChatRoute
   ApiPublicAuthEmailHookRoute: typeof ApiPublicAuthEmailHookRoute
+  ApiPublicJobsSlugRoute: typeof ApiPublicJobsSlugRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -248,6 +261,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminPromptsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/api/public/jobs/$slug': {
+      id: '/api/public/jobs/$slug'
+      path: '/api/public/jobs/$slug'
+      fullPath: '/api/public/jobs/$slug'
+      preLoaderRoute: typeof ApiPublicJobsSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/auth/email-hook': {
       id: '/api/public/auth/email-hook'
       path: '/api/public/auth/email-hook'
@@ -301,6 +321,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiChatRoute: ApiChatRoute,
   ApiPublicGuestChatRoute: ApiPublicGuestChatRoute,
   ApiPublicAuthEmailHookRoute: ApiPublicAuthEmailHookRoute,
+  ApiPublicJobsSlugRoute: ApiPublicJobsSlugRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
