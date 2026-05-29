@@ -639,6 +639,8 @@ export const Route = createFileRoute("/api/chat")({
               let markerSent = false;
               let firstToolCalls: StreamedToolCall[] = [];
               const convo: ChatMessage[] = [...baseMessages];
+              // Hard cap: at most one clarify card per assistant turn.
+              let clarifyEmittedThisTurn = false;
 
               // Pre-create the assistant message row so every agent_task we
               // insert during this turn can be linked to it from the start.
