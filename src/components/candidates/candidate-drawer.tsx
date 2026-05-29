@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { updateCandidate, deleteCandidate, revealCandidatePhone } from "@/lib/candidates.functions";
-import { getApplication } from "@/lib/applications.functions";
+import { getApplication, getResumeSignedUrl } from "@/lib/applications.functions";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import {
