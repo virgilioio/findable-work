@@ -19,7 +19,7 @@ import {
   Doc,
 } from "@/components/findable-icons";
 
-const STAGES = ["Sourced", "Contacted", "Screening", "Interview", "Offer"] as const;
+const STAGES = ["Applied", "Sourced", "Contacted", "Screening", "Interview", "Offer"] as const;
 type Stage = (typeof STAGES)[number];
 
 export type Candidate = {
