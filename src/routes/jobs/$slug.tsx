@@ -1,6 +1,6 @@
 import { createFileRoute, notFound } from "@tanstack/react-router";
 import { useRef, useState } from "react";
-import { Logo, Folder, Check as CheckIcon, Sparkle, Doc, X } from "@/components/findable-icons";
+import { Wordmark, Folder, Check as CheckIcon, Sparkle, Doc, X } from "@/components/findable-icons";
 import { cn } from "@/lib/utils";
 import { getPublicJob } from "@/lib/public-jobs.functions";
 import { Markdown } from "@/components/ui/markdown";
