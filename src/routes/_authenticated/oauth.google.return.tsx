@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { completeGmailConnect } from "@/lib/outreach/gmail.functions";
+import { completeCalendarConnect } from "@/lib/outreach/calendar.functions";
 
 export const Route = createFileRoute("/_authenticated/oauth/google/return")({
   component: GoogleOAuthReturn,
@@ -9,22 +10,29 @@ export const Route = createFileRoute("/_authenticated/oauth/google/return")({
 
 function GoogleOAuthReturn() {
   const navigate = useNavigate();
-  const complete = useServerFn(completeGmailConnect);
+  const completeGmail = useServerFn(completeGmailConnect);
+  const completeCalendar = useServerFn(completeCalendarConnect);
   const [status, setStatus] = useState<"working" | "ok" | "error">("working");
-  const [message, setMessage] = useState("Finishing Gmail connection…");
+  const [message, setMessage] = useState("Finishing Google connection…");
+  const kind =
+    (typeof window !== "undefined" &&
+      (sessionStorage.getItem("google_oauth_kind") as "gmail" | "calendar" | null)) ||
+    "gmail";
+  const label = kind === "calendar" ? "Google Calendar" : "Gmail";
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const success = params.get("success") === "true";
     const connectionId = params.get("connection_id") ?? "";
-    const back = sessionStorage.getItem("gmail_return_to") || "/app";
+    const back = sessionStorage.getItem("google_oauth_return_to") || "/app";
 
     if (!success || !connectionId) {
       setStatus("error");
       setMessage(params.get("error") ?? "Connection cancelled");
       return;
     }
-    complete({ data: { connectionId } })
+    const fn = kind === "calendar" ? completeCalendar : completeGmail;
+    fn({ data: { connectionId } })
       .then(() => {
         setStatus("ok");
         setMessage("Connected! Redirecting…");
@@ -34,13 +42,17 @@ function GoogleOAuthReturn() {
         setStatus("error");
         setMessage(e?.message ?? "Failed to complete connection");
       });
-  }, [complete, navigate]);
+  }, [completeGmail, completeCalendar, navigate, kind]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-bg p-6">
       <div className="max-w-sm rounded-2xl border border-border bg-bg-elev p-6 text-center">
         <div className="text-[15px] font-semibold tracking-tight text-text">
-          {status === "ok" ? "Gmail connected" : status === "error" ? "Connection failed" : "Connecting Gmail…"}
+          {status === "ok"
+            ? `${label} connected`
+            : status === "error"
+              ? "Connection failed"
+              : `Connecting ${label}…`}
         </div>
         <div className="mt-2 text-[13px] text-text-mute">{message}</div>
         {status === "error" && (
