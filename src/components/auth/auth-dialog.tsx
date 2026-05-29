@@ -4,6 +4,7 @@ import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable";
 import { Wordmark } from "@/components/findable-icons";
+import googleLogo from "@/assets/google-logo.png";
 
 export type AuthReason = "nudge" | "sourcing" | "cap" | "manual";
 
@@ -127,21 +128,8 @@ export function AuthDialog({
             disabled={loading}
             className="flex h-10 items-center justify-center gap-2.5 rounded-[10px] border border-[var(--border-strong)] bg-[var(--bg-elev)] text-[13.5px] font-medium text-[var(--text)] transition hover:bg-[var(--bg-hover)] disabled:opacity-60"
           >
-            <span className="mono inline-flex h-3.5 w-3.5 items-center justify-center text-[13px] font-bold">
-              G
-            </span>
+            <img src={googleLogo} alt="" aria-hidden="true" className="h-4 w-4" />
             Continue with Google
-          </button>
-          <button
-            type="button"
-            disabled
-            title="Coming soon"
-            className="flex h-10 cursor-not-allowed items-center justify-center gap-2.5 rounded-[10px] border border-[var(--border-strong)] bg-[var(--bg-elev)] text-[13.5px] font-medium text-[var(--text)] opacity-60"
-          >
-            <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-              <path d="M14.5 10.6c0-2.4 1.95-3.55 2.04-3.6-1.11-1.62-2.84-1.84-3.45-1.87-1.47-.15-2.86.86-3.6.86-.74 0-1.89-.84-3.1-.82-1.6.02-3.07.93-3.89 2.36-1.66 2.88-.43 7.13 1.19 9.46.79 1.14 1.74 2.41 2.98 2.37 1.2-.05 1.66-.77 3.1-.77 1.45 0 1.86.77 3.13.75 1.29-.02 2.11-1.16 2.9-2.3.91-1.32 1.29-2.6 1.31-2.67-.03-.01-2.51-.96-2.53-3.81Z M12.3 3.5c.66-.79 1.1-1.89.98-2.99-.94.04-2.09.63-2.77 1.42-.6.7-1.13 1.81-.99 2.89 1.05.08 2.12-.53 2.78-1.32Z" />
-            </svg>
-            Continue with Apple
           </button>
 
           <div className="my-1 flex items-center gap-2.5">
