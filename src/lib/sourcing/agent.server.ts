@@ -124,10 +124,10 @@ export type SourceResult = {
 };
 
 export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
-  const { userId, conversationId, brief, jobBrief, limit, onTask } = ctx;
+  const { userId, conversationId, messageId, brief, jobBrief, limit, onTask } = ctx;
 
   // ── 1. Normalize ────────────────────────────────────────────────
-  const tNorm = await insertTask(userId, conversationId, "normalize", "Normalizing brief");
+  const tNorm = await insertTask(userId, conversationId, "normalize", "Normalizing brief", messageId);
   onTask(tNorm);
   let normalized: any = {};
   try {
@@ -205,7 +205,7 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
   }
 
   // ── 2. Research ─────────────────────────────────────────────────
-  const tRes = await insertTask(userId, conversationId, "research", "Researching titles & companies");
+  const tRes = await insertTask(userId, conversationId, "research", "Researching titles & companies", messageId);
   onTask(tRes);
   let research: any = { researched_titles: [], researched_companies: [], researched_keywords: [] };
   try {
@@ -266,7 +266,7 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
   if (projErr) throw new Error(projErr.message);
 
   // ── 3. Search Apollo + PDL ─────────────────────────────────────
-  const tSearch = await insertTask(userId, conversationId, "search", "Searching candidate pool");
+  const tSearch = await insertTask(userId, conversationId, "search", "Searching candidate pool", messageId);
   onTask(tSearch);
   const [apolloRes, pdlRes] = await Promise.allSettled([
     searchApolloWithFallback(criteria),
@@ -333,7 +333,7 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
   }
 
   // ── 4. Collect top N ───────────────────────────────────────────
-  const tCollect = await insertTask(userId, conversationId, "collect", `Collecting top ${limit}`);
+  const tCollect = await insertTask(userId, conversationId, "collect", `Collecting top ${limit}`, messageId);
   onTask(tCollect);
 
   // Merge top-N across both providers by score so we always fill the quota
