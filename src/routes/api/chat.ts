@@ -378,6 +378,32 @@ function looksLikeFollowUpQuestion(text: string): boolean {
     && /\b(this|that|these|those|result|results|candidate|candidates|job|post|profile|person|message|email|outreach|esto|eso|estos|esas|resultado|resultados|candidato|candidatos|vacante|puesto|perfil|persona|mensaje|correo)\b/.test(t);
 }
 
+// Heuristic for chain-of-thought that the model leaked into the visible
+// `content` channel (e.g. "(Mode C: We're in a sourcing flow...", "Let me
+// classify…", parentheticals stuffed with meta-analysis). Used to redirect
+// those tokens to the reasoning stream instead of the reply bubble.
+function looksLikeLeakedReasoning(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  // Strong signals: opens with an obviously-internal parenthetical or
+  // meta-cognition phrase.
+  if (/^\(\s*Mode\s+[A-D]\b/i.test(t)) return true;
+  if (/^\((?:we|let me|i need|i should|the user|conversation shows|now (?:user|we|the)|we (?:must|need|should)|hmm)\b/i.test(t))
+    return true;
+  // Mid-text giveaways within the first ~200 chars.
+  const head = t.slice(0, 240).toLowerCase();
+  const triggers = [
+    "mode a:", "mode b:", "mode c:", "mode d:",
+    "we're in", "we are in", "let me classify", "classify this",
+    "the user is asking", "the user hasn't", "the user has not",
+    "conversation shows", "now user", "we must respond", "we need to respond",
+    "we should respond", "we should reply", "internal:", "(the assistant)",
+  ];
+  let hits = 0;
+  for (const k of triggers) if (head.includes(k)) hits++;
+  return hits >= 2;
+}
+
 export const Route = createFileRoute("/api/chat")({
   server: {
     handlers: {
