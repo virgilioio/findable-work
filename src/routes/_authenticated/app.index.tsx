@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { createConversation } from "@/lib/conversations.functions";
-import { Logo, Plus } from "@/components/findable-icons";
+import { AppIcon, Plus } from "@/components/findable-icons";
 
 export const Route = createFileRoute("/_authenticated/app/")({
   component: AppHome,
@@ -18,9 +18,7 @@ function AppHome() {
   return (
     <div className="flex h-full flex-col items-center justify-center px-6">
       <div className="w-full max-w-[520px] text-center">
-        <div className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-bg-bubble text-text">
-          <Logo size={26} />
-        </div>
+        <AppIcon size={48} className="mx-auto mb-5" />
         <h1 className="text-[24px] font-semibold tracking-tight text-text">
           What hire can I help with?
         </h1>
