@@ -1,6 +1,6 @@
 import { createFileRoute, notFound } from "@tanstack/react-router";
 import { useState } from "react";
-import { Logo, Globe, Check as CheckIcon, Sparkle } from "@/components/findable-icons";
+import { Logo, Folder, Check as CheckIcon, Sparkle } from "@/components/findable-icons";
 import { cn } from "@/lib/utils";
 
 type Screening = Array<{
@@ -82,7 +82,7 @@ function NotLive() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-bg-side px-4">
       <div className="max-w-md rounded-2xl border border-border bg-bg-elev p-8 text-center shadow-sm">
-        <Globe size={32} className="mx-auto text-text-faint" />
+        <Folder size={32} className="mx-auto text-text-faint" />
         <h1 className="mt-4 text-[18px] font-semibold">This posting isn't live yet</h1>
         <p className="mt-1.5 text-[13.5px] text-text-mute">
           The job needs to be published from the findable workspace before applications open.
