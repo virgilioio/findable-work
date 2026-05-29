@@ -12,6 +12,9 @@ import {
 import { listCandidates } from "@/lib/candidates.functions";
 import { Send, Linkedin } from "@/components/findable-icons";
 import { cn } from "@/lib/utils";
+import { InboxPanel } from "./inbox-panel";
+import { GmailConnectionPill } from "./connect-gmail-card";
+import { listOutreachThreads } from "@/lib/outreach/gmail.functions";
 
 type Followup = { day: number; channel: string; subject: string; enabled: boolean };
 
@@ -32,6 +35,15 @@ export function OutreachPanel({ conversationId }: { conversationId: string }) {
   const get = useServerFn(getOutreach);
   const upsert = useServerFn(upsertOutreach);
   const listC = useServerFn(listCandidates);
+  const listThreadsFn = useServerFn(listOutreachThreads);
+
+  const [view, setView] = useState<"templates" | "inbox">("templates");
+
+  const { data: threadsSummary } = useQuery({
+    queryKey: ["outreach-threads", conversationId],
+    queryFn: () => listThreadsFn({ data: { conversationId } }),
+  });
+  const unreadCount = threadsSummary?.unreadCount ?? 0;
 
   const { data: row } = useQuery({
     queryKey: ["outreach", conversationId],
@@ -136,10 +148,26 @@ export function OutreachPanel({ conversationId }: { conversationId: string }) {
           </div>
           <div>
             <div className="text-[15px] font-semibold tracking-tight text-text">Outreach</div>
-            <div className="text-[12px] text-text-mute">Templates · sequence · personalization</div>
+            <div className="text-[12px] text-text-mute">
+              {view === "templates" ? "Templates · sequence · personalization" : "Live conversations from your Gmail"}
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <Segmented
+            value={view}
+            options={[
+              { value: "templates", label: "Templates" },
+              {
+                value: "inbox",
+                label: unreadCount > 0 ? `Inbox · ${unreadCount}` : "Inbox",
+              },
+            ]}
+            onChange={(v) => setView(v as "templates" | "inbox")}
+          />
+          <GmailConnectionPill />
+          {view === "templates" && (
+            <>
           <Segmented
             value={channel}
             options={[
@@ -153,9 +181,14 @@ export function OutreachPanel({ conversationId }: { conversationId: string }) {
             options={TONES.map((t) => ({ value: t, label: t }))}
             onChange={(v) => setTone(v as (typeof TONES)[number])}
           />
+            </>
+          )}
         </div>
       </div>
 
+      {view === "inbox" ? (
+        <InboxPanel conversationId={conversationId} />
+      ) : (
       <div className="grid flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[1fr_440px]">
         {/* Editor */}
         <div className="flex flex-col gap-5 overflow-y-auto p-6">
@@ -351,6 +384,7 @@ export function OutreachPanel({ conversationId }: { conversationId: string }) {
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 }

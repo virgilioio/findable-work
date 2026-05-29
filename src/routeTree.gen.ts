@@ -22,6 +22,7 @@ import { Route as ApiPublicGuestChatRouteImport } from './routes/api/public/gues
 import { Route as AuthenticatedAdminPromptsRouteImport } from './routes/_authenticated/admin.prompts'
 import { Route as ApiPublicJobsSlugRouteImport } from './routes/api/public/jobs/$slug'
 import { Route as ApiPublicAuthEmailHookRouteImport } from './routes/api/public/auth/email-hook'
+import { Route as AuthenticatedOauthGoogleReturnRouteImport } from './routes/_authenticated/oauth.google.return'
 import { Route as AuthenticatedAppCIdRouteImport } from './routes/_authenticated/app.c.$id'
 import { Route as ApiPublicJobsSlugApplyRouteImport } from './routes/api/public/jobs/$slug/apply'
 
@@ -90,6 +91,12 @@ const ApiPublicAuthEmailHookRoute = ApiPublicAuthEmailHookRouteImport.update({
   path: '/api/public/auth/email-hook',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedOauthGoogleReturnRoute =
+  AuthenticatedOauthGoogleReturnRouteImport.update({
+    id: '/oauth/google/return',
+    path: '/oauth/google/return',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedAppCIdRoute = AuthenticatedAppCIdRouteImport.update({
   id: '/c/$id',
   path: '/c/$id',
@@ -113,6 +120,7 @@ export interface FileRoutesByFullPath {
   '/api/public/guest-chat': typeof ApiPublicGuestChatRoute
   '/app/': typeof AuthenticatedAppIndexRoute
   '/app/c/$id': typeof AuthenticatedAppCIdRoute
+  '/oauth/google/return': typeof AuthenticatedOauthGoogleReturnRoute
   '/api/public/auth/email-hook': typeof ApiPublicAuthEmailHookRoute
   '/api/public/jobs/$slug': typeof ApiPublicJobsSlugRouteWithChildren
   '/api/public/jobs/$slug/apply': typeof ApiPublicJobsSlugApplyRoute
@@ -128,6 +136,7 @@ export interface FileRoutesByTo {
   '/api/public/guest-chat': typeof ApiPublicGuestChatRoute
   '/app': typeof AuthenticatedAppIndexRoute
   '/app/c/$id': typeof AuthenticatedAppCIdRoute
+  '/oauth/google/return': typeof AuthenticatedOauthGoogleReturnRoute
   '/api/public/auth/email-hook': typeof ApiPublicAuthEmailHookRoute
   '/api/public/jobs/$slug': typeof ApiPublicJobsSlugRouteWithChildren
   '/api/public/jobs/$slug/apply': typeof ApiPublicJobsSlugApplyRoute
@@ -146,6 +155,7 @@ export interface FileRoutesById {
   '/api/public/guest-chat': typeof ApiPublicGuestChatRoute
   '/_authenticated/app/': typeof AuthenticatedAppIndexRoute
   '/_authenticated/app/c/$id': typeof AuthenticatedAppCIdRoute
+  '/_authenticated/oauth/google/return': typeof AuthenticatedOauthGoogleReturnRoute
   '/api/public/auth/email-hook': typeof ApiPublicAuthEmailHookRoute
   '/api/public/jobs/$slug': typeof ApiPublicJobsSlugRouteWithChildren
   '/api/public/jobs/$slug/apply': typeof ApiPublicJobsSlugApplyRoute
@@ -164,6 +174,7 @@ export interface FileRouteTypes {
     | '/api/public/guest-chat'
     | '/app/'
     | '/app/c/$id'
+    | '/oauth/google/return'
     | '/api/public/auth/email-hook'
     | '/api/public/jobs/$slug'
     | '/api/public/jobs/$slug/apply'
@@ -179,6 +190,7 @@ export interface FileRouteTypes {
     | '/api/public/guest-chat'
     | '/app'
     | '/app/c/$id'
+    | '/oauth/google/return'
     | '/api/public/auth/email-hook'
     | '/api/public/jobs/$slug'
     | '/api/public/jobs/$slug/apply'
@@ -196,6 +208,7 @@ export interface FileRouteTypes {
     | '/api/public/guest-chat'
     | '/_authenticated/app/'
     | '/_authenticated/app/c/$id'
+    | '/_authenticated/oauth/google/return'
     | '/api/public/auth/email-hook'
     | '/api/public/jobs/$slug'
     | '/api/public/jobs/$slug/apply'
@@ -307,6 +320,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicAuthEmailHookRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/oauth/google/return': {
+      id: '/_authenticated/oauth/google/return'
+      path: '/oauth/google/return'
+      fullPath: '/oauth/google/return'
+      preLoaderRoute: typeof AuthenticatedOauthGoogleReturnRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/app/c/$id': {
       id: '/_authenticated/app/c/$id'
       path: '/c/$id'
@@ -340,11 +360,13 @@ const AuthenticatedAppRouteWithChildren =
 interface AuthenticatedRouteChildren {
   AuthenticatedAppRoute: typeof AuthenticatedAppRouteWithChildren
   AuthenticatedAdminPromptsRoute: typeof AuthenticatedAdminPromptsRoute
+  AuthenticatedOauthGoogleReturnRoute: typeof AuthenticatedOauthGoogleReturnRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedAppRoute: AuthenticatedAppRouteWithChildren,
   AuthenticatedAdminPromptsRoute: AuthenticatedAdminPromptsRoute,
+  AuthenticatedOauthGoogleReturnRoute: AuthenticatedOauthGoogleReturnRoute,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
