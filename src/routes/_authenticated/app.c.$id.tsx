@@ -538,8 +538,19 @@ function ChatPanel({
               </div>
             );
           })}
-          {(streaming || liveTasks.length > 0) && (
+          {(streaming || liveTasks.length > 0 || sending || reasoning) && (
             <div className="space-y-4">
+              {(sending || reasoning) && (
+                <TimelineRow>
+                  <ThinkingTicker
+                    reasoning={reasoning}
+                    active={sending}
+                    answered={Boolean(streaming)}
+                    startedAt={streamStart}
+                    endedAt={streamEnd || undefined}
+                  />
+                </TimelineRow>
+              )}
               {(() => {
                 const { before, after } = splitAroundTasks(streaming);
                 return (
@@ -561,11 +572,6 @@ function ChatPanel({
                 );
               })()}
             </div>
-          )}
-          {sending && !streaming && liveTasks.length === 0 && (
-            <TimelineRow pulse>
-              <span className="text-[13px] text-text-mute">Thinking…</span>
-            </TimelineRow>
           )}
         </div>
       </div>
