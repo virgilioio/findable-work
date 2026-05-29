@@ -88,9 +88,6 @@ function LoginPage() {
 
       {/* Card */}
       <div className="w-full max-w-[380px] rounded-[14px] border border-[var(--border)] bg-[var(--bg-elev)] px-8 py-9">
-        <div className="mb-5 flex items-center">
-          <Wordmark height={36} />
-        </div>
         <h1 className="text-[22px] font-semibold tracking-[-0.015em] text-[var(--text)]">
           {mode === "signin" ? "Welcome back" : "Create your account"}
         </h1>
