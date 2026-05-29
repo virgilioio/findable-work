@@ -513,8 +513,23 @@ function ChatPanel({
     <div className="flex flex-1 flex-col overflow-hidden">
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-[760px] space-y-6 px-4 py-10">
+          {(() => {
+            // Defensive fallback: any persisted tasks whose message_id is null
+            // (orphaned by a pre-fix turn or an interrupted stream) get
+            // attached to the most recent assistant message so they still
+            // render instead of vanishing.
+            const lastAssistantId =
+              [...messages].reverse().find((m) => m.role === "assistant")?.id ?? null;
+            return null;
+          })()}
           {messages.map((m) => {
-            const msgTasks = persistedTasks.filter((t) => t.message_id === m.id);
+            const lastAssistantId =
+              [...messages].reverse().find((x) => x.role === "assistant")?.id ?? null;
+            const msgTasks = persistedTasks.filter(
+              (t) =>
+                t.message_id === m.id ||
+                (t.message_id === null && m.id === lastAssistantId && m.role === "assistant"),
+            );
             const { before, after } =
               m.role === "assistant"
                 ? splitAroundTasks(m.content)
