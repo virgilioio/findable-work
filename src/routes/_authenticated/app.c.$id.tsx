@@ -1251,6 +1251,58 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
+function JdListSection({
+  title,
+  emptyHint,
+  placeholder,
+  editing,
+  value,
+  text,
+  onChange,
+  onCommit,
+}: {
+  title: string;
+  emptyHint: string;
+  placeholder: string;
+  editing: boolean;
+  value: string[];
+  text: string;
+  onChange: (next: string[]) => void;
+  onCommit: (next: string[]) => void;
+}) {
+  return (
+    <section>
+      <h3 className="mb-2 text-[11px] font-medium uppercase tracking-wide text-text-faint">
+        {title}
+      </h3>
+      {editing ? (
+        <Textarea
+          rows={Math.max(4, Math.min(10, value.length + 1))}
+          value={text}
+          onChange={(e) => onChange(e.target.value.split("\n").filter((l) => l.length > 0))}
+          onBlur={(e) => {
+            const next = e.target.value
+              .split("\n")
+              .map((s) => s.trim())
+              .filter(Boolean);
+            onCommit(next);
+          }}
+          placeholder={placeholder}
+          className="border-border bg-bg-elev text-[14px] leading-relaxed"
+        />
+      ) : value.length > 0 ? (
+        <ul className="list-disc space-y-1 pl-5 text-[14px] leading-relaxed text-text">
+          {value.map((r, i) => (
+            <li key={i}>{r}</li>
+          ))}
+        </ul>
+      ) : (
+        <div className="text-[14px] leading-relaxed text-text-faint">{emptyHint}</div>
+      )}
+    </section>
+  );
+}
+
 function HeaderBtn({
   onClick,
   disabled,
