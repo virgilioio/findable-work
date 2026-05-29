@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { supabase } from "@/integrations/supabase/client";
+import { lovable } from "@/integrations/lovable";
 import { Wordmark } from "@/components/findable-icons";
 
 export type AuthReason = "nudge" | "sourcing" | "cap" | "manual";
@@ -45,6 +46,23 @@ export function AuthDialog({
   const [loading, setLoading] = useState(false);
 
   const subtitle = REASON_SUBTITLE[reason][mode];
+
+  async function onGoogle() {
+    setError(null);
+    setLoading(true);
+    try {
+      const result = await lovable.auth.signInWithOAuth("google", {
+        redirect_uri: window.location.origin,
+      });
+      if (result.error) throw result.error instanceof Error ? result.error : new Error(String(result.error));
+      if (result.redirected) return;
+      await onAuthenticated();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Google sign-in failed");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -108,9 +126,9 @@ export function AuthDialog({
         <form onSubmit={onSubmit} className="mt-6 flex flex-col gap-2.5">
           <button
             type="button"
-            disabled
-            title="Coming soon"
-            className="flex h-10 cursor-not-allowed items-center justify-center gap-2.5 rounded-[10px] border border-[var(--border-strong)] bg-[var(--bg-elev)] text-[13.5px] font-medium text-[var(--text)] opacity-60"
+            onClick={onGoogle}
+            disabled={loading}
+            className="flex h-10 items-center justify-center gap-2.5 rounded-[10px] border border-[var(--border-strong)] bg-[var(--bg-elev)] text-[13.5px] font-medium text-[var(--text)] transition hover:bg-[var(--bg-hover)] disabled:opacity-60"
           >
             <span className="mono inline-flex h-3.5 w-3.5 items-center justify-center text-[13px] font-bold">
               G

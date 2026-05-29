@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { lovable } from "@/integrations/lovable";
 import { Wordmark } from "@/components/findable-icons";
 
 export const Route = createFileRoute("/login")({
@@ -24,6 +25,23 @@ function LoginPage() {
     console.info("[auth] redirecting to app after successful auth");
     const target = search.redirect && search.redirect.startsWith("/") ? search.redirect : "/app";
     navigate({ to: target });
+  }
+
+  async function onGoogle() {
+    setError(null);
+    setLoading(true);
+    try {
+      const result = await lovable.auth.signInWithOAuth("google", {
+        redirect_uri: window.location.origin,
+      });
+      if (result.error) throw result.error instanceof Error ? result.error : new Error(String(result.error));
+      if (result.redirected) return;
+      redirectToApp();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Google sign-in failed");
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function onSubmit(e: React.FormEvent) {
@@ -86,9 +104,9 @@ function LoginPage() {
           {/* SSO (visual only — Google/Apple wiring optional later) */}
           <button
             type="button"
-            disabled
-            title="Coming soon"
-            className="flex h-10 cursor-not-allowed items-center justify-center gap-2.5 rounded-[10px] border border-[var(--border-strong)] bg-[var(--bg-elev)] text-[13.5px] font-medium text-[var(--text)] opacity-60"
+            onClick={onGoogle}
+            disabled={loading}
+            className="flex h-10 items-center justify-center gap-2.5 rounded-[10px] border border-[var(--border-strong)] bg-[var(--bg-elev)] text-[13.5px] font-medium text-[var(--text)] transition hover:bg-[var(--bg-hover)] disabled:opacity-60"
           >
             <span className="mono inline-flex h-3.5 w-3.5 items-center justify-center text-[13px] font-bold">
               G
