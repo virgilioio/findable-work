@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import {
   Logo,
+  AppIcon,
   Chat as ChatIcon,
   Briefcase,
   Megaphone,
