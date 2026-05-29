@@ -48,6 +48,7 @@ import {
 import { cn } from "@/lib/utils";
 import { CandidatesPanel } from "@/components/candidates/candidates-panel";
 import { TaskCard, type ChatTask, type ArtifactTab } from "@/components/chat/task-card";
+import { ThinkingTicker } from "@/components/chat/thinking-ticker";
 import { JobPostsPanel, type JobPost } from "@/components/job-posts/job-posts-panel";
 import { OutreachPanel } from "@/components/outreach/outreach-panel";
 
@@ -107,6 +108,9 @@ function ConversationPage() {
   });
 
   const [streaming, setStreaming] = useState<string>("");
+  const [reasoning, setReasoning] = useState<string>("");
+  const [streamStart, setStreamStart] = useState<number>(0);
+  const [streamEnd, setStreamEnd] = useState<number>(0);
   const [sending, setSending] = useState(false);
   const [tab, setTab] = useState<"chat" | "job" | "job_posts" | "candidates" | "outreach">("chat");
   const [pulse, setPulse] = useState(false);
@@ -138,6 +142,9 @@ function ConversationPage() {
   async function sendMessage(text: string) {
     setSending(true);
     setStreaming("");
+    setReasoning("");
+    setStreamStart(Date.now());
+    setStreamEnd(0);
     setLiveTasks([]);
     qc.setQueryData(["conversation", id], (prev: any) => ({
       ...prev,
@@ -203,6 +210,8 @@ function ConversationPage() {
           } else if (event === "text_replace" && typeof payload.content === "string") {
             acc = payload.content;
             setStreaming(acc);
+          } else if (event === "reasoning" && typeof payload.content === "string") {
+            setReasoning((prev) => prev + payload.content);
           } else if (event === "job") {
             jobCreated = true;
           } else if (event === "job_posts") {
@@ -226,8 +235,11 @@ function ConversationPage() {
         }
       }
 
+      setStreamEnd(Date.now());
       setStreaming("");
       setLiveTasks([]);
+      // Keep `reasoning` so the collapsed "Thought for Ns" chip stays
+      // visible on the last turn until the user sends the next message.
       await qc.invalidateQueries({ queryKey: ["conversation", id] });
       qc.invalidateQueries({ queryKey: ["conversations"] });
       if (candidatesAdded > 0) {
