@@ -1,8 +1,10 @@
 import { createFileRoute, notFound } from "@tanstack/react-router";
-import { useState } from "react";
-import { Logo, Folder, Check as CheckIcon, Sparkle } from "@/components/findable-icons";
+import { useRef, useState } from "react";
+import { Logo, Folder, Check as CheckIcon, Sparkle, Doc, X } from "@/components/findable-icons";
 import { cn } from "@/lib/utils";
 import { getPublicJob } from "@/lib/public-jobs.functions";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 type Screening = Array<{
   id: string;
@@ -89,6 +91,9 @@ function ApplyPage() {
     linkedin: string;
     location: string;
     resume_filename: string;
+    resume_path: string;
+    resume_size: number;
+    resume_mime: string;
     answers: Record<string, string | string[]>;
   }>({
     name: "",
@@ -97,6 +102,9 @@ function ApplyPage() {
     linkedin: "",
     location: "",
     resume_filename: "",
+    resume_path: "",
+    resume_size: 0,
+    resume_mime: "",
     answers: {},
   });
   const [errors, setErrors] = useState<Record<string, true>>({});
@@ -145,9 +153,10 @@ function ApplyPage() {
           phone: form.phone,
           linkedin: form.linkedin,
           location: form.location,
-          resume_filename:
-            form.resume_filename ||
-            (form.name ? `${form.name.replace(/\s+/g, "_")}_Resume.pdf` : ""),
+          resume_filename: form.resume_filename || undefined,
+          resume_path: form.resume_path || undefined,
+          resume_size: form.resume_size || undefined,
+          resume_mime: form.resume_mime || undefined,
           answers: form.answers,
         }),
       });
@@ -292,16 +301,29 @@ function ApplyPage() {
                 placeholder="linkedin.com/in/…"
               />
             </Field>
-            <Field label="Resume filename">
-              <input
-                value={form.resume_filename}
-                onChange={(e) => setForm({ ...form, resume_filename: e.target.value })}
-                className={inputCls}
-                placeholder="jane_doe_resume.pdf"
+            <Field label="Resume">
+              <ResumeDrop
+                filename={form.resume_filename}
+                size={form.resume_size}
+                onUploaded={(f) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    resume_filename: f.filename,
+                    resume_path: f.path,
+                    resume_size: f.size,
+                    resume_mime: f.mime,
+                  }))
+                }
+                onClear={() =>
+                  setForm((prev) => ({
+                    ...prev,
+                    resume_filename: "",
+                    resume_path: "",
+                    resume_size: 0,
+                    resume_mime: "",
+                  }))
+                }
               />
-              <p className="mt-1 text-[11.5px] text-text-faint">
-                File upload coming soon — enter the filename for now.
-              </p>
             </Field>
 
             {screening.length > 0 && (
