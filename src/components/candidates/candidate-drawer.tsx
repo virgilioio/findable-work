@@ -5,7 +5,6 @@ import { toast } from "sonner";
 import { updateCandidate, deleteCandidate, revealCandidatePhone } from "@/lib/candidates.functions";
 import { getApplication } from "@/lib/applications.functions";
 import { useQuery } from "@tanstack/react-query";
-import { useServerFn as _useServerFn } from "@tanstack/react-start";
 import { cn } from "@/lib/utils";
 import {
   X,
