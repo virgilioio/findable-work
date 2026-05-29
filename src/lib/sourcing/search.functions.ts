@@ -168,24 +168,12 @@ export const collectCandidates = createServerFn({ method: "POST" })
 
     const apolloPreviews = previews.filter((p) => p.source === "apollo");
 
-    // Skip already-collected in this tenant (apollo_id match)
-    const apolloIds = apolloPreviews.map((p) => p.external_id);
-    const { data: alreadyRows } = await supabase
-      .from("candidates")
-      .select("apollo_id")
-      .eq("user_id", userId)
-      .in("apollo_id", apolloIds.length ? apolloIds : ["__none__"]);
-    const alreadyCollected = new Set((alreadyRows ?? []).map((r) => r.apollo_id));
-
-    const toEnrich = apolloPreviews
-      .filter((p) => !alreadyCollected.has(p.external_id))
-      .map((p) => p.external_id);
-
-    const enriched = await enrichApolloProfiles(toEnrich);
-    // Build a quick external_id → has_direct_phone lookup from the preview rows
-    // so we can persist the flag without paying for a phone reveal.
-    const phoneFlag = new Map<string, boolean>(
-      apolloPreviews.map((p: any) => [p.external_id, Boolean(p.preview?.has_direct_phone)]),
+    // Split: internal previews are already in this tenant — reuse without paying Apollo.
+    const internalPreviews = apolloPreviews.filter(
+      (p: any) => p.display_source === "internal",
+    );
+    const enrichablePreviews = apolloPreviews.filter(
+      (p: any) => p.display_source !== "internal",
     );
 
     if (!data.conversation_id) {
@@ -193,6 +181,106 @@ export const collectCandidates = createServerFn({ method: "POST" })
     }
 
     const insertedCandidates: any[] = [];
+
+    // --- Internal reuse path: clone existing candidate row into this conversation. ---
+    if (internalPreviews.length > 0) {
+      const internalApolloIds = internalPreviews.map((p) => p.external_id);
+      const internalSlugs = internalPreviews
+        .map((p) => p.linkedin_slug)
+        .filter(Boolean) as string[];
+
+      const { data: existing } = await supabase
+        .from("candidates")
+        .select("*")
+        .eq("user_id", userId)
+        .or(
+          [
+            internalApolloIds.length
+              ? `apollo_id.in.(${internalApolloIds.map((id) => `"${id}"`).join(",")})`
+              : "",
+            internalSlugs.length
+              ? `linkedin_slug.in.(${internalSlugs.map((s) => `"${s}"`).join(",")})`
+              : "",
+          ]
+            .filter(Boolean)
+            .join(","),
+        );
+
+      const byApollo = new Map<string, any>();
+      const bySlug = new Map<string, any>();
+      for (const row of existing ?? []) {
+        if (row.apollo_id) byApollo.set(row.apollo_id, row);
+        if (row.linkedin_slug) bySlug.set(row.linkedin_slug, row);
+      }
+
+      for (const prev of internalPreviews) {
+        const src =
+          byApollo.get(prev.external_id) ||
+          (prev.linkedin_slug ? bySlug.get(prev.linkedin_slug) : null);
+        if (!src) continue;
+        const { data: ins, error: insErr } = await supabase
+          .from("candidates")
+          .insert({
+            user_id: userId,
+            conversation_id: data.conversation_id,
+            name: src.name,
+            role: src.role,
+            company: src.company,
+            stage: "Sourced",
+            source: src.source ?? "Apollo",
+            match: src.match ?? 80,
+            tags: [],
+            starred: false,
+            avatar: src.avatar ?? "",
+            email: src.email,
+            phone: src.phone,
+            linkedin: src.linkedin,
+            location: src.location,
+            summary: src.summary,
+            experience: src.experience ?? [],
+            education: src.education ?? [],
+            activity: [] as any,
+            match_breakdown: [] as any,
+            apollo_id: src.apollo_id,
+            linkedin_slug: src.linkedin_slug,
+            has_direct_phone: src.has_direct_phone ?? false,
+          })
+          .select("*")
+          .single();
+        if (insErr) {
+          console.error("internal candidate reuse failed:", insErr.message);
+          continue;
+        }
+        insertedCandidates.push(ins);
+        await supabase
+          .from("sourcing_preview_candidates")
+          .update({ collected_at: new Date().toISOString() })
+          .eq("id", prev.id);
+      }
+    }
+
+    // --- Apollo enrichment path (fresh + gio): pay for enrichment as today. ---
+    // Skip already-collected in this tenant (apollo_id match)
+    const apolloIds = enrichablePreviews.map((p) => p.external_id);
+    const { data: alreadyRows } = await supabase
+      .from("candidates")
+      .select("apollo_id")
+      .eq("user_id", userId)
+      .in("apollo_id", apolloIds.length ? apolloIds : ["__none__"]);
+    const alreadyCollected = new Set((alreadyRows ?? []).map((r) => r.apollo_id));
+
+    const toEnrich = enrichablePreviews
+      .filter((p) => !alreadyCollected.has(p.external_id))
+      .map((p) => p.external_id);
+
+    const enriched = await enrichApolloProfiles(toEnrich);
+    // Build a quick external_id → has_direct_phone lookup from the preview rows
+    // so we can persist the flag without paying for a phone reveal.
+    const phoneFlag = new Map<string, boolean>(
+      enrichablePreviews.map((p: any) => [p.external_id, Boolean(p.preview?.has_direct_phone)]),
+    );
+
+    const enrichedInsertedCount0 = insertedCandidates.length;
     for (const e of enriched) {
       const slug = linkedinSlug(e.linkedin_url);
       const { data: ins, error: insErr } = await supabase
@@ -244,10 +332,11 @@ export const collectCandidates = createServerFn({ method: "POST" })
         .eq("external_id", e.id);
     }
 
-    if (insertedCandidates.length > 0) {
+    const enrichedInsertedCount = insertedCandidates.length - enrichedInsertedCount0;
+    if (enrichedInsertedCount > 0) {
       const { error: rpcErr } = await supabaseAdmin.rpc("increment_sourcing_usage", {
         _user_id: userId,
-        _count: insertedCandidates.length,
+        _count: enrichedInsertedCount,
       });
       if (rpcErr) console.error("increment_sourcing_usage failed:", rpcErr.message);
     }
