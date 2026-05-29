@@ -1005,57 +1005,82 @@ function JobPanel({
       <div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-[1fr_320px]">
         {/* Main */}
         <div className="space-y-7">
+          {/* About the role */}
           <section>
             <h3 className="mb-2 text-[11px] font-medium uppercase tracking-wide text-text-faint">
-              Summary
+              About the role
             </h3>
             {editing ? (
               <Textarea
-                rows={6}
-                value={form.description}
-                onChange={(e) => setForm({ ...form, description: e.target.value })}
-                onBlur={(e) => e.target.value !== job.description && save({ description: e.target.value })}
+                rows={4}
+                value={form.summary ?? ""}
+                onChange={(e) => setForm({ ...form, summary: e.target.value })}
+                onBlur={(e) => {
+                  const v = e.target.value;
+                  if (v !== (job.summary ?? job.description ?? "")) save({ summary: v });
+                }}
+                placeholder="2–4 sentences describing the role, mission, and team."
                 className="border-border bg-bg-elev text-[14px] leading-relaxed"
               />
+            ) : form.summary ? (
+              <p className="text-[14px] leading-relaxed text-text whitespace-pre-wrap">{form.summary}</p>
             ) : (
-              form.description ? (
-                <Markdown className="text-[14px]">{form.description}</Markdown>
-              ) : (
-                <div className="text-[14px] leading-relaxed text-text-faint">No summary yet.</div>
-              )
+              <div className="text-[14px] leading-relaxed text-text-faint">
+                No overview yet — ask the assistant to draft one, or click Edit to add your own.
+              </div>
             )}
           </section>
 
-          <section>
-            <h3 className="mb-2 text-[11px] font-medium uppercase tracking-wide text-text-faint">
-              Requirements
-            </h3>
-            {editing ? (
-              <Textarea
-                rows={8}
-                value={reqText}
-                onChange={(e) =>
-                  setForm({ ...form, requirements: e.target.value.split("\n").filter(Boolean) })
+          {/* Responsibilities */}
+          <JdListSection
+            title="Responsibilities"
+            emptyHint="No responsibilities yet — ask the assistant to draft them, or click Edit to add your own."
+            placeholder="One responsibility per line"
+            editing={editing}
+            value={form.responsibilities ?? []}
+            text={respText}
+            onChange={(arr) => setForm({ ...form, responsibilities: arr })}
+            onCommit={(arr) => {
+              if (JSON.stringify(arr) !== JSON.stringify(job.responsibilities ?? [])) {
+                save({ responsibilities: arr });
+              }
+            }}
+          />
+
+          {/* Must-have */}
+          <JdListSection
+            title="Must-have requirements"
+            emptyHint="No must-have requirements yet."
+            placeholder="One requirement per line"
+            editing={editing}
+            value={form.must_have ?? []}
+            text={mustText}
+            onChange={(arr) => setForm({ ...form, must_have: arr })}
+            onCommit={(arr) => {
+              const prev = (job.must_have && job.must_have.length ? job.must_have : job.requirements) ?? [];
+              if (JSON.stringify(arr) !== JSON.stringify(prev)) {
+                save({ must_have: arr });
+              }
+            }}
+          />
+
+          {/* Nice to have */}
+          {(editing || (form.nice_to_have && form.nice_to_have.length > 0)) && (
+            <JdListSection
+              title="Nice to have"
+              emptyHint="Add nice-to-haves to attract a wider range of candidates."
+              placeholder="One nice-to-have per line"
+              editing={editing}
+              value={form.nice_to_have ?? []}
+              text={niceText}
+              onChange={(arr) => setForm({ ...form, nice_to_have: arr })}
+              onCommit={(arr) => {
+                if (JSON.stringify(arr) !== JSON.stringify(job.nice_to_have ?? [])) {
+                  save({ nice_to_have: arr });
                 }
-                onBlur={(e) => {
-                  const next = e.target.value.split("\n").map((s) => s.trim()).filter(Boolean);
-                  if (JSON.stringify(next) !== JSON.stringify(job.requirements)) {
-                    save({ requirements: next });
-                  }
-                }}
-                placeholder="One per line"
-                className="border-border bg-bg-elev text-[14px] leading-relaxed"
-              />
-            ) : form.requirements.length ? (
-              <ul className="list-disc space-y-1 pl-5 text-[14px] leading-relaxed text-text">
-                {form.requirements.map((r, i) => (
-                  <li key={i}>{r}</li>
-                ))}
-              </ul>
-            ) : (
-              <span className="text-[14px] text-text-faint">No requirements yet.</span>
-            )}
-          </section>
+              }}
+            />
+          )}
 
           <section>
             <div className="mb-2 flex items-center justify-between">
