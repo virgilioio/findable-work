@@ -67,7 +67,28 @@ function splitAroundTasks(content: string): { before: string; after: string } {
 
 export const Route = createFileRoute("/_authenticated/app/c/$id")({
   component: ConversationPage,
+  notFoundComponent: ConversationNotFound,
+  errorComponent: ConversationError,
 });
+
+function ConversationNotFound() {
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
+      <p className="text-text-faint text-sm">This conversation doesn't exist or was deleted.</p>
+      <a href="/app" className="text-sm underline">Go back</a>
+    </div>
+  );
+}
+
+function ConversationError({ error }: { error: Error }) {
+  console.error(error);
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
+      <p className="text-text-faint text-sm">Something went wrong loading this conversation.</p>
+      <a href="/app" className="text-sm underline">Go back</a>
+    </div>
+  );
+}
 
 type Message = { id: string; role: string; content: string; created_at: string };
 type Job = {
