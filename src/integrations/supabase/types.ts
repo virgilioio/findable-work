@@ -840,6 +840,30 @@ export type Database = {
         }
         Relationships: []
       }
+      user_calendar_connections: {
+        Row: {
+          connection_id: string
+          created_at: string
+          email: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          connection_id: string
+          created_at?: string
+          email: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          connection_id?: string
+          created_at?: string
+          email?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_gmail_connections: {
         Row: {
           connection_id: string

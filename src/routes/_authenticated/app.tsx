@@ -17,7 +17,6 @@ import {
   setConversationPinned,
 } from "@/lib/conversations.functions";
 import { adminCheck } from "@/lib/prompts/prompts.functions";
-import { useTheme } from "@/hooks/use-theme";
 import {
   Logo,
   Wordmark,
@@ -25,13 +24,17 @@ import {
   Search as SearchIcon,
   Dots,
   Chat as ChatIcon,
-  Sun,
-  Moon,
-  LogOut,
   Pencil,
   Pin,
+  Sparkle,
 } from "@/components/findable-icons";
-import { Trash2, PinOff } from "lucide-react";
+import {
+  Trash2,
+  PinOff,
+  Settings as SettingsIcon,
+  LifeBuoy,
+  LogOut as LogOutIcon,
+} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,6 +42,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  SettingsDialog,
+  type SettingsSection,
+} from "@/components/settings/settings-dialog";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -108,6 +115,9 @@ function AppLayout() {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [settingsSection, setSettingsSection] = useState<SettingsSection | null>(
+    null,
+  );
 
   useEffect(() => {
     const {
@@ -132,7 +142,6 @@ function AppLayout() {
   const activeId = useActiveConversationId();
   const [query, setQuery] = useState("");
   const [email, setEmail] = useState<string>("");
-  const { theme, toggle } = useTheme();
   const adminCheckFn = useServerFn(adminCheck);
   const { data: isAdmin } = useQuery({
     queryKey: ["is-admin"],
@@ -258,20 +267,6 @@ function AppLayout() {
           <div className="min-w-0 flex-1">
             <p className="truncate text-[12px] text-text">{email || "Signed in"}</p>
           </div>
-          <button
-            onClick={toggle}
-            aria-label="Toggle theme"
-            className="rounded-md p-1.5 text-text-mute transition hover:bg-bg-hover hover:text-text"
-          >
-            {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
-          </button>
-          <button
-            onClick={onSignOut}
-            aria-label="Sign out"
-            className="rounded-md p-1.5 text-text-mute transition hover:bg-bg-hover hover:text-text"
-          >
-            <LogOut size={14} />
-          </button>
           {isAdmin && (
             <Link
               to="/admin/prompts"
@@ -281,18 +276,49 @@ function AppLayout() {
               Admin
             </Link>
           )}
-          <button
-            aria-label="More"
-            className="rounded-md p-1.5 text-text-mute transition hover:bg-bg-hover hover:text-text"
-          >
-            <Dots size={14} />
-          </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                aria-label="Account menu"
+                className="rounded-md p-1.5 text-text-mute transition hover:bg-bg-hover hover:text-text"
+              >
+                <Dots size={14} />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent side="top" align="end" className="w-52">
+              <DropdownMenuItem onSelect={() => setSettingsSection("personalization")}>
+                <Sparkle size={14} />
+                <span>Personalization</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setSettingsSection("general")}>
+                <SettingsIcon className="h-3.5 w-3.5" />
+                <span>Configuration</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setSettingsSection("help")}>
+                <LifeBuoy className="h-3.5 w-3.5" />
+                <span>Help</span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={onSignOut}>
+                <LogOutIcon className="h-3.5 w-3.5" />
+                <span>Sign out</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </aside>
 
       <main className="flex flex-1 flex-col overflow-hidden bg-bg">
         <Outlet />
       </main>
+
+      <SettingsDialog
+        open={settingsSection !== null}
+        section={settingsSection}
+        onOpenChange={(open) => {
+          if (!open) setSettingsSection(null);
+        }}
+      />
 
       <AlertDialog open={Boolean(deletingId)} onOpenChange={(open) => { if (!open) setDeletingId(null); }}>
         <AlertDialogContent>
