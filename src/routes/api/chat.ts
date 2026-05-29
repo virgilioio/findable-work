@@ -385,23 +385,30 @@ function looksLikeFollowUpQuestion(text: string): boolean {
 function looksLikeLeakedReasoning(text: string): boolean {
   const t = text.trim();
   if (!t) return false;
-  // Strong signals: opens with an obviously-internal parenthetical or
-  // meta-cognition phrase.
+  // Very strong opener — almost always leaked CoT.
   if (/^\(\s*Mode\s+[A-D]\b/i.test(t)) return true;
-  if (/^\((?:we|let me|i need|i should|the user|conversation shows|now (?:user|we|the)|we (?:must|need|should)|hmm)\b/i.test(t))
+  if (/^\((?:we|let me|i need|i should|the user|conversation shows|we (?:must|need|should))\b/i.test(t))
     return true;
-  // Mid-text giveaways within the first ~200 chars.
+  // Otherwise require the head to START with an internal-monologue phrase
+  // AND accumulate 3+ trigger hits. Fail-open: Spanish/short prose, normal
+  // wrap-ups ("Listo — añadí 20 candidatos…"), and post-tool summaries
+  // never match.
   const head = t.slice(0, 240).toLowerCase();
+  const opensInternal =
+    /^(mode [a-d]:|we're in|we are in|let me classify|classify this|the user is asking|the user hasn't|the user has not|conversation shows|internal:)/.test(
+      head,
+    );
+  if (!opensInternal) return false;
   const triggers = [
     "mode a:", "mode b:", "mode c:", "mode d:",
     "we're in", "we are in", "let me classify", "classify this",
     "the user is asking", "the user hasn't", "the user has not",
-    "conversation shows", "now user", "we must respond", "we need to respond",
+    "conversation shows", "we must respond", "we need to respond",
     "we should respond", "we should reply", "internal:", "(the assistant)",
   ];
   let hits = 0;
   for (const k of triggers) if (head.includes(k)) hits++;
-  return hits >= 2;
+  return hits >= 3;
 }
 
 export const Route = createFileRoute("/api/chat")({
@@ -476,6 +483,7 @@ export const Route = createFileRoute("/api/chat")({
             async function streamCompletion(
               messages: ChatMessage[],
               mode?: "all" | "read_only",
+              allowLeakRedirect: boolean = false,
             ): Promise<{ text: string; toolCalls: StreamedToolCall[] }> {
               const upstream = await callGateway(messages, apiKey!, mode);
               if (!upstream.ok || !upstream.body) {
@@ -531,6 +539,11 @@ export const Route = createFileRoute("/api/chat")({
                     send("reasoning", { content: reasoningChunk });
                   }
                   if (typeof delta.content === "string" && delta.content) {
+                    if (!allowLeakRedirect) {
+                      assistantText += delta.content;
+                      send("delta", { content: delta.content });
+                      continue;
+                    }
                     // Decide once whether the visible content is actually
                     // a leaked CoT block.
                     if (leakMode === "unknown") {
@@ -583,9 +596,9 @@ export const Route = createFileRoute("/api/chat")({
                   }
                 }
               }
-              // If we were still buffering when the stream ended, flush.
-              if (leakMode === "unknown" && leakedSoFar) {
-                if (looksLikeLeakedReasoning(leakedSoFar)) {
+              // Flush any buffered text — never lose a short reply.
+              if (leakedSoFar) {
+                if (leakMode === "leak" && looksLikeLeakedReasoning(leakedSoFar)) {
                   send("reasoning", { content: leakedSoFar });
                 } else {
                   assistantText += leakedSoFar;
@@ -613,7 +626,10 @@ export const Route = createFileRoute("/api/chat")({
                 // the model is forced to answer in prose from history.
                 const mode: "all" | "read_only" =
                   iter === 0 && looksLikeFollowUpQuestion(message) ? "read_only" : "all";
-                const pass = await streamCompletion(convo, mode);
+                // Only run the CoT-leak redirect on the very first pass and
+                // only before tools have run — post-tool wrap-ups are short
+                // prose that should never be re-routed to the reasoning channel.
+                const pass = await streamCompletion(convo, mode, iter === 0 && !toolsRanAny);
                 if (iter === 0) firstToolCalls = pass.toolCalls;
 
                 // Safety net: if the model wrote the clarify payload as text
@@ -1167,6 +1183,38 @@ export const Route = createFileRoute("/api/chat")({
                   markerSent = true;
                 } else {
                   send("delta", { content: "\n\n" });
+                }
+              }
+
+              // If tools ran but the model never produced a closing prose
+              // turn, force one more no-tools pass so the user always sees
+              // a wrap-up under the task cards.
+              if (toolsRanAny && !postText.trim()) {
+                const closingConvo: ChatMessage[] = [
+                  ...convo,
+                  {
+                    role: "system",
+                    content:
+                      "Write a single short closing message (1–2 sentences) summarizing what just happened and a natural next step. Reply in the SAME language the user wrote in. Do NOT call any tools.",
+                  },
+                ];
+                try {
+                  const closing = await streamCompletion(closingConvo, "read_only", false);
+                  if (closing.text.trim()) {
+                    postText += closing.text;
+                  }
+                } catch (e) {
+                  console.error("closing pass failed", e);
+                }
+                if (!postText.trim()) {
+                  const isSpanish = /[ñáéíóú¿¡]|\b(que|qué|para|por|con|los|las|una|esto|esta|cómo|hola|gracias)\b/i.test(
+                    message,
+                  );
+                  const fallback = isSpanish
+                    ? "Listo — revisa los resultados arriba."
+                    : "Done — check the results above.";
+                  postText += fallback;
+                  send("delta", { content: fallback });
                 }
               }
 
