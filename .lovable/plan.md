@@ -1,69 +1,57 @@
-## Goal
+## What's happening
 
-Send Supabase auth verification emails (signup confirmation, password reset, magic links, email changes) from **no-reply@findable.work** via Resend, so they actually arrive and look branded.
+The chat agent (`src/routes/api/chat.ts`) uses one big system prompt stored in the DB (`prompts.chat.main`, editable at `/admin/prompts`). That prompt is heavily weighted toward *driving the recruiting flow forward*:
 
-## Why this is needed
+- "Before sourcing you MUST have title/location/seniority — otherwise call `ask_clarifying_questions` and STOP."
+- "Never end a turn with only a summary. Always end with a question or a one-line proposed next move."
+- Tool descriptions also nudge: `ask_clarifying_questions` says "use after an empty/limited search to broaden the brief."
 
-The "check your email" banner shows even when no email was sent — Lovable Cloud's default auth mailer is a low-rate-limit test sender that silently drops most messages. We need to point Auth at a real provider on your verified Resend domain.
+There is **no rule for "the user is asking a question about results that already exist."** So when you asked *"why 18 instead of 20?"*, the model pattern-matched on "limited results" → fired `ask_clarifying_questions` to broaden the brief. Technically on-prompt, behaviorally wrong.
 
-## Approach: Supabase "Send Email Hook" → our app → Resend
+A second contributing factor: the `source_candidates` tool result returned to the model is just `{ added, skipped, ... }`. The model doesn't get a clean explanation it can quote back ("we requested 20, pool returned 18 unique matches after dedupe vs your existing pipeline"), so even if it *wanted* to answer factually, it has thin material.
 
-Supabase Auth supports a webhook that, when configured, replaces the default mailer. We expose a public endpoint in our TanStack app; Auth POSTs every email event to it (signup, recovery, magic_link, email_change, invite, reauthentication) with the user, token, and redirect URL. Our handler verifies the request signature, renders a branded HTML email, and sends it via Resend.
+## The fix — two layers
 
-## Steps
+### 1. Teach the prompt to distinguish "drive the flow" vs "answer a question"
 
-### 1. Create the email hook route
+Add an explicit **conversation-mode** section near the top of `chat.main`, before the mandatory flow rules. Roughly:
 
-New file: `src/routes/api/public/auth/email-hook.ts`
+> **First, classify the user's turn:**
+> - **Question about existing artifacts / results / numbers / why something happened** → answer directly in prose using the conversation + tool history. Do NOT call `ask_clarifying_questions`. Do NOT call `source_candidates`. End with a light next-step nudge *only if natural*; a plain answer with no question is fine here.
+> - **Small talk / acknowledgement** → reply briefly, no tools, no forced next-step.
+> - **Request to do/produce something new** → follow the mandatory flow below.
+>
+> Clarifying questions and the "always end with a proposal" rule apply to the third case only.
 
-- Public route (no app auth) — Supabase calls it directly.
-- Verifies the `standard-webhooks` HMAC signature using a shared secret (`AUTH_EMAIL_HOOK_SECRET`).
-- Branches on `email_data.email_action_type` and renders one of 6 templates.
-- Sends through the Resend connector gateway with `from: "findable <no-reply@findable.work>"`.
-- Returns `{}` on success, proper error codes on failure (so Supabase logs them).
+Also soften the absolute "never end with a summary" line so it doesn't override answering a factual question.
 
-### 2. Branded email templates
+And tighten `ask_clarifying_questions`'s tool description: *"Only call when the user has asked for new sourcing / a new artifact and required info is missing, or after an empty/limited result when the user has explicitly asked you to try again. Never call it to answer a question about results already on screen."*
 
-Inline-HTML templates in `src/lib/email/auth-templates.ts` (one per event type):
-- Confirm signup
-- Magic link
-- Reset password
-- Email change confirmation
-- Invite
-- Reauthentication
+### 2. Give the model better material to answer "why N?"
 
-Style: findable wordmark, white background, simple CTA button matching the app's `--text` / `--bg-elev` tokens. Light mode only (email clients are inconsistent with dark mode).
+In `src/lib/sourcing/agent.server.ts`, the `source_candidates` handler returns counts but loses the "why fewer than requested" reason. Enrich the tool-result JSON the model sees with:
 
-### 3. Secrets
+- `requested` (the limit asked for)
+- `added`, `skipped_duplicates`, `pool_limited` (already tracked internally)
+- a one-line `summary` string the model can quote, e.g. `"Requested 20, added 18 (2 already in your pipeline)"` or `"Pool only had 18 matching profiles for this brief"`.
 
-Already set ✅:
-- `RESEND_API_KEY`
-- `LOVABLE_API_KEY` (for the connector gateway)
+This is the single source of truth for the "why 18 instead of 20" answer, so the model isn't guessing.
 
-Need to add (one new secret):
-- `AUTH_EMAIL_HOOK_SECRET` — the signing secret Supabase generates when registering the hook. I'll request it via the secure secret prompt once you've created the hook (step 4).
+### 3. Lightweight guardrail (optional, recommended)
 
-### 4. Register the hook in Supabase Auth
+In `src/routes/api/chat.ts`, when the latest user message is short and clearly interrogative (heuristic: `?` present, no imperative verbs like *find/source/draft/post*), skip injecting tools other than read-only ones, OR pass `tool_choice: "none"` to the gateway for that turn. This makes it structurally impossible for a follow-up question to trigger `ask_clarifying_questions` / `source_candidates`. Cheap insurance against prompt drift.
 
-Two options here — I'll pick whichever works given Lovable Cloud's surface:
+## How to keep behavior natural over time
 
-- **Option A (preferred):** Configure via a migration that sets the hook URL and secret in `auth.config` / hook tables. If Lovable Cloud allows this, it's fully automated.
-- **Option B (fallback):** You add it manually in Cloud → Auth settings (I'll give you the URL + paste-in instructions). The hook URL will be:
-  `https://findable.work/api/public/auth/email-hook`
+- **The prompt is the contract.** All behavior tuning happens in `/admin/prompts` against `chat.main` — it's versioned and hot-reloaded (60s cache). Treat it like product copy: when you notice an unnatural turn, capture the exact transcript, add or sharpen one rule, save, re-test.
+- **Tool descriptions are part of the prompt.** OpenAI/Gemini read them. Keep "when to call" and "when NOT to call" tight in `src/routes/api/chat.ts` next to each tool definition.
+- **Tool results are part of the prompt.** Anything the user might ask about afterward ("why?", "how many?", "from where?") should be returned in the tool result JSON in a form the model can quote — don't make it re-derive facts.
+- **Test matrix:** keep a short list of canonical follow-ups to spot-check after any prompt edit — "why N candidates?", "can you explain this candidate?", "what's in the JD?", "thanks", "actually let's also add Berlin". Run them in a fresh conversation; if any feel unnatural, that's a prompt bug, not a model bug.
 
-I'll determine which path works during implementation. Most likely Option B because Lovable Cloud restricts direct auth-config writes.
+## Files touched
 
-### 5. Test end-to-end
+- `prompts.chat.main` row in the DB (edit via `/admin/prompts`) — add conversation-mode classifier, soften "always end with a question".
+- `src/routes/api/chat.ts` — sharpen `ask_clarifying_questions` tool description; optionally add the interrogative-turn guardrail (`tool_choice: "none"`).
+- `src/lib/sourcing/agent.server.ts` — enrich the `source_candidates` tool-result JSON with `requested`, `skipped_duplicates`, `pool_limited`, and a human `summary` string.
 
-- I'll first delete the stuck test user (your earlier admin signup) via a migration so you can re-signup cleanly.
-- You sign up with a fresh email → email arrives from `no-reply@findable.work` within seconds.
-- Verify in Resend dashboard logs.
-- Click link → land on the app verified and signed in.
-- Test "Forgot password" path too.
-
-## Open questions
-
-1. **Sender display name** — `findable <no-reply@findable.work>` or just `no-reply@findable.work`? (I'll default to `findable` if no preference.)
-2. **Reply-to** — should replies go anywhere meaningful (e.g. `support@findable.work`), or is `no-reply` truly no-reply? (Default: no reply-to header.)
-
-Approve and I'll switch to build mode and wire it all up.
+No schema changes, no new deps.
