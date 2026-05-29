@@ -149,11 +149,18 @@ export async function searchApolloWithFallback(criteria: SearchCriteria): Promis
       step: "country_only_location",
       body: buildBody({ titles, companies: [], locations: countryOnly, seniorities: [], companySizes, companyDomains }),
     },
-    {
+  ];
+
+  // Only allow the global title-only fallback when the user did NOT specify a
+  // location. Otherwise we'd silently return e.g. US candidates for a
+  // "SDRs in LATAM" search — much worse UX than returning zero results and
+  // asking the user to broaden.
+  if (locations.length === 0) {
+    attempts.push({
       step: "title_only",
       body: buildBody({ titles, companies: [], locations: [], seniorities: [], companySizes, companyDomains: [] }),
-    },
-  ];
+    });
+  }
 
   const broadeningSteps: string[] = [];
   for (let i = 0; i < attempts.length; i++) {
