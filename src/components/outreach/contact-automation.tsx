@@ -3,6 +3,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { contactCandidates } from "@/lib/outreach/outreach.functions";
+import { sendOutreachEmail } from "@/lib/outreach/gmail.functions";
+import { useGmailConnection, ConnectGmailButton } from "./connect-gmail-card";
 import { X, Check, Linkedin, Send } from "@/components/findable-icons";
 import type { Candidate } from "@/components/candidates/candidate-drawer";
 
@@ -29,6 +31,8 @@ export function ContactAutomation({
 }) {
   const qc = useQueryClient();
   const contactFn = useServerFn(contactCandidates);
+  const sendFn = useServerFn(sendOutreachEmail);
+  const { data: gmail } = useGmailConnection();
 
   const [progress, setProgress] = useState<Progress[]>(() =>
     candidates.map((c, i) => ({
@@ -48,11 +52,33 @@ export function ContactAutomation({
   }, [progress]);
 
   const persistMut = useMutation({
-    mutationFn: () =>
-      contactFn({ data: { conversationId, candidateIds: candidates.map((c) => c.id) } }),
-    onSuccess: () => {
+    mutationFn: async () => {
+      if (gmail) {
+        // Real Gmail send per candidate (only those with email).
+        let sent = 0;
+        for (const c of candidates) {
+          if (!c.email) continue;
+          const first = (c.name || "").split(" ")[0] || "there";
+          const subject = `${c.role || "Opportunity"} — ${first}`;
+          const body = personalize(LI_TEMPLATE, c);
+          try {
+            await sendFn({
+              data: { conversationId, candidateId: c.id, subject, body },
+            });
+            sent++;
+          } catch (err: any) {
+            toast.error(`Failed for ${c.name}: ${err?.message ?? "send error"}`);
+          }
+        }
+        return { sent };
+      }
+      await contactFn({ data: { conversationId, candidateIds: candidates.map((c) => c.id) } });
+      return { sent: candidates.length };
+    },
+    onSuccess: ({ sent }) => {
       qc.invalidateQueries({ queryKey: ["candidates", conversationId] });
-      toast.success(`${candidates.length} candidate${candidates.length === 1 ? "" : "s"} contacted`);
+      qc.invalidateQueries({ queryKey: ["outreach-threads", conversationId] });
+      toast.success(`${sent} candidate${sent === 1 ? "" : "s"} contacted`);
       onClose();
     },
     onError: (e: any) => toast.error(e?.message ?? "Failed to update candidates"),
@@ -177,13 +203,29 @@ export function ContactAutomation({
 
       <div className="flex items-center justify-end gap-2 border-t border-border bg-bg px-6 py-4">
         {done ? (
+          !gmail ? (
+            <div className="flex items-center gap-3">
+              <span className="text-[12px] text-text-mute">
+                Connect Gmail to send for real from your address.
+              </span>
+              <ConnectGmailButton label="Connect Gmail" />
+              <button
+                onClick={() => persistMut.mutate()}
+                disabled={persistMut.isPending}
+                className="flex h-9 items-center gap-1.5 rounded-lg border border-border bg-bg-elev px-3.5 text-[13px] font-medium text-text disabled:opacity-60"
+              >
+                {persistMut.isPending ? "Saving…" : "Mark as contacted only"}
+              </button>
+            </div>
+          ) : (
           <button
             disabled={persistMut.isPending}
             onClick={() => persistMut.mutate()}
             className="flex h-9 items-center gap-1.5 rounded-lg bg-text px-4 text-[13px] font-medium text-text-invert transition hover:opacity-90 disabled:opacity-60"
           >
-            {persistMut.isPending ? "Saving…" : "Done"}
+            {persistMut.isPending ? "Sending via Gmail…" : `Send via ${gmail.email}`}
           </button>
+          )
         ) : (
           <span className="text-[12px] text-text-mute">Sending…</span>
         )}
