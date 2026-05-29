@@ -268,20 +268,6 @@ function AppLayout() {
           <div className="min-w-0 flex-1">
             <p className="truncate text-[12px] text-text">{email || "Signed in"}</p>
           </div>
-          <button
-            onClick={toggle}
-            aria-label="Toggle theme"
-            className="rounded-md p-1.5 text-text-mute transition hover:bg-bg-hover hover:text-text"
-          >
-            {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
-          </button>
-          <button
-            onClick={onSignOut}
-            aria-label="Sign out"
-            className="rounded-md p-1.5 text-text-mute transition hover:bg-bg-hover hover:text-text"
-          >
-            <LogOut size={14} />
-          </button>
           {isAdmin && (
             <Link
               to="/admin/prompts"
@@ -291,18 +277,49 @@ function AppLayout() {
               Admin
             </Link>
           )}
-          <button
-            aria-label="More"
-            className="rounded-md p-1.5 text-text-mute transition hover:bg-bg-hover hover:text-text"
-          >
-            <Dots size={14} />
-          </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                aria-label="Account menu"
+                className="rounded-md p-1.5 text-text-mute transition hover:bg-bg-hover hover:text-text"
+              >
+                <Dots size={14} />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent side="top" align="end" className="w-52">
+              <DropdownMenuItem onSelect={() => setSettingsSection("personalization")}>
+                <Sparkle size={14} />
+                <span>Personalization</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setSettingsSection("general")}>
+                <SettingsIcon className="h-3.5 w-3.5" />
+                <span>Configuration</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setSettingsSection("help")}>
+                <LifeBuoy className="h-3.5 w-3.5" />
+                <span>Help</span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={onSignOut}>
+                <LogOutIcon className="h-3.5 w-3.5" />
+                <span>Sign out</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </aside>
 
       <main className="flex flex-1 flex-col overflow-hidden bg-bg">
         <Outlet />
       </main>
+
+      <SettingsDialog
+        open={settingsSection !== null}
+        section={settingsSection}
+        onOpenChange={(open) => {
+          if (!open) setSettingsSection(null);
+        }}
+      />
 
       <AlertDialog open={Boolean(deletingId)} onOpenChange={(open) => { if (!open) setDeletingId(null); }}>
         <AlertDialogContent>
