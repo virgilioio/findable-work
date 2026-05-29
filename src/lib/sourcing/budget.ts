@@ -163,6 +163,78 @@ function aliasCity(raw: string): string {
   return CITY_ALIASES[key] ?? raw.trim();
 }
 
+// Multi-country regions. When a user types one of these as a "location",
+// expand it into the constituent countries so Apollo's `person_locations`
+// filter actually narrows results to the region instead of collapsing to
+// a global title-only search.
+const REGION_ALIASES: Record<string, string[]> = {
+  latam: [
+    "Mexico", "Brazil", "Argentina", "Chile", "Colombia", "Peru",
+    "Venezuela", "Ecuador", "Guatemala", "Costa Rica", "Panama",
+    "Uruguay", "Bolivia", "Paraguay", "Honduras", "El Salvador",
+    "Nicaragua", "Dominican Republic",
+  ],
+  "latin america": [],
+  "south america": [
+    "Brazil", "Argentina", "Chile", "Colombia", "Peru",
+    "Venezuela", "Ecuador", "Uruguay", "Bolivia", "Paraguay",
+  ],
+  "central america": [
+    "Guatemala", "Costa Rica", "Panama", "Honduras", "El Salvador", "Nicaragua",
+  ],
+  emea: [
+    "United Kingdom", "Germany", "France", "Spain", "Italy", "Netherlands",
+    "Belgium", "Sweden", "Norway", "Denmark", "Finland", "Poland", "Portugal",
+    "Greece", "Austria", "Switzerland", "Ireland", "Czech Republic", "Romania",
+    "Hungary", "Ukraine", "Turkey", "United Arab Emirates", "Saudi Arabia",
+    "Israel", "Egypt", "South Africa", "Kenya", "Nigeria",
+  ],
+  europe: [
+    "United Kingdom", "Germany", "France", "Spain", "Italy", "Netherlands",
+    "Belgium", "Sweden", "Norway", "Denmark", "Finland", "Poland", "Portugal",
+    "Greece", "Austria", "Switzerland", "Ireland", "Czech Republic", "Romania",
+    "Hungary", "Ukraine",
+  ],
+  "western europe": [
+    "United Kingdom", "Germany", "France", "Spain", "Italy", "Netherlands",
+    "Belgium", "Ireland", "Portugal", "Austria", "Switzerland",
+  ],
+  nordics: ["Sweden", "Norway", "Denmark", "Finland"],
+  scandinavia: ["Sweden", "Norway", "Denmark"],
+  dach: ["Germany", "Austria", "Switzerland"],
+  benelux: ["Netherlands", "Belgium"],
+  apac: [
+    "India", "China", "Japan", "Singapore", "Australia", "New Zealand",
+    "South Korea", "Thailand", "Vietnam", "Philippines", "Indonesia",
+    "Malaysia", "Taiwan", "Hong Kong",
+  ],
+  "asia pacific": [
+    "India", "China", "Japan", "Singapore", "Australia", "New Zealand",
+    "South Korea", "Thailand", "Vietnam", "Philippines", "Indonesia",
+    "Malaysia", "Taiwan", "Hong Kong",
+  ],
+  sea: [
+    "Singapore", "Thailand", "Vietnam", "Philippines",
+    "Indonesia", "Malaysia",
+  ],
+  "southeast asia": [
+    "Singapore", "Thailand", "Vietnam", "Philippines",
+    "Indonesia", "Malaysia",
+  ],
+  mena: [
+    "United Arab Emirates", "Saudi Arabia", "Israel", "Egypt", "Turkey",
+  ],
+  "north america": ["United States", "Canada", "Mexico"],
+};
+// Backfill aliases that reference others
+REGION_ALIASES["latin america"] = REGION_ALIASES.latam;
+
+function expandRegion(raw: string): string[] | null {
+  const key = raw.trim().toLowerCase();
+  const hit = REGION_ALIASES[key];
+  return hit && hit.length > 0 ? hit : null;
+}
+
 /**
  * Normalize a raw location string into Apollo-compatible variants.
  * Returns progressively-broader variants so a single `person_locations[]`
@@ -185,6 +257,14 @@ export function normalizeLocationForApollo(raw: string): string[] {
   const rawParts = raw.split(",").map((s) => s.trim());
   const parts = rawParts.filter(Boolean);
   if (parts.length === 0) return [];
+
+  // Multi-country region (LATAM, EMEA, APAC, Nordics, DACH, ...).
+  // Only expand when the whole string is a region name — `parts.length === 1`
+  // catches "LATAM" but not "Mexico City, LATAM" (which is malformed anyway).
+  if (parts.length === 1) {
+    const region = expandRegion(parts[0]);
+    if (region) return region;
+  }
 
   // Single token: could be city alias, country code, country name, or city
   if (parts.length === 1) {
