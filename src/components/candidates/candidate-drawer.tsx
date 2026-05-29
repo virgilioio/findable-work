@@ -295,6 +295,13 @@ function Overview({ c }: { c: Candidate }) {
               Applied via public job post on{" "}
               {new Date((app as any).created_at).toLocaleDateString()}
             </div>
+            {(app as any).resume_url && (
+              <ResumeRow
+                applicationId={(app as any).id}
+                filename={(app as any).resume_filename || "Resume"}
+                size={(app as any).resume_size || 0}
+              />
+            )}
             {Array.isArray((app as any).screening) &&
               (app as any).screening.length > 0 && (
                 <div className="mt-3 flex flex-col gap-3">
