@@ -804,11 +804,16 @@ function JobPanel({
                 <span
                   className={cn(
                     "inline-block h-1.5 w-1.5 rounded-full",
-                    form.status === "open" ? "bg-emerald-500" : "bg-text-faint",
+                    published ? "bg-emerald-500" : "bg-text-faint",
                   )}
                 />
                 {statusLabel}
               </span>
+              {published && applicantCount > 0 && (
+                <span className="ml-3 inline-flex items-center gap-1 rounded-full bg-bg-bubble px-2 py-0.5 text-[11px] font-medium text-text">
+                  {applicantCount} applicant{applicantCount === 1 ? "" : "s"}
+                </span>
+              )}
               {form.location && <span className="ml-3">{form.location}</span>}
               <span className="ml-3 text-text-faint">
                 {saving ? "Saving…" : savedAt ? `Saved ${savedAt}` : "Edits autosave"}
@@ -824,16 +829,75 @@ function JobPanel({
             label={editing ? "Done" : "Edit"}
             active={editing}
           />
-          <HeaderBtn
-            onClick={handlePublish}
-            disabled={published || publishing}
-            icon={published ? <Check size={13} /> : <Upload size={13} />}
-            label={published ? "Published" : "Publish"}
-            primary={!published}
-            dot={published}
-          />
+          {published ? (
+            <div className="relative">
+              <HeaderBtn
+                onClick={() => setStatusMenu((v) => !v)}
+                icon={<Check size={13} />}
+                label="Live"
+                dot
+              />
+              {statusMenu && (
+                <div className="absolute right-0 top-[calc(100%+4px)] z-20 min-w-[180px] rounded-lg border border-border-strong bg-bg-elev p-1 shadow-[var(--shadow-md)]">
+                  <a
+                    href={publicUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setStatusMenu(false)}
+                    className="block rounded-md px-2.5 py-1.5 text-left text-[13px] text-text hover:bg-bg-hover"
+                  >
+                    View public page
+                  </a>
+                  <button
+                    onClick={copyLink}
+                    className="block w-full rounded-md px-2.5 py-1.5 text-left text-[13px] text-text hover:bg-bg-hover"
+                  >
+                    Copy link
+                  </button>
+                  <button
+                    onClick={handleUnpublish}
+                    disabled={publishing}
+                    className="block w-full rounded-md px-2.5 py-1.5 text-left text-[13px] text-text hover:bg-bg-hover disabled:opacity-50"
+                  >
+                    Unpublish
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <HeaderBtn
+              onClick={handlePublish}
+              disabled={publishing}
+              icon={<Upload size={13} />}
+              label={publishing ? "Publishing…" : "Publish"}
+              primary
+            />
+          )}
         </div>
       </div>
+
+      {published && publicUrl && (
+        <div className="mt-4 flex items-center justify-between gap-3 rounded-[12px] border border-border bg-bg-side px-3.5 py-2.5">
+          <div className="flex min-w-0 items-center gap-2 text-[12.5px]">
+            <span className="inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            <span className="text-text-mute">Public application page:</span>
+            <a
+              href={publicUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="truncate font-mono text-text underline decoration-border-strong underline-offset-2"
+            >
+              {publicUrl}
+            </a>
+          </div>
+          <button
+            onClick={copyLink}
+            className="flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-border bg-bg px-2.5 text-[12px] text-text-mute hover:bg-bg-hover hover:text-text"
+          >
+            <Copy size={12} /> Copy
+          </button>
+        </div>
+      )}
 
       {/* Two columns */}
       <div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-[1fr_320px]">
