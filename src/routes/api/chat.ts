@@ -33,14 +33,32 @@ const createJobTool = {
   type: "function" as const,
   function: {
     name: "create_job",
-    description: "Create or update the Job artifact for this conversation.",
+    description:
+      "Create or update the Job artifact for this conversation. The JD MUST follow this fixed professional structure: a short `summary` paragraph (2–4 sentences, plain prose, no markdown headings, no bullets), then bulleted lists for `responsibilities` (what they'll do), `must_have` (hard requirements), and optional `nice_to_have`. Each list item is a single short sentence — no paragraphs, no nested bullets, no markdown. Do NOT dump a free-form description; the structured fields are what render in the Job tab and on the public page.",
     parameters: {
       type: "object",
       additionalProperties: false,
       properties: {
         title: { type: "string" },
-        description: { type: "string", description: "Markdown job description." },
-        requirements: { type: "array", items: { type: "string" } },
+        summary: {
+          type: "string",
+          description: "Short overview paragraph (2–4 sentences). Plain prose. No markdown, no bullets, no headings.",
+        },
+        responsibilities: {
+          type: "array",
+          items: { type: "string" },
+          description: "What the person will do day-to-day. Each item is one short sentence. Aim for 4–8 items.",
+        },
+        must_have: {
+          type: "array",
+          items: { type: "string" },
+          description: "Hard requirements (skills, experience, qualifications). Each item is one short sentence. Aim for 3–7 items.",
+        },
+        nice_to_have: {
+          type: "array",
+          items: { type: "string" },
+          description: "Optional bonus qualifications. Each item is one short sentence.",
+        },
         location: { type: "string" },
         employment_type: {
           type: "string",
@@ -50,7 +68,7 @@ const createJobTool = {
         salary_max: { type: ["number", "null"] },
         currency: { type: "string" },
       },
-      required: ["title", "description"],
+      required: ["title", "summary", "responsibilities", "must_have"],
     },
   },
 };
@@ -723,14 +741,40 @@ export const Route = createFileRoute("/api/chat")({
                 } catch {}
 
                 if (call.name === "create_job") {
+                  const summary = String(args.summary ?? "").trim();
+                  const responsibilities = Array.isArray(args.responsibilities)
+                    ? args.responsibilities.map((r: unknown) => String(r).trim()).filter(Boolean).slice(0, 50)
+                    : [];
+                  const mustHave = Array.isArray(args.must_have)
+                    ? args.must_have.map((r: unknown) => String(r).trim()).filter(Boolean).slice(0, 50)
+                    : Array.isArray(args.requirements)
+                      ? args.requirements.map((r: unknown) => String(r).trim()).filter(Boolean).slice(0, 50)
+                      : [];
+                  const niceToHave = Array.isArray(args.nice_to_have)
+                    ? args.nice_to_have.map((r: unknown) => String(r).trim()).filter(Boolean).slice(0, 50)
+                    : [];
+                  // Compose markdown description from the structured parts so
+                  // legacy consumers (public job page fallback, exports) still
+                  // have a renderable body. The Job tab itself renders the
+                  // structured fields directly.
+                  const composedDescription = [
+                    summary,
+                    responsibilities.length ? `## What you'll do\n${responsibilities.map((r: string) => `- ${r}`).join("\n")}` : "",
+                    mustHave.length ? `## Must have\n${mustHave.map((r: string) => `- ${r}`).join("\n")}` : "",
+                    niceToHave.length ? `## Nice to have\n${niceToHave.map((r: string) => `- ${r}`).join("\n")}` : "",
+                  ].filter(Boolean).join("\n\n");
                   const jobPayload = {
                     conversation_id: conversationId,
                     user_id: userId,
                     title: String(args.title ?? "").slice(0, 200),
-                    description: String(args.description ?? ""),
-                    requirements: Array.isArray(args.requirements)
-                      ? args.requirements.map((r: unknown) => String(r)).slice(0, 50)
-                      : [],
+                    description: composedDescription,
+                    summary,
+                    responsibilities,
+                    must_have: mustHave,
+                    nice_to_have: niceToHave,
+                    // Mirror must_have into legacy `requirements` so screening
+                    // generation and other callers that still read it stay populated.
+                    requirements: mustHave,
                     location: String(args.location ?? ""),
                     employment_type: ["full_time", "part_time", "contract", "internship", "temporary"].includes(
                       args.employment_type,

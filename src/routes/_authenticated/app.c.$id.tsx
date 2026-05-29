@@ -5,7 +5,6 @@ import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Markdown } from "@/components/ui/markdown";
 import { getConversation } from "@/lib/conversations.functions";
 import {
   updateJob,
@@ -87,6 +86,10 @@ type Job = {
   published?: boolean;
   published_at?: string | null;
   company?: string;
+  summary?: string;
+  responsibilities?: string[];
+  must_have?: string[];
+  nice_to_have?: string[];
   screening?: Array<{
     id: string;
     type: "select" | "multi" | "textarea";
@@ -744,10 +747,19 @@ function JobPanel({
   const unpub = useServerFn(unpublishJob);
   const regen = useServerFn(regenerateScreening);
   const listApps = useServerFn(listApplications);
-  const [form, setForm] = useState<Job>(job);
+  // Normalize: backfill summary/must_have from legacy description/requirements
+  // so existing jobs still render the standard structure.
+  const normalize = (j: Job): Job => ({
+    ...j,
+    summary: j.summary ?? j.description ?? "",
+    responsibilities: j.responsibilities ?? [],
+    must_have: j.must_have && j.must_have.length ? j.must_have : (j.requirements ?? []),
+    nice_to_have: j.nice_to_have ?? [],
+  });
+  const [form, setForm] = useState<Job>(() => normalize(job));
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [editing, setEditing] = useState<boolean>(!job.description);
+  const [editing, setEditing] = useState<boolean>(!(job.summary || job.description));
   const [duplicating, setDuplicating] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [statusMenu, setStatusMenu] = useState(false);
@@ -765,7 +777,7 @@ function JobPanel({
       ? `${window.location.origin}/jobs/${form.slug}`
       : "";
 
-  useEffect(() => setForm(job), [job.id]);
+  useEffect(() => setForm(normalize(job)), [job.id]);
   // Resync server-managed fields when the conversation query refetches
   // (publish/unpublish updates published/slug/status without changing id).
   useEffect(() => {
@@ -783,12 +795,20 @@ function JobPanel({
     try {
       const next = { ...form, ...patch };
       setForm(next);
+      // Mirror must_have into legacy `requirements` so screening generation
+      // and other callers that still read `requirements` stay populated.
+      const mirroredReqs =
+        patch.must_have !== undefined ? (next.must_have ?? []) : next.requirements;
       await update({
         data: {
           conversationId,
           title: next.title,
           description: next.description,
-          requirements: next.requirements,
+          requirements: mirroredReqs,
+          summary: next.summary,
+          responsibilities: next.responsibilities,
+          must_have: next.must_have,
+          nice_to_have: next.nice_to_have,
           location: next.location,
           employment_type: next.employment_type as any,
           salary_min: next.salary_min,
@@ -804,7 +824,9 @@ function JobPanel({
     }
   }
 
-  const reqText = useMemo(() => form.requirements.join("\n"), [form.requirements]);
+  const respText = useMemo(() => (form.responsibilities ?? []).join("\n"), [form.responsibilities]);
+  const mustText = useMemo(() => (form.must_have ?? []).join("\n"), [form.must_have]);
+  const niceText = useMemo(() => (form.nice_to_have ?? []).join("\n"), [form.nice_to_have]);
   const published = Boolean(form.published);
   const statusLabel = published ? "Live" : "Draft";
 
@@ -982,57 +1004,82 @@ function JobPanel({
       <div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-[1fr_320px]">
         {/* Main */}
         <div className="space-y-7">
+          {/* About the role */}
           <section>
             <h3 className="mb-2 text-[11px] font-medium uppercase tracking-wide text-text-faint">
-              Summary
+              About the role
             </h3>
             {editing ? (
               <Textarea
-                rows={6}
-                value={form.description}
-                onChange={(e) => setForm({ ...form, description: e.target.value })}
-                onBlur={(e) => e.target.value !== job.description && save({ description: e.target.value })}
+                rows={4}
+                value={form.summary ?? ""}
+                onChange={(e) => setForm({ ...form, summary: e.target.value })}
+                onBlur={(e) => {
+                  const v = e.target.value;
+                  if (v !== (job.summary ?? job.description ?? "")) save({ summary: v });
+                }}
+                placeholder="2–4 sentences describing the role, mission, and team."
                 className="border-border bg-bg-elev text-[14px] leading-relaxed"
               />
+            ) : form.summary ? (
+              <p className="text-[14px] leading-relaxed text-text whitespace-pre-wrap">{form.summary}</p>
             ) : (
-              form.description ? (
-                <Markdown className="text-[14px]">{form.description}</Markdown>
-              ) : (
-                <div className="text-[14px] leading-relaxed text-text-faint">No summary yet.</div>
-              )
+              <div className="text-[14px] leading-relaxed text-text-faint">
+                No overview yet — ask the assistant to draft one, or click Edit to add your own.
+              </div>
             )}
           </section>
 
-          <section>
-            <h3 className="mb-2 text-[11px] font-medium uppercase tracking-wide text-text-faint">
-              Requirements
-            </h3>
-            {editing ? (
-              <Textarea
-                rows={8}
-                value={reqText}
-                onChange={(e) =>
-                  setForm({ ...form, requirements: e.target.value.split("\n").filter(Boolean) })
+          {/* Responsibilities */}
+          <JdListSection
+            title="Responsibilities"
+            emptyHint="No responsibilities yet — ask the assistant to draft them, or click Edit to add your own."
+            placeholder="One responsibility per line"
+            editing={editing}
+            value={form.responsibilities ?? []}
+            text={respText}
+            onChange={(arr) => setForm({ ...form, responsibilities: arr })}
+            onCommit={(arr) => {
+              if (JSON.stringify(arr) !== JSON.stringify(job.responsibilities ?? [])) {
+                save({ responsibilities: arr });
+              }
+            }}
+          />
+
+          {/* Must-have */}
+          <JdListSection
+            title="Must-have requirements"
+            emptyHint="No must-have requirements yet."
+            placeholder="One requirement per line"
+            editing={editing}
+            value={form.must_have ?? []}
+            text={mustText}
+            onChange={(arr) => setForm({ ...form, must_have: arr })}
+            onCommit={(arr) => {
+              const prev = (job.must_have && job.must_have.length ? job.must_have : job.requirements) ?? [];
+              if (JSON.stringify(arr) !== JSON.stringify(prev)) {
+                save({ must_have: arr });
+              }
+            }}
+          />
+
+          {/* Nice to have */}
+          {(editing || (form.nice_to_have && form.nice_to_have.length > 0)) && (
+            <JdListSection
+              title="Nice to have"
+              emptyHint="Add nice-to-haves to attract a wider range of candidates."
+              placeholder="One nice-to-have per line"
+              editing={editing}
+              value={form.nice_to_have ?? []}
+              text={niceText}
+              onChange={(arr) => setForm({ ...form, nice_to_have: arr })}
+              onCommit={(arr) => {
+                if (JSON.stringify(arr) !== JSON.stringify(job.nice_to_have ?? [])) {
+                  save({ nice_to_have: arr });
                 }
-                onBlur={(e) => {
-                  const next = e.target.value.split("\n").map((s) => s.trim()).filter(Boolean);
-                  if (JSON.stringify(next) !== JSON.stringify(job.requirements)) {
-                    save({ requirements: next });
-                  }
-                }}
-                placeholder="One per line"
-                className="border-border bg-bg-elev text-[14px] leading-relaxed"
-              />
-            ) : form.requirements.length ? (
-              <ul className="list-disc space-y-1 pl-5 text-[14px] leading-relaxed text-text">
-                {form.requirements.map((r, i) => (
-                  <li key={i}>{r}</li>
-                ))}
-              </ul>
-            ) : (
-              <span className="text-[14px] text-text-faint">No requirements yet.</span>
-            )}
-          </section>
+              }}
+            />
+          )}
 
           <section>
             <div className="mb-2 flex items-center justify-between">
@@ -1200,6 +1247,58 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <Label className="text-[11px] font-medium text-text-mute">{label}</Label>
       {children}
     </div>
+  );
+}
+
+function JdListSection({
+  title,
+  emptyHint,
+  placeholder,
+  editing,
+  value,
+  text,
+  onChange,
+  onCommit,
+}: {
+  title: string;
+  emptyHint: string;
+  placeholder: string;
+  editing: boolean;
+  value: string[];
+  text: string;
+  onChange: (next: string[]) => void;
+  onCommit: (next: string[]) => void;
+}) {
+  return (
+    <section>
+      <h3 className="mb-2 text-[11px] font-medium uppercase tracking-wide text-text-faint">
+        {title}
+      </h3>
+      {editing ? (
+        <Textarea
+          rows={Math.max(4, Math.min(10, value.length + 1))}
+          value={text}
+          onChange={(e) => onChange(e.target.value.split("\n").filter((l) => l.length > 0))}
+          onBlur={(e) => {
+            const next = e.target.value
+              .split("\n")
+              .map((s) => s.trim())
+              .filter(Boolean);
+            onCommit(next);
+          }}
+          placeholder={placeholder}
+          className="border-border bg-bg-elev text-[14px] leading-relaxed"
+        />
+      ) : value.length > 0 ? (
+        <ul className="list-disc space-y-1 pl-5 text-[14px] leading-relaxed text-text">
+          {value.map((r, i) => (
+            <li key={i}>{r}</li>
+          ))}
+        </ul>
+      ) : (
+        <div className="text-[14px] leading-relaxed text-text-faint">{emptyHint}</div>
+      )}
+    </section>
   );
 }
 
