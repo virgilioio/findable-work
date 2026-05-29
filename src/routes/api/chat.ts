@@ -681,6 +681,7 @@ export const Route = createFileRoute("/api/chat")({
                       .insert({
                         user_id: userId,
                         conversation_id: conversationId,
+                        message_id: assistantMessageId,
                         kind: "clarify",
                         label: intro || "A couple quick details to sharpen the search:",
                         status: "done",
