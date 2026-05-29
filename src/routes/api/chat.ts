@@ -467,6 +467,13 @@ export const Route = createFileRoute("/api/chat")({
               let buffer = "";
               let assistantText = "";
               const toolCalls: Record<number, StreamedToolCall> = {};
+              // Defensive: some models leak chain-of-thought into the
+              // visible `content` channel instead of `reasoning`. If the
+              // very first content tokens look like leaked reasoning,
+              // we re-route them to the reasoning stream so the user
+              // never sees them in the reply bubble.
+              let leakMode: "unknown" | "answer" | "leak" = "unknown";
+              let leakedSoFar = "";
 
               while (true) {
                 const { done, value } = await reader.read();
@@ -489,7 +496,53 @@ export const Route = createFileRoute("/api/chat")({
                   }
                   const delta = parsed.choices?.[0]?.delta;
                   if (!delta) continue;
+                  // Forward true reasoning tokens to the UI's thinking ticker.
+                  const reasoningChunk =
+                    (typeof delta.reasoning === "string" && delta.reasoning) ||
+                    (typeof delta.reasoning_content === "string" && delta.reasoning_content) ||
+                    "";
+                  if (reasoningChunk) {
+                    send("reasoning", { content: reasoningChunk });
+                  }
                   if (typeof delta.content === "string" && delta.content) {
+                    // Decide once whether the visible content is actually
+                    // a leaked CoT block.
+                    if (leakMode === "unknown") {
+                      leakedSoFar += delta.content;
+                      if (looksLikeLeakedReasoning(leakedSoFar)) {
+                        leakMode = "leak";
+                        send("reasoning", { content: leakedSoFar });
+                        leakedSoFar = "";
+                        continue;
+                      }
+                      // Wait until we have enough to judge, or commit.
+                      if (leakedSoFar.length < 80 && !/[.!?]\s/.test(leakedSoFar)) {
+                        continue;
+                      }
+                      leakMode = "answer";
+                      assistantText += leakedSoFar;
+                      send("delta", { content: leakedSoFar });
+                      leakedSoFar = "";
+                      continue;
+                    }
+                    if (leakMode === "leak") {
+                      // Keep redirecting until we see a clean break out of
+                      // the parenthetical / reasoning block.
+                      send("reasoning", { content: delta.content });
+                      // Detect end-of-leak: closing paren + newline OR a
+                      // short crisp final sentence after the dump.
+                      leakedSoFar += delta.content;
+                      if (/\)\s*\n/.test(leakedSoFar) || /\n\n[A-ZÁÉÍÓÚÑa-záéíóúñ"¡¿]/.test(leakedSoFar)) {
+                        const tailMatch = leakedSoFar.match(/\n\n([\s\S]+)$/);
+                        if (tailMatch && tailMatch[1] && !looksLikeLeakedReasoning(tailMatch[1])) {
+                          assistantText += tailMatch[1];
+                          send("delta", { content: tailMatch[1] });
+                          leakMode = "answer";
+                          leakedSoFar = "";
+                        }
+                      }
+                      continue;
+                    }
                     assistantText += delta.content;
                     send("delta", { content: delta.content });
                   }
@@ -502,6 +555,15 @@ export const Route = createFileRoute("/api/chat")({
                       if (tc.function?.arguments) slot.args += tc.function.arguments;
                     }
                   }
+                }
+              }
+              // If we were still buffering when the stream ended, flush.
+              if (leakMode === "unknown" && leakedSoFar) {
+                if (looksLikeLeakedReasoning(leakedSoFar)) {
+                  send("reasoning", { content: leakedSoFar });
+                } else {
+                  assistantText += leakedSoFar;
+                  send("delta", { content: leakedSoFar });
                 }
               }
               return { text: assistantText, toolCalls: Object.values(toolCalls) };
