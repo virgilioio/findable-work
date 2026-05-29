@@ -344,7 +344,18 @@ export function CandidatesPanel({
                       <span className="font-mono text-[11.5px] text-text-mute">{c.match}%</span>
                     </div>
                   </td>
-                  <td className="px-3 py-2.5 text-text-mute">{c.source}</td>
+                  <td className="px-3 py-2.5 text-text-mute">
+                    {c.source === "Internal" ? (
+                      <span
+                        className="rounded bg-bg-input px-1.5 py-0.5 font-mono text-[10.5px] text-text"
+                        title="Previously revealed in another project. No credits used."
+                      >
+                        Internal
+                      </span>
+                    ) : (
+                      c.source
+                    )}
+                  </td>
                   <td className="px-3 py-2.5">
                     <div className="flex flex-wrap gap-1">
                       {c.tags.slice(0, 3).map((t) => (

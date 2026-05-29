@@ -44,19 +44,35 @@ export const sourceMore = createServerFn({ method: "POST" })
     const apolloIds = apolloPrev.map((p: any) => p.external_id);
     const pdlIds = pdlPrev.map((p: any) => p.external_id);
 
+    // Same-tenant existing candidates: we keyed off these to detect repeats.
+    // Pull the full row so we can clone for "internal" reuse without paying
+    // Apollo / PDL for enrichment. Already-in-THIS-conversation rows still
+    // count as duplicates and must be skipped.
     const [{ data: aRows }, { data: pRows }] = await Promise.all([
-      supabaseAdmin.from("candidates").select("apollo_id").eq("user_id", userId)
+      supabaseAdmin.from("candidates").select("*").eq("user_id", userId)
         .in("apollo_id", apolloIds.length ? apolloIds : ["__none__"]),
-      supabaseAdmin.from("candidates").select("pdl_id").eq("user_id", userId)
+      supabaseAdmin.from("candidates").select("*").eq("user_id", userId)
         .in("pdl_id", pdlIds.length ? pdlIds : ["__none__"]),
     ]);
-    const apolloAlready = new Set((aRows ?? []).map((r: any) => r.apollo_id));
-    const pdlAlready = new Set((pRows ?? []).map((r: any) => r.pdl_id));
+    const apolloByIdAll = new Map<string, any>();
+    const pdlByIdAll = new Map<string, any>();
+    for (const r of aRows ?? []) if (r.apollo_id) apolloByIdAll.set(r.apollo_id, r);
+    for (const r of pRows ?? []) if (r.pdl_id) pdlByIdAll.set(r.pdl_id, r);
 
-    // Interleave by overall preview ordering, take next N not yet collected
+    // "Already collected in THIS conversation" → skip entirely.
+    const apolloInThisConv = new Set(
+      (aRows ?? []).filter((r: any) => r.conversation_id === conversationId).map((r: any) => r.apollo_id),
+    );
+    const pdlInThisConv = new Set(
+      (pRows ?? []).filter((r: any) => r.conversation_id === conversationId).map((r: any) => r.pdl_id),
+    );
+
+    // Keep previews that aren't already in this conversation. Internal repeats
+    // (in another project of the same tenant) STAY in the list and will be
+    // cloned for free, marked as Internal.
     const remaining = (previews ?? []).filter((p: any) => {
-      if (p.source === "apollo") return !apolloAlready.has(p.external_id);
-      if (p.source === "pdl") return !pdlAlready.has(p.external_id);
+      if (p.source === "apollo") return !apolloInThisConv.has(p.external_id);
+      if (p.source === "pdl") return !pdlInThisConv.has(p.external_id);
       return false;
     });
 
@@ -65,19 +81,75 @@ export const sourceMore = createServerFn({ method: "POST" })
       return { added: 0, skipped: 0, remaining: 0, exhausted: true };
     }
 
-    const apolloNext = next.filter((p: any) => p.source === "apollo");
-    const pdlNext = next.filter((p: any) => p.source === "pdl");
+    // Split into internal-reuse vs fresh (needs enrichment / cost).
+    const apolloInternal = next.filter(
+      (p: any) => p.source === "apollo" && apolloByIdAll.has(p.external_id),
+    );
+    const apolloFresh = next.filter(
+      (p: any) => p.source === "apollo" && !apolloByIdAll.has(p.external_id),
+    );
+    const pdlInternal = next.filter(
+      (p: any) => p.source === "pdl" && pdlByIdAll.has(p.external_id),
+    );
+    const pdlFresh = next.filter(
+      (p: any) => p.source === "pdl" && !pdlByIdAll.has(p.external_id),
+    );
 
     let added = 0;
     let skipped = 0;
 
-    // Apollo: enrich + insert
-    if (apolloNext.length > 0) {
+    // --- Internal reuse: clone existing candidate row into this conversation. ---
+    async function cloneInternal(src: any) {
+      const { error: insErr } = await supabaseAdmin.from("candidates").insert({
+        user_id: userId,
+        conversation_id: conversationId,
+        name: src.name,
+        role: src.role,
+        company: src.company,
+        stage: "Sourced",
+        source: "Internal",
+        match: src.match ?? 80,
+        tags: [],
+        starred: false,
+        avatar: src.avatar ?? "",
+        email: src.email,
+        phone: src.phone,
+        linkedin: src.linkedin,
+        location: src.location,
+        summary: src.summary,
+        experience: src.experience ?? [],
+        education: src.education ?? [],
+        activity: [] as any,
+        match_breakdown: [] as any,
+        apollo_id: src.apollo_id,
+        pdl_id: src.pdl_id,
+        linkedin_slug: src.linkedin_slug,
+        has_direct_phone: src.has_direct_phone ?? false,
+      });
+      if (insErr) {
+        console.error("source-more internal reuse failed:", insErr.message);
+        skipped++;
+      } else added++;
+    }
+
+    for (const p of apolloInternal) {
+      const src = apolloByIdAll.get((p as any).external_id);
+      if (src) await cloneInternal(src);
+    }
+    for (const p of pdlInternal) {
+      const src = pdlByIdAll.get((p as any).external_id);
+      if (src) await cloneInternal(src);
+    }
+
+    let creditedAdds = 0;
+
+    // Apollo fresh: enrich + insert (1 credit each).
+    if (apolloFresh.length > 0) {
       const apolloPhoneFlag = new Map<string, boolean>(
-        apolloNext.map((p: any) => [p.external_id, Boolean(p.preview?.has_direct_phone)]),
+        apolloFresh.map((p: any) => [p.external_id, Boolean(p.preview?.has_direct_phone)]),
       );
       try {
-        const enriched = await enrichApolloProfiles(apolloNext.map((p: any) => p.external_id));
+        const enriched = await enrichApolloProfiles(apolloFresh.map((p: any) => p.external_id));
         for (const e of enriched) {
           const slug = linkedinSlug(e.linkedin_url);
           const { error: insErr } = await supabaseAdmin.from("candidates").insert({
@@ -114,15 +186,18 @@ export const sourceMore = createServerFn({ method: "POST" })
           if (insErr) {
             console.error("source-more apollo insert failed:", insErr.message);
             skipped++;
-          } else added++;
+          } else {
+            added++;
+            creditedAdds++;
+          }
         }
       } catch (e: any) {
         console.error("source-more apollo enrichment failed:", e?.message);
       }
     }
 
-    // PDL: insert from preview payload
-    for (const p of pdlNext) {
+    // PDL fresh: insert from preview payload.
+    for (const p of pdlFresh) {
       const raw: any = (p as any).preview?.raw ?? {};
       const prev: any = (p as any).preview ?? {};
       const fn = raw.first_name ?? "";
@@ -168,11 +243,15 @@ export const sourceMore = createServerFn({ method: "POST" })
       if (insErr) {
         console.error("source-more pdl insert failed:", insErr.message);
         skipped++;
-      } else added++;
+      } else {
+        added++;
+        creditedAdds++;
+      }
     }
 
-    if (added > 0) {
-      await supabaseAdmin.rpc("increment_sourcing_usage", { _user_id: userId, _count: added });
+    // Only fresh Apollo/PDL adds consume credits. Internal reuse is free.
+    if (creditedAdds > 0) {
+      await supabaseAdmin.rpc("increment_sourcing_usage", { _user_id: userId, _count: creditedAdds });
     }
 
     return {
