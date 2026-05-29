@@ -357,14 +357,12 @@ function TabButton({
   icon,
   label,
   pulse,
-  closable,
 }: {
   active: boolean;
   onClick: () => void;
   icon: React.ReactNode;
   label: string;
   pulse?: boolean;
-  closable?: boolean;
 }) {
   return (
     <button
@@ -380,11 +378,6 @@ function TabButton({
     >
       <span className="opacity-80">{icon}</span>
       <span>{label}</span>
-      {closable && (
-        <span className="ml-1 rounded p-0.5 text-text-faint hover:bg-bg-hover hover:text-text">
-          <XSm />
-        </span>
-      )}
     </button>
   );
 }
