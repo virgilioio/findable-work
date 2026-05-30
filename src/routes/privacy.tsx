@@ -22,7 +22,7 @@ export const Route = createFileRoute("/privacy")({
 });
 
 const EFFECTIVE_DATE = "May 29, 2026";
-const LAST_UPDATED = "May 29, 2026";
+const LAST_UPDATED = "May 30, 2026";
 
 function PrivacyPage() {
   return (
@@ -266,7 +266,110 @@ function PrivacyPage() {
             processing terms, security commitments, and retention practices.
           </P>
 
-          <H2>6. Legal bases for processing</H2>
+          <H2>6. Google user data</H2>
+          <P>
+            findable.work integrates with Gmail and Google Calendar to help users send
+            recruiting outreach, read replies from candidates, and schedule interviews. This
+            section describes how we access, use, store, and share data obtained from Google
+            APIs. This use is in addition to the disclosures elsewhere in this Privacy Policy.
+          </P>
+
+          <H3>A. Google services and OAuth scopes we request</H3>
+          <P>
+            We only request the scopes needed to deliver user-facing recruiting features.
+            Access is granted by the signed-in user through Google's OAuth consent screen and
+            can be revoked at any time.
+          </P>
+          <UL>
+            <li>
+              <strong>gmail.send</strong> — send recruiting outreach emails on the user's
+              behalf from their connected Gmail account.
+            </li>
+            <li>
+              <strong>gmail.modify</strong> — manage labels and update the state of outreach
+              threads created by findable (for example, mark threads read or apply labels).
+            </li>
+            <li>
+              <strong>gmail.readonly</strong> — read replies to outreach threads so the user
+              can see candidate responses inside findable.
+            </li>
+            <li>
+              <strong>calendar.readonly</strong> — read free/busy and existing calendar events
+              to suggest interview times.
+            </li>
+            <li>
+              <strong>calendar.events</strong> — create, update, and cancel interview events
+              that the user schedules through findable.
+            </li>
+          </UL>
+
+          <H3>B. How we access Google user data</H3>
+          <P>
+            We only access Google user data after the signed-in user explicitly connects
+            Gmail and/or Google Calendar through Google's OAuth flow from Settings →
+            Connections. The user can disconnect at any time from the same screen, which
+            revokes findable's access and deletes the stored OAuth tokens.
+          </P>
+
+          <H3>C. How we use Google user data</H3>
+          <P>
+            We use Google user data solely to provide the user-facing recruiting features the
+            user has connected: sending outreach from the user's Gmail account, surfacing
+            candidate replies inside findable, and reading or scheduling interview events on
+            the user's Google Calendar. We do not use Google user data to train AI or machine
+            learning models, to show it to other users outside the user's workspace, or for
+            advertising.
+          </P>
+
+          <H3>D. How we store Google user data</H3>
+          <UL>
+            <li>
+              OAuth tokens are stored encrypted and used only to call Google APIs on the
+              user's behalf.
+            </li>
+            <li>
+              Message metadata and reply content needed to display the outreach inbox are
+              stored in our database under the user's account.
+            </li>
+            <li>
+              Calendar events read or created through findable are stored only as needed to
+              display them and manage scheduling in the product.
+            </li>
+          </UL>
+
+          <H3>E. How we share Google user data</H3>
+          <P>
+            We do not sell Google user data and we do not share it with third parties for
+            their own purposes. Google user data is processed only by our infrastructure
+            subprocessors (hosting, database, and AI providers used to draft outreach) to
+            deliver the features the user requested, and only to the extent necessary to do
+            so.
+          </P>
+
+          <H3>F. Retention and deletion</H3>
+          <P>
+            Google user data is retained while the Google connection is active. Disconnecting
+            Gmail or Google Calendar from Settings → Connections revokes findable's access
+            and deletes the stored OAuth tokens. Users can also revoke findable's access at
+            any time from{" "}
+            <A href="https://myaccount.google.com/permissions">
+              myaccount.google.com/permissions
+            </A>
+            . Deleting your findable account removes associated Google user data within a
+            reasonable period, subject to legal retention obligations.
+          </P>
+
+          <H3>G. Limited Use disclosure</H3>
+          <P>
+            findable.work's use and transfer to any other app of information received from
+            Google APIs will adhere to the{" "}
+            <A href="https://developers.google.com/terms/api-services-user-data-policy">
+              Google API Services User Data Policy
+            </A>
+            , including the Limited Use requirements.
+          </P>
+
+          <H2>7. Legal bases for processing</H2>
           <P>
             Where applicable law requires a legal basis, we process personal information under
             one or more of the following legal bases:
@@ -295,7 +398,7 @@ function PrivacyPage() {
             </li>
           </UL>
 
-          <H2>7. Candidate data and customer responsibility</H2>
+          <H2>8. Candidate data and customer responsibility</H2>
           <P>
             For account information and product operations, Virgilio Technologies LLC
             generally acts as the controller of personal information.
@@ -314,7 +417,7 @@ function PrivacyPage() {
             laws, or violate the rights of candidates.
           </P>
 
-          <H2>8. How we share information</H2>
+          <H2>9. How we share information</H2>
           <P>We may share personal information with:</P>
 
           <H3>A. Service providers and subprocessors</H3>
@@ -363,7 +466,7 @@ function PrivacyPage() {
             part of that transaction, subject to appropriate safeguards.
           </P>
 
-          <H2>9. Payments</H2>
+          <H2>10. Payments</H2>
           <P>
             Payments, credits, subscriptions, and related billing events may be processed by
             Stripe or another payment provider. We may store payment-related identifiers,
@@ -371,7 +474,7 @@ function PrivacyPage() {
             do not directly store full payment card numbers.
           </P>
 
-          <H2>10. Cookies, local storage, and session storage</H2>
+          <H2>11. Cookies, local storage, and session storage</H2>
           <P>
             We may use cookies, local storage, session storage, and similar technologies to:
           </P>
@@ -389,7 +492,7 @@ function PrivacyPage() {
             up, the guest conversation may be associated with the new account.
           </P>
 
-          <H2>11. Data retention</H2>
+          <H2>12. Data retention</H2>
           <P>
             We retain personal information for as long as reasonably necessary to provide the
             service, comply with legal obligations, resolve disputes, enforce agreements, and
@@ -421,7 +524,7 @@ function PrivacyPage() {
             </li>
           </UL>
 
-          <H2>12. Security</H2>
+          <H2>13. Security</H2>
           <P>
             We use reasonable technical, administrative, and organizational measures designed
             to protect personal information. These may include access controls, HTTPS
@@ -433,7 +536,7 @@ function PrivacyPage() {
             be accessed, disclosed, altered, or destroyed.
           </P>
 
-          <H2>13. International data transfers</H2>
+          <H2>14. International data transfers</H2>
           <P>
             findable.work is operated by a United States company, and our service providers
             may process information in the United States and other countries. If you access
@@ -446,7 +549,7 @@ function PrivacyPage() {
             such as contractual protections or standard contractual clauses.
           </P>
 
-          <H2>14. Your privacy rights</H2>
+          <H2>15. Your privacy rights</H2>
           <P>Depending on your location, you may have rights to:</P>
           <UL>
             <li>Access personal information we hold about you.</li>
@@ -468,7 +571,7 @@ function PrivacyPage() {
             the relevant customer, who may be the controller of your information.
           </P>
 
-          <H2>15. Candidate rights and opt-out requests</H2>
+          <H2>16. Candidate rights and opt-out requests</H2>
           <P>
             If you are a candidate or potential candidate and believe your professional
             information appears in findable.work, you may contact us at{" "}
@@ -488,7 +591,7 @@ function PrivacyPage() {
           </P>
           <P>We will respond to verified privacy requests as required by applicable law.</P>
 
-          <H2>16. California privacy notice</H2>
+          <H2>17. California privacy notice</H2>
           <P>
             If you are a California resident, California law may provide additional rights
             regarding your personal information, including rights to know, delete, correct,
@@ -507,7 +610,7 @@ function PrivacyPage() {
             16.
           </P>
 
-          <H2>17. European and UK users</H2>
+          <H2>18. European and UK users</H2>
           <P>
             If you are located in the European Economic Area, United Kingdom, or Switzerland,
             you may have additional rights under applicable data protection laws.
@@ -528,7 +631,7 @@ function PrivacyPage() {
             protection authority.
           </P>
 
-          <H2>18. Recruiting, outreach, and communications compliance</H2>
+          <H2>19. Recruiting, outreach, and communications compliance</H2>
           <P>
             Customers are responsible for ensuring that their recruiting activities comply
             with applicable laws and platform rules, including laws relating to email,
@@ -542,21 +645,21 @@ function PrivacyPage() {
             appropriate and compliant.
           </P>
 
-          <H2>19. Children</H2>
+          <H2>20. Children</H2>
           <P>
             findable.work is intended for business and professional use. It is not directed to
             children under 18, and we do not knowingly collect personal information from
             children under 18.
           </P>
 
-          <H2>20. Do Not Track</H2>
+          <H2>21. Do Not Track</H2>
           <P>
             Some browsers offer "Do Not Track" signals. There is no uniform industry standard
             for responding to these signals. Unless required by law, we do not currently
             respond to Do Not Track signals.
           </P>
 
-          <H2>21. Changes to this Privacy Policy</H2>
+          <H2>22. Changes to this Privacy Policy</H2>
           <P>
             We may update this Privacy Policy from time to time. If we make material changes,
             we may notify users by email, in-app notice, or by updating the effective date
@@ -564,7 +667,7 @@ function PrivacyPage() {
             effective means you acknowledge the updated policy.
           </P>
 
-          <H2>22. Contact us</H2>
+          <H2>23. Contact us</H2>
           <P>
             If you have questions or requests regarding this Privacy Policy or your personal
             information, contact:
