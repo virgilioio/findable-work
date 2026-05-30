@@ -247,6 +247,8 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
     researched_companies: research.researched_companies ?? [],
     keywords: [...((normalized.keywords ?? []) as string[]), ...((research.researched_keywords ?? []) as string[])],
     seniorities: normalized.seniorities ?? [],
+    industries: (normalized.industries ?? []) as string[],
+    must_have_keywords: (normalized.must_have_keywords ?? []) as string[],
     locations: normalized.location ? [normalized.location] : [],
   });
 
