@@ -183,6 +183,28 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
     const hit = detectAmbiguousRegion(tok);
     if (hit) { ambiguous = hit; break; }
   }
+  // If we detected a region acronym, BUT the brief also mentions concrete
+  // countries from that region (because the user already answered a prior
+  // clarification card), use those concrete countries instead of asking
+  // again. This breaks the "ask LATAM countries forever" loop.
+  let concreteCountries: string[] = [];
+  if (ambiguous) {
+    const briefLower = ` ${brief.toLowerCase()} `;
+    for (const country of ambiguous.suggestedCountries) {
+      const needle = country.toLowerCase();
+      // Word-ish boundary: surrounded by non-letter chars.
+      const re = new RegExp(
+        `[^a-záéíóúñ]${needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[^a-záéíóúñ]`,
+        "i",
+      );
+      if (re.test(briefLower)) concreteCountries.push(country);
+    }
+    if (concreteCountries.length > 0) {
+      // User has already specified the countries — proceed with them.
+      normalized.location = concreteCountries.join(", ");
+      ambiguous = null;
+    }
+  }
   if (ambiguous) {
     return {
       preview_total: 0,
