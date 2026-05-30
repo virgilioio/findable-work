@@ -1289,6 +1289,82 @@ export const Route = createFileRoute("/api/chat")({
               // turn, force one more no-tools pass so the user always sees
               // a wrap-up under the task cards.
               if (toolsRanAny && !postText.trim()) {
+                // (proposal emission happens after closing prose below)
+              }
+              // --- Suggested next steps proposal ---------------------------
+              // After any turn that produced real artifact work, propose the
+              // remaining optional steps (Job Posts, Outreach) as clickable
+              // pills in chat. Skip if nothing actionable happened this turn.
+              if (toolsRanAny) {
+                try {
+                  const [{ data: existingJobPost }, { data: existingOutreach }, { data: existingJob }] =
+                    await Promise.all([
+                      supabaseAdmin
+                        .from("job_posts")
+                        .select("id")
+                        .eq("conversation_id", conversationId)
+                        .maybeSingle(),
+                      supabaseAdmin
+                        .from("outreach_drafts")
+                        .select("id")
+                        .eq("conversation_id", conversationId)
+                        .maybeSingle(),
+                      supabaseAdmin
+                        .from("jobs")
+                        .select("id")
+                        .eq("conversation_id", conversationId)
+                        .maybeSingle(),
+                    ]);
+                  // Only propose once we have a Job to anchor the next steps on.
+                  if (existingJob) {
+                    const steps: Array<{
+                      key: "job_posts" | "outreach";
+                      title: string;
+                      subtitle: string;
+                      recommended?: boolean;
+                    }> = [];
+                    if (!existingJobPost) {
+                      steps.push({
+                        key: "job_posts",
+                        title: "Draft the job posts",
+                        subtitle: "Punchy, mission-led & concise variants",
+                      });
+                    }
+                    if (!existingOutreach) {
+                      steps.push({
+                        key: "outreach",
+                        title: "Set up outreach",
+                        subtitle: "LinkedIn note + 3-step email sequence",
+                      });
+                    }
+                    if (steps.length > 0) {
+                      steps[0].recommended = true;
+                    }
+                    const { data: proposalTask } = await supabaseAdmin
+                      .from("agent_tasks")
+                      .insert({
+                        user_id: userId,
+                        conversation_id: conversationId,
+                        message_id: assistantMessageId,
+                        kind: "proposal",
+                        label: "Suggested next steps",
+                        status: "done",
+                        summary: null,
+                        data: { steps },
+                        finished_at: new Date().toISOString(),
+                      })
+                      .select("*")
+                      .single();
+                    if (proposalTask) {
+                      allTaskIds.push(proposalTask.id);
+                      send("task", proposalTask);
+                    }
+                  }
+                } catch (e) {
+                  console.error("emit proposal failed", e);
+                }
+              }
+              if (toolsRanAny && !postText.trim()) {
                 const closingConvo: ChatMessage[] = [
                   ...convo,
                   {
