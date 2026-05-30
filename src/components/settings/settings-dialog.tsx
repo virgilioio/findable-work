@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   X,
   Search as SearchIcon,
+  Eye,
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -406,14 +407,19 @@ function PersonalizationPane() {
 /* ----------------------------- Connections ------------------------------ */
 
 function ConnectionsPane() {
+  const [previewKind, setPreviewKind] = useState<"gmail" | "calendar" | null>(null);
   return (
     <div className="space-y-3">
       <p className="text-[12.5px] text-text-mute">
         Connect your own Google account so Findable can send emails and read your
         calendar on your behalf.
       </p>
-      <GmailRow />
-      <CalendarRow />
+      <GmailRow onPreview={() => setPreviewKind("gmail")} />
+      <CalendarRow onPreview={() => setPreviewKind("calendar")} />
+      <PermissionsPreviewDialog
+        kind={previewKind}
+        onClose={() => setPreviewKind(null)}
+      />
     </div>
   );
 }
