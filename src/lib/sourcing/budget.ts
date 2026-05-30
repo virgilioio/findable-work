@@ -7,6 +7,7 @@ export type SearchCriteria = {
   keywords?: string[];
   seniorities?: string[];
   industries?: string[];
+  must_have_keywords?: string[];
   locations?: string[];
   company_sizes?: string[];
   company_domains?: string[];
@@ -20,6 +21,18 @@ export function budgetSearchCriteria(input: SearchCriteria): SearchCriteria {
     userCompanies.length > 0 ? [] : (input.researched_companies ?? []).slice(0, 3);
   let keywords = (input.keywords ?? []).slice(0, 3);
   let seniorities = (input.seniorities ?? []).slice(0, 2);
+  // Industries become Apollo `q_organization_keyword_tags` (free-text). Cap so
+  // the OR list stays manageable and doesn't fragment the result set.
+  const industries = (input.industries ?? [])
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, 5);
+  // Must-have keywords become an AND-filter (`q_keywords`). Keep tight so a
+  // long list doesn't zero out the result set on its own.
+  const mustHaveKeywords = (input.must_have_keywords ?? [])
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, 3);
 
   // Tighten further when many dense dimensions
   if (titles.length >= 3 && keywords.length >= 2) researchedCompanies = [];
@@ -31,7 +44,8 @@ export function budgetSearchCriteria(input: SearchCriteria): SearchCriteria {
     researched_companies: researchedCompanies,
     keywords,
     seniorities,
-    industries: [], // Apollo wants numeric tag IDs; always drop text industries
+    industries,
+    must_have_keywords: mustHaveKeywords,
     locations: input.locations ?? [],
     company_sizes: input.company_sizes ?? [],
     company_domains: input.company_domains ?? [],
