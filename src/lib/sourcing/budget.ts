@@ -11,6 +11,10 @@ export type SearchCriteria = {
   locations?: string[];
   company_sizes?: string[];
   company_domains?: string[];
+  // New (clarify-card driven):
+  technologies?: string[];
+  employer_hiring_titles?: string[];
+  strict_titles?: boolean;
 };
 
 // Mirrors the other app: caps to avoid Apollo AND-stack overload.
@@ -33,6 +37,17 @@ export function budgetSearchCriteria(input: SearchCriteria): SearchCriteria {
     .map((s) => s.trim())
     .filter(Boolean)
     .slice(0, 3);
+  // Apollo `currently_using_any_of_technology_uids[]` is an OR-filter on the
+  // candidate's current employer tech stack. Cap to keep the OR list tight.
+  const technologies = (input.technologies ?? [])
+    .map((s) => s.trim().toLowerCase().replace(/[.\s]+/g, "_"))
+    .filter(Boolean)
+    .slice(0, 5);
+  // Apollo `q_organization_job_titles[]` — titles the employer is hiring for.
+  const employerHiringTitles = (input.employer_hiring_titles ?? [])
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, 5);
 
   // Tighten further when many dense dimensions
   if (titles.length >= 3 && keywords.length >= 2) researchedCompanies = [];
@@ -49,6 +64,9 @@ export function budgetSearchCriteria(input: SearchCriteria): SearchCriteria {
     locations: input.locations ?? [],
     company_sizes: input.company_sizes ?? [],
     company_domains: input.company_domains ?? [],
+    technologies,
+    employer_hiring_titles: employerHiringTitles,
+    strict_titles: input.strict_titles === true,
   };
 }
 
