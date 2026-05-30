@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   X,
   Search as SearchIcon,
+  Eye,
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -406,14 +407,19 @@ function PersonalizationPane() {
 /* ----------------------------- Connections ------------------------------ */
 
 function ConnectionsPane() {
+  const [previewKind, setPreviewKind] = useState<"gmail" | "calendar" | null>(null);
   return (
     <div className="space-y-3">
       <p className="text-[12.5px] text-text-mute">
         Connect your own Google account so Findable can send emails and read your
         calendar on your behalf.
       </p>
-      <GmailRow />
-      <CalendarRow />
+      <GmailRow onPreview={() => setPreviewKind("gmail")} />
+      <CalendarRow onPreview={() => setPreviewKind("calendar")} />
+      <PermissionsPreviewDialog
+        kind={previewKind}
+        onClose={() => setPreviewKind(null)}
+      />
     </div>
   );
 }
@@ -426,6 +432,7 @@ function ConnectionCard({
   onConnect,
   onDisconnect,
   busy,
+  onPreview,
 }: {
   icon: React.ReactNode;
   title: string;
@@ -434,6 +441,7 @@ function ConnectionCard({
   onConnect: () => void;
   onDisconnect: () => void;
   busy?: boolean;
+  onPreview?: () => void;
 }) {
   const connected = Boolean(connectedEmail);
   return (
@@ -457,7 +465,18 @@ function ConnectionCard({
         )}
       </div>
       <div className="shrink-0">
-        {connected ? (
+        <div className="flex items-center gap-2">
+          {onPreview && !connected && (
+            <button
+              onClick={onPreview}
+              className="flex items-center gap-1.5 rounded-lg border border-border bg-bg px-3 py-1.5 text-[12.5px] text-text transition hover:bg-bg-hover"
+              title="See exactly which permissions Findable will request"
+            >
+              <Eye className="h-3.5 w-3.5" />
+              Preview permissions
+            </button>
+          )}
+          {connected ? (
           <button
             onClick={onDisconnect}
             disabled={busy}
@@ -474,6 +493,7 @@ function ConnectionCard({
             {busy ? "Opening Google…" : "Connect"}
           </button>
         )}
+        </div>
       </div>
     </div>
   );
@@ -487,7 +507,7 @@ function friendlyOAuthError(err: unknown, provider: string): string {
   return msg || `Failed to start ${provider} connect`;
 }
 
-function GmailRow() {
+function GmailRow({ onPreview }: { onPreview: () => void }) {
   const qc = useQueryClient();
   const getFn = useServerFn(getGmailConnection);
   const startFn = useServerFn(startGmailConnect);
@@ -524,11 +544,12 @@ function GmailRow() {
       onConnect={() => startMut.mutate()}
       onDisconnect={() => disMut.mutate()}
       busy={startMut.isPending || disMut.isPending}
+      onPreview={onPreview}
     />
   );
 }
 
-function CalendarRow() {
+function CalendarRow({ onPreview }: { onPreview: () => void }) {
   const qc = useQueryClient();
   const getFn = useServerFn(getCalendarConnection);
   const startFn = useServerFn(startCalendarConnect);
@@ -565,7 +586,117 @@ function CalendarRow() {
       onConnect={() => startMut.mutate()}
       onDisconnect={() => disMut.mutate()}
       busy={startMut.isPending || disMut.isPending}
+      onPreview={onPreview}
     />
+  );
+}
+
+const PERMISSION_DETAILS = {
+  gmail: {
+    title: "Gmail",
+    icon: Mail,
+    intro: "Findable is requesting access to your Google Account",
+    scopes: [
+      {
+        label: "Send email on your behalf",
+        scope: "gmail.send",
+        detail: "So we can deliver outreach messages from your address.",
+      },
+      {
+        label: "Read, compose, and modify (but not permanently delete) email",
+        scope: "gmail.modify",
+        detail: "So we can thread replies and update conversation status.",
+      },
+      {
+        label: "Read your email messages and settings",
+        scope: "gmail.readonly",
+        detail: "So we can detect replies from candidates and surface them in the inbox.",
+      },
+    ],
+  },
+  calendar: {
+    title: "Google Calendar",
+    icon: CalendarIcon,
+    intro: "Findable is requesting access to your Google Account",
+    scopes: [
+      {
+        label: "See and download any calendar you can access",
+        scope: "calendar.readonly",
+        detail: "So we can show your real availability when proposing interview slots.",
+      },
+      {
+        label: "View and edit events on all your calendars",
+        scope: "calendar.events",
+        detail: "So we can create interview events and invite candidates directly.",
+      },
+    ],
+  },
+} as const;
+
+function PermissionsPreviewDialog({
+  kind,
+  onClose,
+}: {
+  kind: "gmail" | "calendar" | null;
+  onClose: () => void;
+}) {
+  const data = kind ? PERMISSION_DETAILS[kind] : null;
+  const Icon = data?.icon;
+  return (
+    <Dialog open={kind !== null} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-md gap-0 overflow-hidden p-0">
+        <DialogTitle className="sr-only">
+          {data ? `${data.title} permissions` : "Permissions"}
+        </DialogTitle>
+        <DialogDescription className="sr-only">
+          Exact Google scopes Findable will request when you connect.
+        </DialogDescription>
+        {data && Icon && (
+          <div className="flex flex-col">
+            <div className="flex items-center gap-3 border-b border-border px-5 py-4">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-bg-input">
+                <Icon className="h-4.5 w-4.5 text-text" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-[13px] font-semibold text-text">{data.title}</div>
+                <div className="text-[12px] text-text-mute">{data.intro}</div>
+              </div>
+            </div>
+            <div className="px-5 py-4">
+              <p className="text-[12.5px] font-medium text-text">
+                This will allow Findable to:
+              </p>
+              <ul className="mt-3 space-y-3">
+                {data.scopes.map((s) => (
+                  <li key={s.scope} className="flex gap-3">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+                    <div className="min-w-0">
+                      <div className="text-[12.5px] text-text">{s.label}</div>
+                      <div className="mt-0.5 text-[11.5px] text-text-mute">{s.detail}</div>
+                      <code className="mt-1 inline-block rounded bg-bg-input px-1.5 py-0.5 font-mono text-[10.5px] text-text-mute">
+                        {s.scope}
+                      </code>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-4 text-[11.5px] text-text-faint">
+                You can revoke this access any time from your Google Account or by
+                disconnecting here.
+              </p>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-border bg-bg-elev px-5 py-3">
+              <button
+                onClick={onClose}
+                className="rounded-lg bg-text px-3 py-1.5 text-[12.5px] font-medium text-text-invert transition hover:opacity-90"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
