@@ -84,9 +84,9 @@ function buildBody(opts: {
     ...(opts.companySizes.length ? { organization_num_employees_ranges: opts.companySizes } : {}),
     ...(opts.companyDomains.length ? { q_organization_domains_list: opts.companyDomains } : {}),
     // Free-text industry/vertical tags on the candidate's current org.
-    // Apollo treats `q_organization_keyword_tags` as OR within the string.
+    // Apollo requires this as an array of strings (OR between entries).
     ...(opts.industries.length
-      ? { q_organization_keyword_tags: opts.industries.join(" OR ") }
+      ? { q_organization_keyword_tags: opts.industries }
       : {}),
     // Documented free-text AND-filter. Combines must-have signals with
     // industry terms so we have a documented fallback path for vertical
