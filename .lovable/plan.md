@@ -1,32 +1,35 @@
-The connector gateway is returning a 500 before redirecting to Google, even on the published domain. That means the app never reaches Google's consent screen, so there is nothing recordable yet.
+Add a dedicated **"Google user data"** section to the privacy policy (src/routes/privacy.tsx) so it meets Google's OAuth verification requirements.
 
-Plan:
+## What to add
 
-1. Add a temporary “Preview Google permissions” action in Settings → Connections
-   - This will open Google's OAuth consent URL directly using the existing Google OAuth client ID.
-   - It is only for recording the permissions screen.
-   - It will request the same Gmail and Calendar scopes we intend to use.
-   - It will not store tokens or mark the account connected.
+Insert a new numbered section titled **"Google user data"** (after the existing "AI processing" section, renumbering subsequent sections) that covers:
 
-2. Keep the real Connect Gmail / Connect Calendar buttons intact
-   - Those will continue using the Lovable app-user connector flow.
-   - Once the upstream connector issue is fixed, the real integration path remains ready.
+1. **Which Google services and scopes we request:**
+   - `gmail.send` — send recruiting outreach emails on the user's behalf from their connected Gmail account.
+   - `gmail.modify` — manage labels, mark threads read, and update outreach threads created by findable.
+   - `gmail.readonly` — read replies to outreach threads so the user can see candidate responses inside findable.
+   - `calendar.readonly` — read free/busy and existing events to suggest interview times.
+   - `calendar.events` — create, update, and cancel interview events the user schedules through findable.
 
-3. Improve the visible failure state
-   - If the real connector returns the current 500, show a clear message that the connector failed before Google opened.
-   - Avoid exposing the raw JSON error during the demo.
+2. **How we access Google user data:** only after the signed-in user explicitly connects Gmail and/or Google Calendar through OAuth. The user can disconnect at any time from Settings → Connections.
 
-4. After recording, remove or hide the demo-only action
-   - We can either remove it completely or keep it behind a small “demo permissions only” affordance until the connector gateway is healthy.
+3. **How we use Google user data:** solely for user-facing recruiting features (sending outreach, surfacing replies, scheduling interviews). We do not use it to train AI/ML models, show it to other users outside the workspace, or for advertising.
 
-Technical details:
+4. **How we store Google user data:**
+   - OAuth tokens are stored encrypted and used only to call Google APIs on the user's behalf.
+   - Message metadata and reply content needed to display the inbox are stored in our database under the user's account.
+   - Calendar events are stored only as needed to display them in the product.
 
-- Use the existing `GOOGLE_APP_USER_CONNECTOR_CLIENT_ID` server-side value to generate a Google OAuth authorization URL.
-- Use response type `code`, access type `offline`, prompt `consent`, and scopes:
-  - Gmail send
-  - Gmail modify
-  - Gmail readonly
-  - Calendar readonly
-  - Calendar events
-- Redirect back to the existing `/oauth/google/return` route, but label this as a demo/preview flow so it does not attempt to complete a real connection.
-- No database migration is needed.
+5. **How we share Google user data:** we do not sell or share Google user data with third parties for their own purposes. It is processed only by our infrastructure subprocessors (hosting, database, AI providers for drafting outreach) to deliver the features the user requested.
+
+6. **Retention and deletion:** Google data is retained while the connection is active. Disconnecting in Settings → Connections revokes findable's access and deletes stored OAuth tokens. Users can also revoke access at myaccount.google.com/permissions. Deleting the findable account removes associated Google data within a reasonable period.
+
+7. **Limited Use disclosure (required verbatim):**
+   "findable.work's use and transfer to any other app of information received from Google APIs will adhere to the Google API Services User Data Policy, including the Limited Use requirements."
+
+Also:
+- Bump LAST_UPDATED to today.
+- Add a short "What changed" note at the top of the policy referencing the new Google user data section.
+- Tighten the existing "Account and login information" bullet about Google OAuth to reference the new section.
+
+No other files change. No database or server changes needed.
