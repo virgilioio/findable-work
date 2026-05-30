@@ -498,7 +498,7 @@ function GmailRow() {
     onSuccess: ({ authorizationUrl }) => {
       window.location.href = authorizationUrl;
     },
-    onError: (e: any) => toast.error(e?.message ?? "Failed to start Gmail connect"),
+    onError: (e: any) => toast.error(friendlyOAuthError(e, "Gmail")),
   });
   const disMut = useMutation({
     mutationFn: () => disFn({}),
@@ -539,7 +539,7 @@ function CalendarRow() {
     onSuccess: ({ authorizationUrl }) => {
       window.location.href = authorizationUrl;
     },
-    onError: (e: any) => toast.error(e?.message ?? "Failed to start Calendar connect"),
+    onError: (e: any) => toast.error(friendlyOAuthError(e, "Calendar")),
   });
   const disMut = useMutation({
     mutationFn: () => disFn({}),
