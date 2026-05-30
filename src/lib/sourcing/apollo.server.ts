@@ -58,6 +58,8 @@ function buildBody(opts: {
   seniorities: string[];
   companySizes: string[];
   companyDomains: string[];
+  industries: string[];
+  mustHaveKeywords: string[];
 }): ApolloSearchBody {
   return {
     per_page: 100,
@@ -70,6 +72,16 @@ function buildBody(opts: {
     ...(opts.seniorities.length ? { person_seniorities: opts.seniorities } : {}),
     ...(opts.companySizes.length ? { organization_num_employees_ranges: opts.companySizes } : {}),
     ...(opts.companyDomains.length ? { q_organization_domains_list: opts.companyDomains } : {}),
+    // Free-text industry/vertical tags on the candidate's current org.
+    // Apollo treats `q_organization_keyword_tags` as OR within the string.
+    ...(opts.industries.length
+      ? { q_organization_keyword_tags: opts.industries.join(" OR ") }
+      : {}),
+    // Free-text person+org keyword AND-filter. Used for must-have experience
+    // signals captured during the clarify step (e.g. "strategic partnerships").
+    ...(opts.mustHaveKeywords.length
+      ? { q_keywords: opts.mustHaveKeywords.join(" ") }
+      : {}),
   };
 }
 
@@ -131,23 +143,33 @@ export async function searchApolloWithFallback(criteria: SearchCriteria): Promis
   const keywords = deduplicateKeywords(c.keywords ?? [], titles);
   const companySizes = c.company_sizes ?? [];
   const companyDomains = c.company_domains ?? [];
+  const industries = c.industries ?? [];
+  const mustHaveKeywords = c.must_have_keywords ?? [];
 
   const attempts: Array<{ step: string; body: ApolloSearchBody }> = [
     {
       step: "full",
-      body: buildBody({ titles, companies, locations, seniorities, companySizes, companyDomains }),
+      body: buildBody({ titles, companies, locations, seniorities, companySizes, companyDomains, industries, mustHaveKeywords }),
     },
     {
       step: "dropped_seniority",
-      body: buildBody({ titles, companies, locations, seniorities: [], companySizes, companyDomains }),
+      body: buildBody({ titles, companies, locations, seniorities: [], companySizes, companyDomains, industries, mustHaveKeywords }),
+    },
+    {
+      step: "dropped_must_have_keywords",
+      body: buildBody({ titles, companies, locations, seniorities: [], companySizes, companyDomains, industries, mustHaveKeywords: [] }),
+    },
+    {
+      step: "dropped_industries",
+      body: buildBody({ titles, companies, locations, seniorities: [], companySizes, companyDomains, industries: [], mustHaveKeywords: [] }),
     },
     {
       step: "dropped_companies",
-      body: buildBody({ titles, companies: [], locations, seniorities: [], companySizes, companyDomains }),
+      body: buildBody({ titles, companies: [], locations, seniorities: [], companySizes, companyDomains, industries: [], mustHaveKeywords: [] }),
     },
     {
       step: "country_only_location",
-      body: buildBody({ titles, companies: [], locations: countryOnly, seniorities: [], companySizes, companyDomains }),
+      body: buildBody({ titles, companies: [], locations: countryOnly, seniorities: [], companySizes, companyDomains, industries: [], mustHaveKeywords: [] }),
     },
   ];
 
@@ -158,7 +180,7 @@ export async function searchApolloWithFallback(criteria: SearchCriteria): Promis
   if (locations.length === 0) {
     attempts.push({
       step: "title_only",
-      body: buildBody({ titles, companies: [], locations: [], seniorities: [], companySizes, companyDomains: [] }),
+      body: buildBody({ titles, companies: [], locations: [], seniorities: [], companySizes, companyDomains: [], industries: [], mustHaveKeywords: [] }),
     });
   }
 
