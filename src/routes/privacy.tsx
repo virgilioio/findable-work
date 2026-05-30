@@ -266,7 +266,7 @@ function PrivacyPage() {
             processing terms, security commitments, and retention practices.
           </P>
 
-          <H2>6. Legal bases for processing</H2>
+          <H2>7. Legal bases for processing</H2>
           <P>
             Where applicable law requires a legal basis, we process personal information under
             one or more of the following legal bases:
@@ -295,7 +295,7 @@ function PrivacyPage() {
             </li>
           </UL>
 
-          <H2>7. Candidate data and customer responsibility</H2>
+          <H2>8. Candidate data and customer responsibility</H2>
           <P>
             For account information and product operations, Virgilio Technologies LLC
             generally acts as the controller of personal information.
@@ -314,7 +314,7 @@ function PrivacyPage() {
             laws, or violate the rights of candidates.
           </P>
 
-          <H2>8. How we share information</H2>
+          <H2>9. How we share information</H2>
           <P>We may share personal information with:</P>
 
           <H3>A. Service providers and subprocessors</H3>
@@ -363,7 +363,7 @@ function PrivacyPage() {
             part of that transaction, subject to appropriate safeguards.
           </P>
 
-          <H2>9. Payments</H2>
+          <H2>10. Payments</H2>
           <P>
             Payments, credits, subscriptions, and related billing events may be processed by
             Stripe or another payment provider. We may store payment-related identifiers,
@@ -371,7 +371,7 @@ function PrivacyPage() {
             do not directly store full payment card numbers.
           </P>
 
-          <H2>10. Cookies, local storage, and session storage</H2>
+          <H2>11. Cookies, local storage, and session storage</H2>
           <P>
             We may use cookies, local storage, session storage, and similar technologies to:
           </P>
@@ -389,7 +389,7 @@ function PrivacyPage() {
             up, the guest conversation may be associated with the new account.
           </P>
 
-          <H2>11. Data retention</H2>
+          <H2>12. Data retention</H2>
           <P>
             We retain personal information for as long as reasonably necessary to provide the
             service, comply with legal obligations, resolve disputes, enforce agreements, and
@@ -421,7 +421,7 @@ function PrivacyPage() {
             </li>
           </UL>
 
-          <H2>12. Security</H2>
+          <H2>13. Security</H2>
           <P>
             We use reasonable technical, administrative, and organizational measures designed
             to protect personal information. These may include access controls, HTTPS
@@ -433,7 +433,7 @@ function PrivacyPage() {
             be accessed, disclosed, altered, or destroyed.
           </P>
 
-          <H2>13. International data transfers</H2>
+          <H2>14. International data transfers</H2>
           <P>
             findable.work is operated by a United States company, and our service providers
             may process information in the United States and other countries. If you access
@@ -446,7 +446,7 @@ function PrivacyPage() {
             such as contractual protections or standard contractual clauses.
           </P>
 
-          <H2>14. Your privacy rights</H2>
+          <H2>15. Your privacy rights</H2>
           <P>Depending on your location, you may have rights to:</P>
           <UL>
             <li>Access personal information we hold about you.</li>
@@ -468,7 +468,7 @@ function PrivacyPage() {
             the relevant customer, who may be the controller of your information.
           </P>
 
-          <H2>15. Candidate rights and opt-out requests</H2>
+          <H2>16. Candidate rights and opt-out requests</H2>
           <P>
             If you are a candidate or potential candidate and believe your professional
             information appears in findable.work, you may contact us at{" "}
@@ -488,7 +488,7 @@ function PrivacyPage() {
           </P>
           <P>We will respond to verified privacy requests as required by applicable law.</P>
 
-          <H2>16. California privacy notice</H2>
+          <H2>17. California privacy notice</H2>
           <P>
             If you are a California resident, California law may provide additional rights
             regarding your personal information, including rights to know, delete, correct,
@@ -507,7 +507,7 @@ function PrivacyPage() {
             16.
           </P>
 
-          <H2>17. European and UK users</H2>
+          <H2>18. European and UK users</H2>
           <P>
             If you are located in the European Economic Area, United Kingdom, or Switzerland,
             you may have additional rights under applicable data protection laws.
@@ -528,7 +528,7 @@ function PrivacyPage() {
             protection authority.
           </P>
 
-          <H2>18. Recruiting, outreach, and communications compliance</H2>
+          <H2>19. Recruiting, outreach, and communications compliance</H2>
           <P>
             Customers are responsible for ensuring that their recruiting activities comply
             with applicable laws and platform rules, including laws relating to email,
@@ -542,21 +542,21 @@ function PrivacyPage() {
             appropriate and compliant.
           </P>
 
-          <H2>19. Children</H2>
+          <H2>20. Children</H2>
           <P>
             findable.work is intended for business and professional use. It is not directed to
             children under 18, and we do not knowingly collect personal information from
             children under 18.
           </P>
 
-          <H2>20. Do Not Track</H2>
+          <H2>21. Do Not Track</H2>
           <P>
             Some browsers offer "Do Not Track" signals. There is no uniform industry standard
             for responding to these signals. Unless required by law, we do not currently
             respond to Do Not Track signals.
           </P>
 
-          <H2>21. Changes to this Privacy Policy</H2>
+          <H2>22. Changes to this Privacy Policy</H2>
           <P>
             We may update this Privacy Policy from time to time. If we make material changes,
             we may notify users by email, in-app notice, or by updating the effective date
@@ -564,7 +564,7 @@ function PrivacyPage() {
             effective means you acknowledge the updated policy.
           </P>
 
-          <H2>22. Contact us</H2>
+          <H2>23. Contact us</H2>
           <P>
             If you have questions or requests regarding this Privacy Policy or your personal
             information, contact:
