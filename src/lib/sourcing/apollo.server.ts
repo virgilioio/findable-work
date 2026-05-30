@@ -60,13 +60,24 @@ function buildBody(opts: {
   companyDomains: string[];
   industries: string[];
   mustHaveKeywords: string[];
+  technologies: string[];
+  employerHiringTitles: string[];
+  strictTitles: boolean;
 }): ApolloSearchBody {
+  // Documented `q_keywords` is an AND-friendly free-text filter. We feed it
+  // both must-have signals AND industry terms so industry filtering still
+  // works even if Apollo silently ignores the (undocumented but observed)
+  // `q_organization_keyword_tags` on this endpoint.
+  const qKeywordsParts = [...opts.mustHaveKeywords, ...opts.industries].filter(Boolean);
   return {
     per_page: 100,
     // Quality default: only verified or likely-to-engage contacts.
     // We're a distillery of data — never return guessed/unavailable emails.
     contact_email_status: ["verified", "likely to engage"],
     ...(opts.titles.length ? { person_titles: opts.titles.slice(0, 10) } : {}),
+    // Apollo default is `true` (returns related titles). Only set explicitly
+    // when the recruiter asked for strict matching during the clarify card.
+    ...(opts.strictTitles ? { include_similar_titles: false } : {}),
     ...(opts.companies.length ? { q_organization_name: opts.companies.join(" OR ") } : {}),
     ...(opts.locations.length ? { person_locations: opts.locations } : {}),
     ...(opts.seniorities.length ? { person_seniorities: opts.seniorities } : {}),
@@ -77,10 +88,17 @@ function buildBody(opts: {
     ...(opts.industries.length
       ? { q_organization_keyword_tags: opts.industries.join(" OR ") }
       : {}),
-    // Free-text person+org keyword AND-filter. Used for must-have experience
-    // signals captured during the clarify step (e.g. "strategic partnerships").
-    ...(opts.mustHaveKeywords.length
-      ? { q_keywords: opts.mustHaveKeywords.join(" ") }
+    // Documented free-text AND-filter. Combines must-have signals with
+    // industry terms so we have a documented fallback path for vertical
+    // filtering.
+    ...(qKeywordsParts.length ? { q_keywords: qKeywordsParts.join(" ") } : {}),
+    // OR-filter on the candidate's current employer tech stack (documented).
+    ...(opts.technologies.length
+      ? { currently_using_any_of_technology_uids: opts.technologies }
+      : {}),
+    // Titles the employer is currently hiring for — growth/adjacency signal.
+    ...(opts.employerHiringTitles.length
+      ? { q_organization_job_titles: opts.employerHiringTitles }
       : {}),
   };
 }
@@ -145,31 +163,56 @@ export async function searchApolloWithFallback(criteria: SearchCriteria): Promis
   const companyDomains = c.company_domains ?? [];
   const industries = c.industries ?? [];
   const mustHaveKeywords = c.must_have_keywords ?? [];
+  const technologies = c.technologies ?? [];
+  const employerHiringTitles = c.employer_hiring_titles ?? [];
+  const strictTitles = c.strict_titles === true;
+
+  const baseOpts = {
+    titles,
+    companies,
+    locations,
+    seniorities,
+    companySizes,
+    companyDomains,
+    industries,
+    mustHaveKeywords,
+    technologies,
+    employerHiringTitles,
+    strictTitles,
+  };
 
   const attempts: Array<{ step: string; body: ApolloSearchBody }> = [
     {
       step: "full",
-      body: buildBody({ titles, companies, locations, seniorities, companySizes, companyDomains, industries, mustHaveKeywords }),
+      body: buildBody(baseOpts),
     },
     {
       step: "dropped_seniority",
-      body: buildBody({ titles, companies, locations, seniorities: [], companySizes, companyDomains, industries, mustHaveKeywords }),
+      body: buildBody({ ...baseOpts, seniorities: [] }),
+    },
+    {
+      step: "dropped_technologies",
+      body: buildBody({ ...baseOpts, seniorities: [], technologies: [] }),
+    },
+    {
+      step: "dropped_employer_hiring_titles",
+      body: buildBody({ ...baseOpts, seniorities: [], technologies: [], employerHiringTitles: [] }),
     },
     {
       step: "dropped_must_have_keywords",
-      body: buildBody({ titles, companies, locations, seniorities: [], companySizes, companyDomains, industries, mustHaveKeywords: [] }),
+      body: buildBody({ ...baseOpts, seniorities: [], technologies: [], employerHiringTitles: [], mustHaveKeywords: [] }),
     },
     {
       step: "dropped_industries",
-      body: buildBody({ titles, companies, locations, seniorities: [], companySizes, companyDomains, industries: [], mustHaveKeywords: [] }),
+      body: buildBody({ ...baseOpts, seniorities: [], technologies: [], employerHiringTitles: [], mustHaveKeywords: [], industries: [] }),
     },
     {
       step: "dropped_companies",
-      body: buildBody({ titles, companies: [], locations, seniorities: [], companySizes, companyDomains, industries: [], mustHaveKeywords: [] }),
+      body: buildBody({ ...baseOpts, seniorities: [], technologies: [], employerHiringTitles: [], mustHaveKeywords: [], industries: [], companies: [] }),
     },
     {
       step: "country_only_location",
-      body: buildBody({ titles, companies: [], locations: countryOnly, seniorities: [], companySizes, companyDomains, industries: [], mustHaveKeywords: [] }),
+      body: buildBody({ ...baseOpts, seniorities: [], technologies: [], employerHiringTitles: [], mustHaveKeywords: [], industries: [], companies: [], locations: countryOnly }),
     },
   ];
 
@@ -180,7 +223,7 @@ export async function searchApolloWithFallback(criteria: SearchCriteria): Promis
   if (locations.length === 0) {
     attempts.push({
       step: "title_only",
-      body: buildBody({ titles, companies: [], locations: [], seniorities: [], companySizes, companyDomains: [], industries: [], mustHaveKeywords: [] }),
+      body: buildBody({ ...baseOpts, seniorities: [], technologies: [], employerHiringTitles: [], mustHaveKeywords: [], industries: [], companies: [], locations: [], companyDomains: [] }),
     });
   }
 

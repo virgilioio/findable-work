@@ -1,86 +1,102 @@
-# Always refine, and actually use what we collect
 
-You flagged two real problems in the same flow. The example prompt — *"BD Manager, New York, foodtech/adtech, partnerships experience"* — exposes both:
+# Tighten Apollo search + clarify thresholds
 
-1. **The agent skipped clarifying questions** because the threshold is "title + location + seniority present → go". It had all three (BD Manager / NY / manager) and shipped to Apollo immediately.
-2. **Even if it had asked, the industry signal would have been thrown away.** `budgetSearchCriteria` hardcodes `industries: []` (drop), the `agent_normalize` prompt has no `industries` field at all, and Apollo gets nothing about foodtech/adtech. "Partnerships experience" survives only as a low-priority free-text keyword (cap of 3).
+The Apollo docs you pasted are for `POST /mixed_people/api_search`. Comparing
+them to what we send today (`src/lib/sourcing/apollo.server.ts → buildBody`)
+surfaces a few real issues. Refinement-threshold logic itself is already
+"mandatory clarify on first sourcing turn" — what's worth tuning is **which
+questions we ask** and **how those answers translate into the Apollo payload**.
 
-## Changes
+## What's wrong today
 
-### 1. Always run one clarify round before the first sourcing call
+1. **`q_organization_keyword_tags` is not in the documented endpoint.** We added
+   it for `industries`. It works in Apollo's web app but is NOT in the public
+   API contract — risk of silent ignore on this endpoint. We need a documented
+   path for industry/vertical filtering.
+2. **`q_organization_name` is not in the documented endpoint either.** We pass
+   user company names through it. Same risk.
+3. **`include_similar_titles` is documented and we never set it.** Default is
+   `true`, meaning "marketing manager" also returns "content marketing
+   manager". For senior recruiter searches that's often wrong (e.g. "BD
+   Manager" should not return "Marketing Manager"). We should set it
+   explicitly based on whether the recruiter wants strict-title or not.
+4. **Several high-signal documented filters are unused:**
+   - `q_organization_job_titles[]` — the candidate's employer is currently
+     hiring for these titles (growth/adjacency signal).
+   - `revenue_range[min|max]` — company maturity filter.
+   - `currently_using_any_of_technology_uids[]` — tech-stack filter (huge for
+     engineering/RevOps roles).
+5. **Clarify card doesn't ask "strict title matching?"** so we can't drive
+   `include_similar_titles` from user intent.
+6. **Industries in clarify card seed adjacent verticals automatically** —
+   good — but we lose them at the Apollo layer if `q_organization_keyword_tags`
+   silently fails. Need a fallback that also injects industry terms into
+   `q_keywords` (documented, AND-filter) so they at least bias results.
 
-Edit the `chat.main` prompt (DB-backed, in `prompts` table) so the mandatory mode-C flow becomes:
+## Plan
 
-- On **the first sourcing intent in a conversation** (no `sourcing_projects` row yet), the agent MUST call `ask_clarifying_questions` first, even when title + location + seniority are already in the brief.
-- The card should only ask for what's still ambiguous or under-specified. Pre-fill nothing; the user should see they're refining, not re-typing. Pick 2–4 of these based on what the brief is missing:
-  - **Seniority band** (single-select) — even if "manager" is implied, confirm IC manager vs people manager vs senior IC.
-  - **Years of experience** (single-select: 3–5, 5–8, 8–12, 12+).
-  - **Industry / vertical focus** (multi-select, with the user's hints as preselected pills + adjacent options + "Other" free-text). For the BD example: FoodTech, AdTech, MarTech, B2B SaaS, Marketplaces, CPG, Other.
-  - **Company size of current/recent employer** (multi-select: 1–10, 11–50, 51–200, 201–500, 501–1k, 1k–5k, 5k+).
-  - **Must-have experience signals** (multi-select free-text-aware: e.g. "strategic partnerships", "channel sales", "BD with enterprise", "founder-led GTM").
-  - **Work model** (single-select: On-site NY, Hybrid NY, Remote-US, Remote-global) — only when the location is a city without a model.
-  - **Comp band** (single-select brackets) — skippable.
-  - **Languages** when relevant by location/industry.
-- After the user answers, proceed with `create_job` + `source_candidates` in the same turn (today's behavior for subsequent turns).
-- Subsequent sourcing/broadening in the same conversation keeps today's behavior (no forced extra clarify; only re-ask on 0 results or explicit user retry).
+### 1. Fix the Apollo payload (`src/lib/sourcing/apollo.server.ts`)
 
-### 2. Capture industries in the normalize step
+- Keep `q_organization_keyword_tags` (Apollo accepts it in practice), but
+  **also** append industry terms to `q_keywords` so we have a documented
+  fallback. Final `q_keywords` = `[...mustHaveKeywords, ...industries].join(" ")`.
+- Add `include_similar_titles: false` when the recruiter chose "strict
+  title" in the clarify card (default stays `true`).
+- Add optional pass-through for two new documented filters when the clarify
+  card surfaces them:
+  - `revenue_range[min]` / `revenue_range[max]` from a comp/maturity question.
+  - `currently_using_any_of_technology_uids[]` from a tech-stack question (only
+    asked for technical roles).
+- Add `q_organization_job_titles[]` when the clarify card captures "employer
+  also hiring for…" — useful for finding teams that are scaling.
+- Log the exact body sent (already partly done via `criteria_sent`) — extend
+  to include the resolved Apollo body so the Candidates panel debug view shows
+  what Apollo actually got, not just our internal criteria.
 
-Update the `sourcing.agent_normalize` prompt to add an `industries` field:
+### 2. Clarify card additions (`chat.main` prompt)
 
-```json
-{
-  "title": "...",
-  "skills": ["..."],
-  "industries": ["foodtech", "adtech"],
-  "location": "...",
-  "seniorities": ["..."],
-  "keywords": ["..."]
-}
-```
+Add two optional questions to the menu, only used when relevant:
 
-Same change for `sourcing.normalize` (the standalone normalize fn) for parity.
+- **Title match strictness** (single): "Strict — exact titles only" /
+  "Loose — include related titles". Drives `include_similar_titles`. Ask
+  when the user provided a precise title (e.g. "Head of Partnerships" vs
+  generic "Manager").
+- **Tech stack** (multi, allow_other=true): only for engineering / RevOps /
+  data roles. Maps to `currently_using_any_of_technology_uids[]`.
 
-### 3. Pass industries through `budgetSearchCriteria` instead of dropping them
+Keep the mandatory "ask 2–4 questions on first sourcing turn" rule as-is.
 
-`src/lib/sourcing/budget.ts`:
-- Remove the `industries: []` hardcode.
-- Keep a small budget (max 5 industries).
-- Add a `mustHaveKeywords` field on `SearchCriteria` distinct from boost `keywords`, so signals captured in the clarify card (e.g. "strategic partnerships") can be ANDed instead of competing for the 3-slot keyword budget.
+### 3. Carry the new fields through
 
-### 4. Actually send them to Apollo
+- `sourcing.agent_normalize` + `sourcing.normalize` prompts: add
+  `strict_titles: boolean`, `technologies: string[]`,
+  `employer_hiring_titles: string[]`.
+- `SearchCriteria` type in `budget.ts`: add the three fields, cap
+  `technologies` at 5 and `employer_hiring_titles` at 5.
+- `agent.server.ts → tSearch`: include all of the above in `criteria_sent`.
 
-`src/lib/sourcing/apollo.server.ts`, `buildBody`:
-- Add `q_organization_keyword_tags: industries.join(" OR ")` when industries are present — this is Apollo's free-text industry/company-tag filter and is the right field for "foodtech, adtech".
-- Add `q_keywords: mustHaveKeywords.join(" ")` when present — this scopes person+org keyword match.
-- Add a new fallback rung in `searchApolloWithFallback`: **drop industries before dropping companies**, so the relaxation ladder is:
-  1. full (titles + companies + locations + seniorities + industries + must-have kw)
-  2. drop seniorities
-  3. drop must-have kw
-  4. drop industries
-  5. drop companies
-  6. country-only location
-  7. (existing) title-only when no location
+### 4. Defensive: validate Apollo accepts our undocumented params
 
-Log the broadening step the same way we do today so the chat surfaces it ("broadened — dropped industry filter").
+Add a one-time dev-only log when the response `total_entries` is suspiciously
+identical with and without `q_organization_keyword_tags` / `q_organization_name`
+— that tells us if Apollo is silently dropping them on this endpoint. Cheap to
+add, easy to remove.
 
-### 5. Surface industries in the search task summary
+## Files
 
-In `agent.server.ts` step 2/3, include industries in the `tSearch` data payload so the Candidates panel and the "search criteria" debug view show exactly what was asked of Apollo (today the user can't tell that foodtech/adtech was ignored).
+- DB (migration to update prompt bodies): `chat.main`,
+  `sourcing.agent_normalize`, `sourcing.normalize`.
+- `src/lib/sourcing/apollo.server.ts` — payload + relaxation ladder.
+- `src/lib/sourcing/budget.ts` — `SearchCriteria` shape + caps.
+- `src/lib/sourcing/normalize.functions.ts` — pass new fields through.
+- `src/lib/sourcing/agent.server.ts` — include new fields in `criteria_sent`.
 
-## Out of scope
+No schema changes, no auth changes, no new deps.
 
-- Mapping textual industries to Apollo's numeric `organization_industry_tag_ids` (would need a maintained mapping table). Free-text `q_organization_keyword_tags` covers the BD example correctly without that.
-- PDL parity for industries (PDL path doesn't currently use them; can follow once the Apollo side is validated).
-- Any UI work on the clarify card — the existing pill picker already supports single/multi/text with `allow_other`.
+## Out of scope (flag for later if you want)
 
-## Files touched
-
-- `prompts` table rows: `chat.main`, `sourcing.agent_normalize`, `sourcing.normalize` (via the prompts admin UI / migration)
-- `src/lib/sourcing/budget.ts`
-- `src/lib/sourcing/apollo.server.ts`
-- `src/lib/sourcing/agent.server.ts` (wire `industries` + `mustHaveKeywords` from normalized → criteria; include in task data)
-- `src/lib/sourcing/normalize.functions.ts` (extend returned shape with `industries`)
-- `src/lib/sourcing/project.functions.ts` (accept `industries` in `CreateInput`/refine allow-list)
-
-No DB schema changes — `sourcing_projects.search_criteria` and `normalized` are already `jsonb`.
+- Auto-resolving Apollo `organization_ids[]` for "Stripe-like companies" via
+  the Organization Search endpoint (would let us replace fuzzy
+  `q_organization_name` with the documented `organization_ids[]` filter).
+- Pulling Apollo's technology UID CSV into a typeahead so the clarify card
+  shows real tech tags instead of free text.
