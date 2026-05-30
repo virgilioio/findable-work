@@ -274,7 +274,12 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
     technologies: (normalized.technologies ?? []) as string[],
     employer_hiring_titles: (normalized.employer_hiring_titles ?? []) as string[],
     strict_titles: normalized.strict_titles === true,
-    locations: normalized.location ? [normalized.location] : [],
+    locations:
+      concreteCountries.length > 0
+        ? concreteCountries
+        : normalized.location
+          ? [normalized.location]
+          : [],
   });
 
   const { data: project, error: projErr } = await supabaseAdmin
