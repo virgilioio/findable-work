@@ -42,6 +42,20 @@ export async function authorizeAppUserOAuth(
   );
   const text = await res.text();
   if (!res.ok) {
+    // Log full request + response context to server function logs so we can
+    // diagnose opaque gateway 500s (which return empty message/details).
+    console.error("[appUserConnector] OAuth start failed", {
+      status: res.status,
+      statusText: res.statusText,
+      responseBody: text,
+      request: {
+        connector_id: params.connectorId,
+        app_user_id: params.appUserId,
+        connector_client_id: params.connectorClientId,
+        return_url: params.returnUrl,
+        credentials_configuration: params.credentialsConfiguration,
+      },
+    });
     throw new Error(`App User OAuth start failed (${res.status}): ${text || res.statusText}`);
   }
   const body = text ? JSON.parse(text) : {};
