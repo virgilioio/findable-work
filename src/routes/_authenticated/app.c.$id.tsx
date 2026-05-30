@@ -543,6 +543,17 @@ function ChatPanel({
             // render instead of vanishing.
             const lastAssistantId =
               [...messages].reverse().find((m) => m.role === "assistant")?.id ?? null;
+            // Only the most recent `proposal` task is interactive — any
+            // older proposal cards collapse to nothing so the user never
+            // sees duplicate pill sets.
+            const persistedIds = new Set(persistedTasks.map((p) => p.id));
+            const visibleLiveAll = liveTasks.filter((t) => !persistedIds.has(t.id));
+            const proposals = [...persistedTasks, ...visibleLiveAll].filter(
+              (t) => t.kind === "proposal",
+            );
+            const latestProposalId = proposals.length
+              ? proposals[proposals.length - 1].id
+              : null;
             return messages.map((m) => {
             const msgTasks = persistedTasks.filter(
               (t) =>
@@ -565,6 +576,9 @@ function ChatPanel({
                         onSubmitClarify={onSubmitClarify}
                         clarifyAnswered={Boolean(clarifyAnswers[t.id])}
                         clarifyAnswers={clarifyAnswers[t.id]}
+                        proposalInteractive={t.id === latestProposalId}
+                        proposalDisabled={sending}
+                        onProposalClick={(_step, prompt) => onSend(prompt)}
                       />
                     </TimelineRow>
                   ))}
@@ -592,6 +606,12 @@ function ChatPanel({
                 const { before, after } = splitAroundTasks(streaming);
                 const persistedIds = new Set(persistedTasks.map((p) => p.id));
                 const visibleLive = liveTasks.filter((t) => !persistedIds.has(t.id));
+                const allProposals = [...persistedTasks, ...visibleLive].filter(
+                  (t) => t.kind === "proposal",
+                );
+                const latestProposalId = allProposals.length
+                  ? allProposals[allProposals.length - 1].id
+                  : null;
                 return (
                   <>
                     {before && <MessageRow role="assistant" content={before} streaming />}
@@ -603,6 +623,9 @@ function ChatPanel({
                           onSubmitClarify={onSubmitClarify}
                           clarifyAnswered={Boolean(clarifyAnswers[t.id])}
                           clarifyAnswers={clarifyAnswers[t.id]}
+                          proposalInteractive={t.id === latestProposalId}
+                          proposalDisabled={sending}
+                          onProposalClick={(_step, prompt) => onSend(prompt)}
                         />
                       </TimelineRow>
                     ))}
