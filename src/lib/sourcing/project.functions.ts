@@ -97,7 +97,17 @@ export const refineSourcingProject = createServerFn({ method: "POST" })
     const reply = completion.choices?.[0]?.message?.content ?? "";
     const update = extractJsonBlock(reply) ?? {};
 
-    const allowed = ["skills", "locations", "title_keywords", "experience_years", "education_level"];
+    const allowed = [
+      "skills",
+      "locations",
+      "title_keywords",
+      "experience_years",
+      "education_level",
+      "industries",
+      "must_have_keywords",
+      "keywords",
+      "seniorities",
+    ];
     const merged = { ...(project.search_criteria as Record<string, unknown>) };
     for (const k of allowed) {
       if (k in update) (merged as any)[k] = (update as any)[k];
