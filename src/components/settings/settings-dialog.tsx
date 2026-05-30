@@ -432,6 +432,7 @@ function ConnectionCard({
   onConnect,
   onDisconnect,
   busy,
+  onPreview,
 }: {
   icon: React.ReactNode;
   title: string;
@@ -440,6 +441,7 @@ function ConnectionCard({
   onConnect: () => void;
   onDisconnect: () => void;
   busy?: boolean;
+  onPreview?: () => void;
 }) {
   const connected = Boolean(connectedEmail);
   return (
@@ -463,7 +465,18 @@ function ConnectionCard({
         )}
       </div>
       <div className="shrink-0">
-        {connected ? (
+        <div className="flex items-center gap-2">
+          {onPreview && !connected && (
+            <button
+              onClick={onPreview}
+              className="flex items-center gap-1.5 rounded-lg border border-border bg-bg px-3 py-1.5 text-[12.5px] text-text transition hover:bg-bg-hover"
+              title="See exactly which permissions Findable will request"
+            >
+              <Eye className="h-3.5 w-3.5" />
+              Preview permissions
+            </button>
+          )}
+          {connected ? (
           <button
             onClick={onDisconnect}
             disabled={busy}
@@ -480,6 +493,7 @@ function ConnectionCard({
             {busy ? "Opening Google…" : "Connect"}
           </button>
         )}
+        </div>
       </div>
     </div>
   );
