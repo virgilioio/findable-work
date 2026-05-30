@@ -493,7 +493,7 @@ function friendlyOAuthError(err: unknown, provider: string): string {
   return msg || `Failed to start ${provider} connect`;
 }
 
-function GmailRow() {
+function GmailRow({ onPreview }: { onPreview: () => void }) {
   const qc = useQueryClient();
   const getFn = useServerFn(getGmailConnection);
   const startFn = useServerFn(startGmailConnect);
@@ -530,11 +530,12 @@ function GmailRow() {
       onConnect={() => startMut.mutate()}
       onDisconnect={() => disMut.mutate()}
       busy={startMut.isPending || disMut.isPending}
+      onPreview={onPreview}
     />
   );
 }
 
-function CalendarRow() {
+function CalendarRow({ onPreview }: { onPreview: () => void }) {
   const qc = useQueryClient();
   const getFn = useServerFn(getCalendarConnection);
   const startFn = useServerFn(startCalendarConnect);
@@ -571,6 +572,7 @@ function CalendarRow() {
       onConnect={() => startMut.mutate()}
       onDisconnect={() => disMut.mutate()}
       busy={startMut.isPending || disMut.isPending}
+      onPreview={onPreview}
     />
   );
 }
