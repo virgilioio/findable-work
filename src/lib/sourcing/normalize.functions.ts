@@ -7,6 +7,7 @@ import { getPrompt } from "@/lib/prompts/registry.server";
 export type NormalizedSpecs = {
   title: string;
   skills: string[];
+  industries: string[];
   location: string;
   ai_variations: {
     titles: string[];
@@ -39,6 +40,7 @@ export const normalizeJobSpecs = createServerFn({ method: "POST" })
     return {
       title: String(parsed.title ?? "").trim(),
       skills: Array.isArray(parsed.skills) ? parsed.skills.map(String) : [],
+      industries: Array.isArray(parsed.industries) ? parsed.industries.map(String) : [],
       location: String(parsed.location ?? "").trim(),
       ai_variations: {
         titles: Array.isArray(parsed.ai_variations?.titles)
