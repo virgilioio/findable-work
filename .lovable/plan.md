@@ -1,26 +1,28 @@
-## Plan
+## Why the search returned 0 candidates
 
-### 1. Stop the LATAM country loop
-- Add a deterministic server-side guard in `/api/chat` before letting the model decide tools.
-- Detect when the latest user message is an answer to a prior LATAM/region clarification card, e.g. `Target countries in LATAM: Mexico, Colombia, Chile`.
-- Convert that answer into explicit sourcing context for the next model turn, so the agent sees `location = Mexico, Colombia, Chile` instead of seeing old `LATAM` again.
-- Add a rule that the same region-specific clarification cannot be asked again once the user has answered it in this conversation.
+The recent LATAM fix in `agent.server.ts` did not cause this. The `search` task for the latest conversation recorded:
 
-### 2. Make the sourcing agent accept answered country lists
-- Update the region ambiguity guard in `runSourcingAgent` so it only blocks when the active location is still a bare region acronym like `LATAM`.
-- If the user’s latest answer includes concrete countries, ignore the older bare region token in previous context and proceed with those countries.
-- Ensure normalization/search criteria receive explicit country locations, not an empty location.
+```
+Apollo error [422] /mixed_people/api_search:
+  {"error":"q_organization_keyword_tags requires an array. You are passing in String"}
+```
 
-### 3. Improve the prompt safety rails
-- Tighten the `chat.main` prompt so after a clarification card answer, the assistant must proceed to `create_job` + `source_candidates` and must not ask the same clarification again.
-- Tighten the sourcing normalization prompt/partial so explicit country answers after a region question are preserved as concrete locations.
+In `src/lib/sourcing/apollo.server.ts → buildBody`, we currently send:
 
-### 4. Add immediate “working” feedback
-- Show a visible assistant-side working row as soon as `sending=true`, even before reasoning tokens or task events arrive.
-- Use staged labels like “Thinking”, then “Working on it”, then the current running task label once tool tasks start.
-- Keep the composer disabled while the turn is active, and keep auto-scroll tied to sending/live task changes so the indicator is visible.
+```ts
+q_organization_keyword_tags: opts.industries.join(" OR ")
+```
 
-### 5. Validate the reported conversation path
-- Re-test with the same flow: initial LATAM selection → country clarification → country answer.
-- Confirm the app does not ask for LATAM countries again and instead moves into job drafting/sourcing.
-- Confirm a thinking/working indicator appears immediately during the long response.
+Apollo now requires an array for that field, so every attempt in the fallback ladder that still includes `industries` (the user's brief had `b2b`) hard-fails with 422 and returns 0 rows. Even the later steps that drop industries still don't help here because PDL was simultaneously quota-limited (`PdlQuotaError`), so the combined pool was empty and `collect` reported "No matches".
+
+## Fix
+
+1. In `src/lib/sourcing/apollo.server.ts`:
+   - Change `q_organization_keyword_tags` to send the array directly: `opts.industries` (after trimming/dedup), not a joined string.
+   - Keep the documented `q_keywords` AND-filter as-is (it's a real string field), but make sure the industry terms inside it are also passed when sensible.
+2. No prompt or schema changes needed. The broadening ladder already drops `industries` later, so this fix restores the full query plus every fallback step.
+
+## Validation
+
+- Re-run the same Marketing Director / LATAM brief in a new conversation in preview and confirm Apollo returns rows on the first attempt (no 422 in the `search` task `data.apollo_error`).
+- Spot-check one other recent failing conversation if available.
