@@ -479,6 +479,14 @@ function ConnectionCard({
   );
 }
 
+function friendlyOAuthError(err: unknown, provider: string): string {
+  const msg = err instanceof Error ? err.message : String(err ?? "");
+  if (msg.includes("App User OAuth start failed (500)")) {
+    return `${provider}: connector gateway error. Try again on the published site (findable.work) or contact support if it persists.`;
+  }
+  return msg || `Failed to start ${provider} connect`;
+}
+
 function GmailRow() {
   const qc = useQueryClient();
   const getFn = useServerFn(getGmailConnection);
