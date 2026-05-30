@@ -1285,12 +1285,6 @@ export const Route = createFileRoute("/api/chat")({
                 }
               }
 
-              // If tools ran but the model never produced a closing prose
-              // turn, force one more no-tools pass so the user always sees
-              // a wrap-up under the task cards.
-              if (toolsRanAny && !postText.trim()) {
-                // (proposal emission happens after closing prose below)
-              }
               // --- Suggested next steps proposal ---------------------------
               // After any turn that produced real artifact work, propose the
               // remaining optional steps (Job Posts, Outreach) as clickable
@@ -1364,6 +1358,9 @@ export const Route = createFileRoute("/api/chat")({
                   console.error("emit proposal failed", e);
                 }
               }
+              // If tools ran but the model never produced a closing prose
+              // turn, force one more no-tools pass so the user always sees
+              // a wrap-up under the task cards.
               if (toolsRanAny && !postText.trim()) {
                 const closingConvo: ChatMessage[] = [
                   ...convo,
