@@ -480,6 +480,7 @@ function ConnectionCard({
 }
 
 function GmailRow() {
+  // helper kept colocated
   const qc = useQueryClient();
   const getFn = useServerFn(getGmailConnection);
   const startFn = useServerFn(startGmailConnect);
