@@ -249,6 +249,9 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
     seniorities: normalized.seniorities ?? [],
     industries: (normalized.industries ?? []) as string[],
     must_have_keywords: (normalized.must_have_keywords ?? []) as string[],
+    technologies: (normalized.technologies ?? []) as string[],
+    employer_hiring_titles: (normalized.employer_hiring_titles ?? []) as string[],
+    strict_titles: normalized.strict_titles === true,
     locations: normalized.location ? [normalized.location] : [],
   });
 
@@ -315,6 +318,9 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
           industries: criteria.industries ?? [],
           must_have_keywords: criteria.must_have_keywords ?? [],
           keywords: criteria.keywords ?? [],
+          technologies: criteria.technologies ?? [],
+          employer_hiring_titles: criteria.employer_hiring_titles ?? [],
+          strict_titles: criteria.strict_titles === true,
           companies: [
             ...(criteria.user_company_names ?? []),
             ...(criteria.researched_companies ?? []),
