@@ -308,6 +308,18 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
         pool_limited: poolLimited,
         broadened_to: apolloOut.broadened_to,
         broadening_steps: apolloOut.broadening_steps,
+        criteria_sent: {
+          titles: criteria.title_keywords ?? [],
+          locations: criteria.locations ?? [],
+          seniorities: criteria.seniorities ?? [],
+          industries: criteria.industries ?? [],
+          must_have_keywords: criteria.must_have_keywords ?? [],
+          keywords: criteria.keywords ?? [],
+          companies: [
+            ...(criteria.user_company_names ?? []),
+            ...(criteria.researched_companies ?? []),
+          ],
+        },
       },
     ),
   );
