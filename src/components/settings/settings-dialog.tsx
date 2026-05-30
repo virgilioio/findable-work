@@ -591,6 +591,115 @@ function CalendarRow({ onPreview }: { onPreview: () => void }) {
   );
 }
 
+const PERMISSION_DETAILS = {
+  gmail: {
+    title: "Gmail",
+    icon: Mail,
+    intro: "Findable is requesting access to your Google Account",
+    scopes: [
+      {
+        label: "Send email on your behalf",
+        scope: "gmail.send",
+        detail: "So we can deliver outreach messages from your address.",
+      },
+      {
+        label: "Read, compose, and modify (but not permanently delete) email",
+        scope: "gmail.modify",
+        detail: "So we can thread replies and update conversation status.",
+      },
+      {
+        label: "Read your email messages and settings",
+        scope: "gmail.readonly",
+        detail: "So we can detect replies from candidates and surface them in the inbox.",
+      },
+    ],
+  },
+  calendar: {
+    title: "Google Calendar",
+    icon: CalendarIcon,
+    intro: "Findable is requesting access to your Google Account",
+    scopes: [
+      {
+        label: "See and download any calendar you can access",
+        scope: "calendar.readonly",
+        detail: "So we can show your real availability when proposing interview slots.",
+      },
+      {
+        label: "View and edit events on all your calendars",
+        scope: "calendar.events",
+        detail: "So we can create interview events and invite candidates directly.",
+      },
+    ],
+  },
+} as const;
+
+function PermissionsPreviewDialog({
+  kind,
+  onClose,
+}: {
+  kind: "gmail" | "calendar" | null;
+  onClose: () => void;
+}) {
+  const data = kind ? PERMISSION_DETAILS[kind] : null;
+  const Icon = data?.icon;
+  return (
+    <Dialog open={kind !== null} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-md gap-0 overflow-hidden p-0">
+        <DialogTitle className="sr-only">
+          {data ? `${data.title} permissions` : "Permissions"}
+        </DialogTitle>
+        <DialogDescription className="sr-only">
+          Exact Google scopes Findable will request when you connect.
+        </DialogDescription>
+        {data && Icon && (
+          <div className="flex flex-col">
+            <div className="flex items-center gap-3 border-b border-border px-5 py-4">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-bg-input">
+                <Icon className="h-4.5 w-4.5 text-text" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-[13px] font-semibold text-text">{data.title}</div>
+                <div className="text-[12px] text-text-mute">{data.intro}</div>
+              </div>
+            </div>
+            <div className="px-5 py-4">
+              <p className="text-[12.5px] font-medium text-text">
+                This will allow Findable to:
+              </p>
+              <ul className="mt-3 space-y-3">
+                {data.scopes.map((s) => (
+                  <li key={s.scope} className="flex gap-3">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+                    <div className="min-w-0">
+                      <div className="text-[12.5px] text-text">{s.label}</div>
+                      <div className="mt-0.5 text-[11.5px] text-text-mute">{s.detail}</div>
+                      <code className="mt-1 inline-block rounded bg-bg-input px-1.5 py-0.5 font-mono text-[10.5px] text-text-mute">
+                        {s.scope}
+                      </code>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-4 text-[11.5px] text-text-faint">
+                You can revoke this access any time from your Google Account or by
+                disconnecting here.
+              </p>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-border bg-bg-elev px-5 py-3">
+              <button
+                onClick={onClose}
+                className="rounded-lg bg-text px-3 py-1.5 text-[12.5px] font-medium text-text-invert transition hover:opacity-90"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 /* ------------------------------ Data controls ----------------------------- */
 
 function DataPane() {
