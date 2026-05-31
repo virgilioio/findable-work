@@ -1,7 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable";
 import { Wordmark } from "@/components/findable-icons";
 import googleLogo from "@/assets/google-logo.png";
 
@@ -50,12 +49,13 @@ function LoginPage() {
     setError(null);
     setLoading(true);
     try {
-      const result = await lovable.auth.signInWithOAuth("google", {
-        redirect_uri: window.location.origin,
+      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: window.location.origin },
       });
-      if (result.error) throw result.error instanceof Error ? result.error : new Error(String(result.error));
-      if (result.redirected) return;
-      redirectToApp();
+      if (oauthError) throw oauthError;
+      // Browser will redirect to Google; nothing to do here.
+      return;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Google sign-in failed");
     } finally {
