@@ -1,39 +1,23 @@
 **Diagnóstico**
 
-La app publicada está usando actualmente este backend en `.env`:
+Ya entra OAuth de Google, pero al volver a `/` no se navega a `/app`. Encontré tres puntos frágiles:
 
-- `https://srznzxyhaomvzwqgaego.supabase.co`
-- Project ID/ref: `srznzxyhaomvzwqgaego`
-
-Pero tú confirmas que el Project ID correcto es:
-
-- `oqkgofqwgurvhzluuvsm`
-
-Por eso Google muestra `Error 400: redirect_uri_mismatch`: el login está iniciando OAuth contra un proyecto/callback distinto al que configuraste en Google.
+1. **En el sitio publicado** (no iframe), el broker hace un redirect completo y devuelve los tokens en el URL. El control NO regresa al código que llamó `signInWithOAuth`, así que el `runClaim`/`redirectToApp` posteriores en `auth-dialog.tsx` y `login.tsx` nunca corren en ese flujo.
+2. El listener de `/` que sí cubre ese caso (`handleSignedIn` en `src/routes/index.tsx`) depende de que `SIGNED_IN` se dispare **después** de que `hydrated` sea `true`. Hay una condición de carrera: si Supabase procesa los tokens del URL antes de que el efecto se suscriba, el evento se pierde.
+3. Si no hay conversación de invitado (caso de la prueba — el usuario abrió el diálogo sin escribir nada), `runClaim` se llama igual con `messages: []` y puede fallar silenciosamente sin navegar.
 
 **Plan de corrección**
 
-1. Actualizar la configuración local de la app para apuntar al proyecto correcto `oqkgofqwgurvhzluuvsm`.
-2. Revertir los call sites de Google OAuth para usar el flujo administrado de Lovable Cloud (`lovable.auth.signInWithOAuth`) en vez de llamar directo a `supabase.auth.signInWithOAuth`, porque ese flujo maneja mejor custom domains y callbacks publicados.
-3. Verificar que no queden referencias al project ref incorrecto `srznzxyhaomvzwqgaego` en los archivos de app modificables.
-4. Publicar/probar de nuevo en `https://findable.work`.
+1. Hacer el handler post-OAuth de `/` resiliente:
+   - Quitar la dependencia de `hydrated`: suscribirse al `onAuthStateChange` inmediatamente (en un effect sin deps) y también re-chequear `getUser()` después de hidratación, para que ningún evento se pierda.
+   - Si `data.user` ya existe en el primer poll, navegar sin esperar.
+2. En `AuthDialog.onGoogle`: si `result.redirected` es falso y SÍ hay sesión pero NO hay mensajes para reclamar, navegar directo a `/app` en vez de llamar `runClaim` con conversación vacía.
+3. En `login.tsx`: igual — si el broker devolvió tokens en el mismo tick, llamar `redirectToApp` además de confiar en el listener.
+4. Limpiar los tokens del URL después de procesarlos (`history.replaceState`) para que un refresh no re-dispare lógica.
 
-**Config que debes tener en Google Cloud después del cambio**
+**Notas técnicas**
 
-En el OAuth Client correcto, bajo **Authorized redirect URIs**, debe estar exactamente:
+- Supabase está creado con `detectSessionInUrl` por defecto (`true`), así que los tokens del hash se procesan automáticamente — solo hay que asegurarse de estar escuchando cuando eso pasa.
+- No tocaremos los archivos auto-generados (`src/integrations/supabase/*`, `src/integrations/lovable/*`).
 
-```text
-https://oqkgofqwgurvhzluuvsm.supabase.co/auth/v1/callback
-```
-
-Y bajo **Authorized JavaScript origins**:
-
-```text
-https://findable.work
-https://www.findable.work
-https://findable-work.lovable.app
-```
-
-**Nota importante**
-
-La causa principal aquí no es tu cambio en Google; es que la app quedó mezclando dos backends distintos. El siguiente paso es alinear el código/config con `oqkgofqwgurvhzluuvsm` y quitar esa mezcla.
+¿Procedo?
