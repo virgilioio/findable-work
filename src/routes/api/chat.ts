@@ -968,67 +968,111 @@ export const Route = createFileRoute("/api/chat")({
                     name: "ask_clarifying_questions",
                     content: JSON.stringify({ ok: true, asked: normalized.length }),
                   });
-                } else if (call.name === "draft_job_posts") {
+                } else if (call.name === "publish_job" || call.name === "draft_job_posts") {
+                  // Note: draft_job_posts is kept as a back-compat alias so older
+                  // streamed proposal pills continue to work.
                   const { data: jobRow } = await supabaseAdmin
                     .from("jobs")
-                    .select("title,description,location,requirements,salary_min,salary_max,currency")
+                    .select("*")
                     .eq("conversation_id", conversationId)
+                    .eq("user_id", userId)
                     .maybeSingle();
                   if (!jobRow) {
                     toolResults.push({
                       role: "tool",
                       tool_call_id: call.id ?? "",
-                      name: "draft_job_posts",
+                      name: "publish_job",
                       content: JSON.stringify({ ok: false, error: "No Job exists yet — call create_job first." }),
                     });
                   } else {
-                    const artifact = buildJobPostArtifact(jobRow);
-                    const { data: jpRow } = await supabaseAdmin
-                      .from("job_posts")
-                      .upsert(
-                        {
-                          conversation_id: conversationId,
-                          user_id: userId,
-                          variants: artifact.variants,
-                          channels: artifact.channels,
-                          schedule: artifact.schedule,
-                          est_reach: artifact.est_reach,
-                          status: "draft",
-                        },
-                        { onConflict: "conversation_id" },
-                      )
+                    // 1. Slug — derive from title if missing, dedupe.
+                    let slug: string = (jobRow as any).slug ?? "";
+                    if (!slug) {
+                      const base =
+                        String(jobRow.title || jobRow.location || "job")
+                          .toLowerCase()
+                          .normalize("NFD")
+                          .replace(/[\u0300-\u036f]/g, "")
+                          .replace(/[^a-z0-9]+/g, "-")
+                          .replace(/^-+|-+$/g, "")
+                          .slice(0, 48) || "job";
+                      for (let i = 0; i < 5; i++) {
+                        const candidate = `${base}-${Math.random().toString(36).slice(2, 6)}`;
+                        const { data: clash } = await supabaseAdmin
+                          .from("jobs")
+                          .select("id")
+                          .eq("slug", candidate)
+                          .maybeSingle();
+                        if (!clash) {
+                          slug = candidate;
+                          break;
+                        }
+                      }
+                      if (!slug) slug = `${base}-${Date.now().toString(36)}`;
+                    }
+
+                    // 2. Screening questions — generate if missing.
+                    const existingScreening = Array.isArray((jobRow as any).screening)
+                      ? ((jobRow as any).screening as unknown[])
+                      : [];
+                    let screening = existingScreening;
+                    if (screening.length === 0) {
+                      screening = await generateScreeningQuestions({
+                        title: jobRow.title,
+                        company: (jobRow as any).company,
+                        summary: (jobRow as any).summary || jobRow.description,
+                        description: jobRow.description,
+                        must_have: (jobRow as any).must_have ?? jobRow.requirements,
+                        nice_to_have: (jobRow as any).nice_to_have,
+                        location: jobRow.location,
+                      });
+                    }
+
+                    // 3. Flip published + persist.
+                    const { data: updated } = await supabaseAdmin
+                      .from("jobs")
+                      .update({
+                        slug,
+                        published: true,
+                        published_at: new Date().toISOString(),
+                        status: "open",
+                        screening: screening as any,
+                      })
+                      .eq("conversation_id", conversationId)
+                      .eq("user_id", userId)
                       .select("*")
                       .single();
-                    send("job_posts", jpRow);
-                    const { data: jpTask } = await supabaseAdmin
+                    send("job", updated);
+
+                    const publicPath = `/jobs/${slug}`;
+                    const { data: pubTask } = await supabaseAdmin
                       .from("agent_tasks")
                       .insert({
                         user_id: userId,
                         conversation_id: conversationId,
                         message_id: assistantMessageId,
-                        kind: "create_job_posts",
-                        label: `${artifact.variants.length} job post variants drafted`,
+                        kind: "publish_job",
+                        label: "Job published",
                         status: "done",
-                        summary: "Open Job Posts tab to review",
-                        data: { job_post_id: jpRow?.id },
+                        summary: `Live at ${publicPath}`,
+                        data: { slug, public_path: publicPath, screening_count: screening.length },
                         finished_at: new Date().toISOString(),
                       })
                       .select("*")
                       .single();
-                    if (jpTask) {
-                      allTaskIds.push(jpTask.id);
-                      send("task", jpTask);
+                    if (pubTask) {
+                      allTaskIds.push(pubTask.id);
+                      send("task", pubTask);
                     }
-                    const selectedCount = artifact.channels.filter((c) => c.selected).length;
                     toolResults.push({
                       role: "tool",
                       tool_call_id: call.id ?? "",
-                      name: "draft_job_posts",
+                      name: "publish_job",
                       content: JSON.stringify({
                         ok: true,
-                        variants: artifact.variants.length,
-                        channels_selected: selectedCount,
-                        est_reach: artifact.est_reach,
+                        slug,
+                        public_path: publicPath,
+                        screening_questions: screening.length,
                       }),
                     });
                   }
