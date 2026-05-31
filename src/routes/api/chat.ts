@@ -363,6 +363,7 @@ async function callOpenAI(
           sourceCandidatesTool,
           askClarifyingQuestionsTool,
           publishJobTool,
+          unpublishJobTool,
           draftOutreachTool,
           getConversationContextTool,
           getJobTool,
