@@ -18,33 +18,6 @@ import {
 } from "@/components/findable-icons";
 import { cn } from "@/lib/utils";
 
-// IMPORTANT: Run this BEFORE the supabase client lazily initializes.
-// The Lovable-managed OAuth flow returns tokens through its own broker and
-// calls supabase.auth.setSession() directly. If Supabase's own
-// detectSessionInUrl logic also processes the URL hash, the two race and the
-// PKCE exchange fails with "failed to exchange authorization code".
-// Capture and strip any OAuth-related hash here so Supabase never sees it.
-let __oauthHashCapture: string | null = null;
-if (typeof window !== "undefined") {
-  const h = window.location.hash || "";
-  if (
-    h.includes("access_token=") ||
-    h.includes("error=") ||
-    h.includes("error_description=")
-  ) {
-    __oauthHashCapture = h;
-    try {
-      window.history.replaceState(
-        null,
-        "",
-        window.location.pathname + window.location.search,
-      );
-    } catch {
-      /* ignore */
-    }
-  }
-}
-
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
