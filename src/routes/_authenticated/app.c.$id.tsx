@@ -32,7 +32,6 @@ import {
   ChatGlyph,
   Chat as ChatIcon,
   Briefcase,
-  Megaphone,
   Send as SendIcon,
   Attach,
   Sparkle,
