@@ -136,7 +136,6 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
         ? `Title: ${jobBrief.title}\nLocation: ${jobBrief.location ?? ""}\nRequirements: ${(jobBrief.requirements ?? []).join("; ")}\n\nRecruiter brief: ${brief}`
         : brief;
     const completion = await openaiChat({
-      model: "gpt-4o-mini",
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: await getPrompt("sourcing.agent_normalize") },
@@ -237,7 +236,6 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
       `Skills: ${(normalized.skills ?? []).join(", ")}\n` +
       `Return at most 3 alt titles, 3 target companies, 5 boost keywords.`;
     const completion = await openaiChat({
-      model: "gpt-4o-mini",
       messages: [
         { role: "system", content: await getPrompt("sourcing.research") },
         { role: "user", content: userMsg },
