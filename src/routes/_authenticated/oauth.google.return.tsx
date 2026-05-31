@@ -22,17 +22,19 @@ function GoogleOAuthReturn() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const success = params.get("success") === "true";
-    const connectionId = params.get("connection_id") ?? "";
+    const code = params.get("code") ?? "";
+    const state = params.get("state") ?? "";
+    const errorParam = params.get("error");
     const back = sessionStorage.getItem("google_oauth_return_to") || "/app";
+    const redirectUri = `${window.location.origin}/oauth/google/return`;
 
-    if (!success || !connectionId) {
+    if (errorParam || !code || !state) {
       setStatus("error");
-      setMessage(params.get("error") ?? "Connection cancelled");
+      setMessage(errorParam ?? "Connection cancelled");
       return;
     }
     const fn = kind === "calendar" ? completeCalendar : completeGmail;
-    fn({ data: { connectionId } })
+    fn({ data: { code, state, redirectUri } })
       .then(() => {
         setStatus("ok");
         setMessage("Connected! Redirecting…");
