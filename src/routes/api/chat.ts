@@ -1310,13 +1310,8 @@ export const Route = createFileRoute("/api/chat")({
               // pills in chat. Skip if nothing actionable happened this turn.
               if (toolsRanAny) {
                 try {
-                  const [{ data: existingJobPost }, { data: existingOutreach }, { data: existingJob }] =
+                  const [{ data: existingOutreach }, { data: existingJob }] =
                     await Promise.all([
-                      supabaseAdmin
-                        .from("job_posts")
-                        .select("id")
-                        .eq("conversation_id", conversationId)
-                        .maybeSingle(),
                       supabaseAdmin
                         .from("outreach_drafts")
                         .select("id")
@@ -1324,23 +1319,23 @@ export const Route = createFileRoute("/api/chat")({
                         .maybeSingle(),
                       supabaseAdmin
                         .from("jobs")
-                        .select("id")
+                        .select("id,published")
                         .eq("conversation_id", conversationId)
                         .maybeSingle(),
                     ]);
                   // Only propose once we have a Job to anchor the next steps on.
                   if (existingJob) {
                     const steps: Array<{
-                      key: "job_posts" | "outreach";
+                      key: "publish_job" | "outreach";
                       title: string;
                       subtitle: string;
                       recommended?: boolean;
                     }> = [];
-                    if (!existingJobPost) {
+                    if (!existingJob.published) {
                       steps.push({
-                        key: "job_posts",
-                        title: "Draft the job posts",
-                        subtitle: "Punchy, mission-led & concise variants",
+                        key: "publish_job",
+                        title: "Publish this job",
+                        subtitle: "Generate vetting questions and go live at a public URL",
                       });
                     }
                     if (!existingOutreach) {
