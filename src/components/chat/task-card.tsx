@@ -38,6 +38,15 @@ const PROPOSAL_PROMPT: Record<ProposalStep["key"], string> = {
   outreach: "Set up the outreach messages for the shortlist.",
 };
 
+// Back-compat: older persisted proposal cards have step.key = "job_posts".
+// Map them to the new publish_job behavior so they keep working.
+function normalizeStep(step: ProposalStep): ProposalStep {
+  if ((step.key as string) === "job_posts") {
+    return { ...step, key: "publish_job" };
+  }
+  return step;
+}
+
 export function TaskCard({
   task,
   onOpenTab,
@@ -65,7 +74,7 @@ export function TaskCard({
     // Older proposal cards collapse — only the most recent one is shown.
     if (!proposalInteractive) return null;
     const data = (task.data ?? {}) as { steps?: ProposalStep[] };
-    const steps = Array.isArray(data.steps) ? data.steps : [];
+    const steps = Array.isArray(data.steps) ? data.steps.map(normalizeStep) : [];
     if (steps.length === 0) {
       return (
         <div className="animate-fade-in text-[13px] text-text-mute">
