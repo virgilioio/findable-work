@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { supabase } from "@/integrations/supabase/client";
+import { lovable } from "@/integrations/lovable";
 import { Wordmark } from "@/components/findable-icons";
 import googleLogo from "@/assets/google-logo.png";
 
@@ -58,12 +59,12 @@ export function AuthDialog({
       } catch {
         /* ignore */
       }
-      const { error: oauthError } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: { redirectTo: window.location.origin },
+      const result = await lovable.auth.signInWithOAuth("google", {
+        redirect_uri: window.location.origin,
       });
-      if (oauthError) throw oauthError;
-      // Browser will redirect to Google; nothing to do here.
+      if (result.error) throw result.error;
+      if (result.redirected) return;
+      await onAuthenticated();
       return;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Google sign-in failed");
