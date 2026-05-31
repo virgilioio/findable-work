@@ -191,17 +191,27 @@ function HomePage() {
   useEffect(() => {
     let handled = false;
 
+    // If we captured an OAuth error in the URL hash at module load, surface
+    // it now and stop — no session to claim.
+    if (__oauthHashCapture && __oauthHashCapture.includes("error")) {
+      const params = new URLSearchParams(__oauthHashCapture.replace(/^#/, ""));
+      const desc =
+        params.get("error_description")?.replace(/\+/g, " ") ||
+        params.get("error") ||
+        "Sign-in failed";
+      try {
+        sessionStorage.removeItem(CLAIM_PENDING_KEY);
+      } catch {
+        /* ignore */
+      }
+      __oauthHashCapture = null;
+      toast.error(`Google sign-in failed: ${desc}. Please try again.`);
+      return;
+    }
+
     const handleSignedIn = async () => {
       if (handled) return;
       handled = true;
-      // Clean OAuth tokens from URL so a refresh doesn't re-trigger.
-      if (typeof window !== "undefined" && window.location.hash.includes("access_token")) {
-        try {
-          window.history.replaceState(null, "", window.location.pathname + window.location.search);
-        } catch {
-          /* ignore */
-        }
-      }
       const s = loadGuestState();
       const hasGuestChat = s.messages.length > 0;
       const pending = sessionStorage.getItem(CLAIM_PENDING_KEY);
@@ -217,6 +227,26 @@ function HomePage() {
         navigate({ to: "/app" });
       }
     };
+
+    // If we captured an access_token hash, hand it to Supabase explicitly
+    // and then proceed as signed-in.
+    if (__oauthHashCapture && __oauthHashCapture.includes("access_token=")) {
+      const params = new URLSearchParams(__oauthHashCapture.replace(/^#/, ""));
+      const access_token = params.get("access_token");
+      const refresh_token = params.get("refresh_token");
+      __oauthHashCapture = null;
+      if (access_token && refresh_token) {
+        void supabase.auth
+          .setSession({ access_token, refresh_token })
+          .then(({ error }) => {
+            if (error) {
+              toast.error(`Sign-in failed: ${error.message}`);
+              return;
+            }
+            void handleSignedIn();
+          });
+      }
+    }
 
     (async () => {
       const { data } = await supabase.auth.getUser();
