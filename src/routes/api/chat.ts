@@ -156,6 +156,20 @@ const publishJobTool = {
   },
 };
 
+const unpublishJobTool = {
+  type: "function" as const,
+  function: {
+    name: "unpublish_job",
+    description:
+      "Take the current Job offline. Flips published=false and sets status='closed' so the public page at /jobs/{slug} returns 404 and new applications are rejected. Keeps the slug and screening questions intact so a future publish_job call re-uses the same URL. Use when the user asks to unpublish, close, take down, or pause the job post.",
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      properties: {},
+    },
+  },
+};
+
 const draftOutreachTool = {
   type: "function" as const,
   function: {
@@ -349,6 +363,7 @@ async function callOpenAI(
           sourceCandidatesTool,
           askClarifyingQuestionsTool,
           publishJobTool,
+          unpublishJobTool,
           draftOutreachTool,
           getConversationContextTool,
           getJobTool,
@@ -1074,6 +1089,62 @@ export const Route = createFileRoute("/api/chat")({
                         public_path: publicPath,
                         screening_questions: screening.length,
                       }),
+                    });
+                  }
+                } else if (call.name === "unpublish_job") {
+                  const { data: jobRow } = await supabaseAdmin
+                    .from("jobs")
+                    .select("id, slug, published")
+                    .eq("conversation_id", conversationId)
+                    .eq("user_id", userId)
+                    .maybeSingle();
+                  if (!jobRow) {
+                    toolResults.push({
+                      role: "tool",
+                      tool_call_id: call.id ?? "",
+                      name: "unpublish_job",
+                      content: JSON.stringify({ ok: false, error: "No Job exists in this conversation." }),
+                    });
+                  } else if (!jobRow.published) {
+                    toolResults.push({
+                      role: "tool",
+                      tool_call_id: call.id ?? "",
+                      name: "unpublish_job",
+                      content: JSON.stringify({ ok: true, already_unpublished: true, slug: jobRow.slug }),
+                    });
+                  } else {
+                    const { data: updated } = await supabaseAdmin
+                      .from("jobs")
+                      .update({ published: false, status: "closed" })
+                      .eq("id", jobRow.id)
+                      .select("*")
+                      .single();
+                    send("job", updated);
+                    const publicPath = jobRow.slug ? `/jobs/${jobRow.slug}` : null;
+                    const { data: unpubTask } = await supabaseAdmin
+                      .from("agent_tasks")
+                      .insert({
+                        user_id: userId,
+                        conversation_id: conversationId,
+                        message_id: assistantMessageId,
+                        kind: "unpublish_job",
+                        label: "Job unpublished",
+                        status: "done",
+                        summary: "Public page is offline",
+                        data: { slug: jobRow.slug, public_path: publicPath },
+                        finished_at: new Date().toISOString(),
+                      })
+                      .select("*")
+                      .single();
+                    if (unpubTask) {
+                      allTaskIds.push(unpubTask.id);
+                      send("task", unpubTask);
+                    }
+                    toolResults.push({
+                      role: "tool",
+                      tool_call_id: call.id ?? "",
+                      name: "unpublish_job",
+                      content: JSON.stringify({ ok: true, slug: jobRow.slug, public_path: publicPath }),
                     });
                   }
                 } else if (call.name === "draft_outreach") {
