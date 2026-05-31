@@ -1136,23 +1136,17 @@ export const Route = createFileRoute("/api/chat")({
                     });
                   }
                 } else if (call.name === "get_conversation_context") {
-                  const [{ data: job }, { data: outreach }, { data: jobPost }, { data: cands }] =
+                  const [{ data: job }, { data: outreach }, { data: cands }] =
                     await Promise.all([
                       supabaseAdmin
                         .from("jobs")
-                        .select("id,title,location,employment_type,salary_min,salary_max,currency,status")
+                        .select("id,title,location,employment_type,salary_min,salary_max,currency,status,slug,published,published_at")
                         .eq("conversation_id", conversationId)
                         .eq("user_id", userId)
                         .maybeSingle(),
                       supabaseAdmin
                         .from("outreach_drafts")
                         .select("id,channel,tone")
-                        .eq("conversation_id", conversationId)
-                        .eq("user_id", userId)
-                        .maybeSingle(),
-                      supabaseAdmin
-                        .from("job_posts")
-                        .select("id,status,est_reach")
                         .eq("conversation_id", conversationId)
                         .eq("user_id", userId)
                         .maybeSingle(),
@@ -1178,7 +1172,7 @@ export const Route = createFileRoute("/api/chat")({
                       ok: true,
                       job: job ?? null,
                       outreach_draft: outreach ?? null,
-                      job_post: jobPost ?? null,
+                      job_published: Boolean(job?.published),
                       candidates: {
                         total: cands?.length ?? 0,
                         starred: starredCount,
@@ -1276,23 +1270,6 @@ export const Route = createFileRoute("/api/chat")({
                       row
                         ? { ok: true, outreach: row }
                         : { ok: true, outreach: null, note: "No outreach draft on this chat yet." },
-                    ),
-                  });
-                } else if (call.name === "get_job_post") {
-                  const { data: row } = await supabaseAdmin
-                    .from("job_posts")
-                    .select("*")
-                    .eq("conversation_id", conversationId)
-                    .eq("user_id", userId)
-                    .maybeSingle();
-                  toolResults.push({
-                    role: "tool",
-                    tool_call_id: call.id ?? "",
-                    name: "get_job_post",
-                    content: JSON.stringify(
-                      row
-                        ? { ok: true, job_post: row }
-                        : { ok: true, job_post: null, note: "No job post drafted on this chat yet." },
                     ),
                   });
                 }
