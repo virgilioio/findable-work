@@ -157,7 +157,7 @@ export async function getAccessTokenForUser(
   kind: ConnectionKind,
 ): Promise<{ accessToken: string; email: string }> {
   const table = TABLE[kind];
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await (supabaseAdmin as any)
     .from(table)
     .select("access_token, refresh_token, token_expires_at, email")
     .eq("user_id", userId)
@@ -176,7 +176,7 @@ export async function getAccessTokenForUser(
 
   const refreshed = await refreshAccessToken(data.refresh_token);
   const newExpires = new Date(Date.now() + refreshed.expires_in * 1000).toISOString();
-  await supabaseAdmin
+  await (supabaseAdmin as any)
     .from(table)
     .update({
       access_token: refreshed.access_token,
