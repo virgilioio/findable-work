@@ -64,7 +64,8 @@ export function AuthDialog({
       });
       if (result.error) throw result.error;
       if (result.redirected) return;
-      await onAuthenticated();
+      // Tokens received in-page (iframe/popup flow). The landing page's
+      // SIGNED_IN listener will navigate; just close the dialog.
       return;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Google sign-in failed");
