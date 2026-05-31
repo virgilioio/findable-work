@@ -1,23 +1,29 @@
-**Diagnóstico**
+## Plan
 
-Ya entra OAuth de Google, pero al volver a `/` no se navega a `/app`. Encontré tres puntos frágiles:
+1. **Stop the backend from trying to process the OAuth hash/code itself**
+   - Update the browser auth client options so it does **not** auto-detect OAuth tokens or codes in the URL.
+   - This matters because the managed Google sign-in flow returns tokens through Lovable Cloud’s broker, but the current auth client can still see the callback URL and attempt its own exchange, producing `failed to exchange authorization code`.
 
-1. **En el sitio publicado** (no iframe), el broker hace un redirect completo y devuelve los tokens en el URL. El control NO regresa al código que llamó `signInWithOAuth`, así que el `runClaim`/`redirectToApp` posteriores en `auth-dialog.tsx` y `login.tsx` nunca corren en ese flujo.
-2. El listener de `/` que sí cubre ese caso (`handleSignedIn` en `src/routes/index.tsx`) depende de que `SIGNED_IN` se dispare **después** de que `hydrated` sea `true`. Hay una condición de carrera: si Supabase procesa los tokens del URL antes de que el efecto se suscriba, el evento se pierde.
-3. Si no hay conversación de invitado (caso de la prueba — el usuario abrió el diálogo sin escribir nada), `runClaim` se llama igual con `messages: []` y puede fallar silenciosamente sin navegar.
+2. **Handle callback errors on `/` explicitly**
+   - On the home route, detect `#error=...` in the URL.
+   - Clean the hash from the address bar so the page does not stay stuck on an OAuth error URL.
+   - If a valid session already exists, send the user to `/app`; otherwise show a clean sign-in error instead of silently doing nothing.
 
-**Plan de corrección**
+3. **Make successful managed OAuth redirect deterministic**
+   - Keep using `lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin })`.
+   - After tokens are set, force a route refresh/navigation check so the user lands in `/app` even if the auth event is missed.
+   - Keep the existing guest-chat claim behavior only when there is a real pending guest conversation.
 
-1. Hacer el handler post-OAuth de `/` resiliente:
-   - Quitar la dependencia de `hydrated`: suscribirse al `onAuthStateChange` inmediatamente (en un effect sin deps) y también re-chequear `getUser()` después de hidratación, para que ningún evento se pierda.
-   - Si `data.user` ya existe en el primer poll, navegar sin esperar.
-2. En `AuthDialog.onGoogle`: si `result.redirected` es falso y SÍ hay sesión pero NO hay mensajes para reclamar, navegar directo a `/app` en vez de llamar `runClaim` con conversación vacía.
-3. En `login.tsx`: igual — si el broker devolvió tokens en el mismo tick, llamar `redirectToApp` además de confiar en el listener.
-4. Limpiar los tokens del URL después de procesarlos (`history.replaceState`) para que un refresh no re-dispare lógica.
+4. **Verify the code path**
+   - Confirm there are no remaining direct `supabase.auth.signInWithOAuth` calls.
+   - Check the final OAuth path only targets the managed broker and `/app` is the post-login destination.
 
-**Notas técnicas**
+## Technical details
 
-- Supabase está creado con `detectSessionInUrl` por defecto (`true`), así que los tokens del hash se procesan automáticamente — solo hay que asegurarse de estar escuchando cuando eso pasa.
-- No tocaremos los archivos auto-generados (`src/integrations/supabase/*`, `src/integrations/lovable/*`).
+- Files to change:
+  - `src/integrations/supabase/client.ts` only if necessary to add the auth client option that prevents URL-session detection.
+  - `src/routes/index.tsx` for callback error cleanup and redirect fallback.
+  - `src/routes/login.tsx` / `src/components/auth/auth-dialog.tsx` only for small redirect hardening if needed.
 
-¿Procedo?
+- No database changes are needed.
+- No Google Console changes are needed; this should remain on Lovable Cloud managed Google OAuth.
