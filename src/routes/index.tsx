@@ -195,8 +195,9 @@ function HomePage() {
       if (data.user) await handleSignedIn();
     })();
 
-    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
-      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "INITIAL_SESSION") {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!session) return;
+      if (event === "SIGNED_IN" || event === "INITIAL_SESSION") {
         void handleSignedIn();
       }
     });
