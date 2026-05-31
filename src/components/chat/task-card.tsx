@@ -12,31 +12,40 @@ export type ChatTask = {
   data?: Record<string, unknown>;
 };
 
-export type ArtifactTab = "job" | "candidates" | "job_posts" | "outreach";
+export type ArtifactTab = "job" | "candidates" | "outreach";
 
 const ARTIFACT_BY_KIND: Record<string, { tab: ArtifactTab; icon: React.ReactNode; subtitle: string }> = {
   create_job: { tab: "job", icon: <Briefcase size={14} />, subtitle: "Open Job tab to review" },
   collect: { tab: "candidates", icon: <Users size={14} />, subtitle: "Open Candidates tab to review" },
-  create_job_posts: { tab: "job_posts", icon: <Megaphone size={14} />, subtitle: "Open Job Posts tab to review" },
+  publish_job: { tab: "job", icon: <Megaphone size={14} />, subtitle: "Live — open Job tab for the public URL" },
   create_outreach: { tab: "outreach", icon: <Send size={14} />, subtitle: "Open Outreach tab to review" },
 };
 
 export type ProposalStep = {
-  key: "job_posts" | "outreach";
+  key: "publish_job" | "outreach";
   title: string;
   subtitle: string;
   recommended?: boolean;
 };
 
 const PROPOSAL_ICON: Record<ProposalStep["key"], React.ReactNode> = {
-  job_posts: <Megaphone size={14} />,
+  publish_job: <Megaphone size={14} />,
   outreach: <Send size={14} />,
 };
 
 const PROPOSAL_PROMPT: Record<ProposalStep["key"], string> = {
-  job_posts: "Draft the job posts for this role.",
+  publish_job: "Publish this job as a live public job post.",
   outreach: "Set up the outreach messages for the shortlist.",
 };
+
+// Back-compat: older persisted proposal cards have step.key = "job_posts".
+// Map them to the new publish_job behavior so they keep working.
+function normalizeStep(step: ProposalStep): ProposalStep {
+  if ((step.key as string) === "job_posts") {
+    return { ...step, key: "publish_job" };
+  }
+  return step;
+}
 
 export function TaskCard({
   task,
@@ -65,7 +74,7 @@ export function TaskCard({
     // Older proposal cards collapse — only the most recent one is shown.
     if (!proposalInteractive) return null;
     const data = (task.data ?? {}) as { steps?: ProposalStep[] };
-    const steps = Array.isArray(data.steps) ? data.steps : [];
+    const steps = Array.isArray(data.steps) ? data.steps.map(normalizeStep) : [];
     if (steps.length === 0) {
       return (
         <div className="animate-fade-in text-[13px] text-text-mute">
