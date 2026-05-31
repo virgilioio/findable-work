@@ -156,6 +156,20 @@ const publishJobTool = {
   },
 };
 
+const unpublishJobTool = {
+  type: "function" as const,
+  function: {
+    name: "unpublish_job",
+    description:
+      "Take the current Job offline. Flips published=false and sets status='closed' so the public page at /jobs/{slug} returns 404 and new applications are rejected. Keeps the slug and screening questions intact so a future publish_job call re-uses the same URL. Use when the user asks to unpublish, close, take down, or pause the job post.",
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      properties: {},
+    },
+  },
+};
+
 const draftOutreachTool = {
   type: "function" as const,
   function: {
