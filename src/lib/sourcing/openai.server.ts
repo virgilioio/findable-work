@@ -1,5 +1,7 @@
 // OpenAI client helper. Server-only.
 
+import { getOpenAIKey, getOpenAIModel, OPENAI_CHAT_COMPLETIONS_URL } from "@/lib/ai/openai-model.server";
+
 type ChatMessage = { role: "system" | "user" | "assistant" | "tool"; content: string };
 
 export type OpenAIChatOpts = {
@@ -12,16 +14,15 @@ export type OpenAIChatOpts = {
 };
 
 export async function openaiChat(opts: OpenAIChatOpts): Promise<any> {
-  const key = process.env.OPENAI_API_KEY;
-  if (!key) throw new Error("OPENAI_API_KEY is not configured");
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+  const key = getOpenAIKey();
+  const res = await fetch(OPENAI_CHAT_COMPLETIONS_URL, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${key}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: opts.model ?? "gpt-4o-mini",
+      model: opts.model ?? getOpenAIModel(),
       messages: opts.messages,
       temperature: opts.temperature ?? 0.2,
       ...(opts.tools ? { tools: opts.tools, tool_choice: opts.tool_choice } : {}),
