@@ -560,6 +560,8 @@ function ChatPanel({
                 t.message_id === m.id ||
                 (t.message_id === null && m.id === lastAssistantId && m.role === "assistant"),
             );
+            const artifactTasks = msgTasks.filter((t) => t.kind !== "proposal");
+            const proposalTasks = msgTasks.filter((t) => t.kind === "proposal");
             const { before, after } =
               m.role === "assistant"
                 ? splitAroundTasks(m.content)
@@ -567,8 +569,8 @@ function ChatPanel({
             return (
               <div key={m.id} className="space-y-4">
                 {before && <MessageRow role={m.role} content={before} />}
-                {msgTasks.length > 0 && m.role === "assistant" &&
-                  msgTasks.map((t) => (
+                {artifactTasks.length > 0 && m.role === "assistant" &&
+                  artifactTasks.map((t) => (
                     <TimelineRow key={t.id}>
                       <TaskCard
                         task={t}
@@ -585,6 +587,21 @@ function ChatPanel({
                 {after && m.role === "assistant" && (
                   <MessageRow role={m.role} content={after} />
                 )}
+                {proposalTasks.length > 0 && m.role === "assistant" &&
+                  proposalTasks.map((t) => (
+                    <TimelineRow key={t.id}>
+                      <TaskCard
+                        task={t}
+                        onOpenTab={onOpenTab}
+                        onSubmitClarify={onSubmitClarify}
+                        clarifyAnswered={Boolean(clarifyAnswers[t.id])}
+                        clarifyAnswers={clarifyAnswers[t.id]}
+                        proposalInteractive={t.id === latestProposalId}
+                        proposalDisabled={sending}
+                        onProposalClick={(_step, prompt) => onSend(prompt)}
+                      />
+                    </TimelineRow>
+                  ))}
               </div>
             );
             });
@@ -615,7 +632,7 @@ function ChatPanel({
                 return (
                   <>
                     {before && <MessageRow role="assistant" content={before} streaming />}
-                    {visibleLive.map((t) => (
+                    {visibleLive.filter((t) => t.kind !== "proposal").map((t) => (
                       <TimelineRow key={t.id}>
                         <TaskCard
                           task={t}
@@ -630,6 +647,20 @@ function ChatPanel({
                       </TimelineRow>
                     ))}
                     {after && <MessageRow role="assistant" content={after} streaming />}
+                    {visibleLive.filter((t) => t.kind === "proposal").map((t) => (
+                      <TimelineRow key={t.id}>
+                        <TaskCard
+                          task={t}
+                          onOpenTab={onOpenTab}
+                          onSubmitClarify={onSubmitClarify}
+                          clarifyAnswered={Boolean(clarifyAnswers[t.id])}
+                          clarifyAnswers={clarifyAnswers[t.id]}
+                          proposalInteractive={t.id === latestProposalId}
+                          proposalDisabled={sending}
+                          onProposalClick={(_step, prompt) => onSend(prompt)}
+                        />
+                      </TimelineRow>
+                    ))}
                   </>
                 );
               })()}

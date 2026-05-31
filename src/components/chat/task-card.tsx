@@ -98,7 +98,7 @@ export function TaskCard({
                 <span className="flex items-center gap-2">
                   <span className="truncate text-[13.5px] font-medium text-text">{step.title}</span>
                   {step.recommended && (
-                    <span className="rounded-full border border-border bg-bg px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-text-mute">
+                    <span className="rounded-full bg-text px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-bg">
                       Recommended
                     </span>
                   )}
