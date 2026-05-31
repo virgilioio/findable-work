@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { z } from "zod";
 import { runSourcingAgent, type TaskEvent } from "@/lib/sourcing/agent.server";
-import { buildJobPostArtifact } from "@/lib/job-posts/builder.server";
+import { generateScreeningQuestions } from "@/lib/jobs/screening.server";
 import { getPrompt } from "@/lib/prompts/registry.server";
 import {
   OPENAI_CHAT_COMPLETIONS_URL,
@@ -142,18 +142,16 @@ const askClarifyingQuestionsTool = {
   },
 };
 
-const draftJobPostsTool = {
+const publishJobTool = {
   type: "function" as const,
   function: {
-    name: "draft_job_posts",
+    name: "publish_job",
     description:
-      "Draft 3 ready-to-publish job post variants (Punchy, Mission-led, Concise), pre-select channels (LinkedIn + regional boards), and set a default schedule. Requires that a Job already exists in the conversation.",
+      "Publish the current Job as a LIVE public job post. Generates AI screening questions if missing, mints a public URL slug, flips published=true, and sets status='open'. The result is a real shareable page at /jobs/{slug} with a working application form. Requires that a Job already exists. Safe to call again — re-publish is idempotent.",
     parameters: {
       type: "object",
       additionalProperties: false,
-      properties: {
-        tone_focus: { type: "string", description: "Optional one-line steer, e.g. 'lean into mission' or 'emphasize comp'." },
-      },
+      properties: {},
     },
   },
 };
@@ -246,23 +244,12 @@ const getOutreachDraftTool = {
   },
 };
 
-const getJobPostTool = {
-  type: "function" as const,
-  function: {
-    name: "get_job_post",
-    description:
-      "Return the job-post artifact for this conversation (3 variants, selected channels, schedule, estimated reach, status).",
-    parameters: { type: "object", additionalProperties: false, properties: {} },
-  },
-};
-
 const READ_TOOL_NAMES = new Set([
   "get_conversation_context",
   "get_job",
   "list_candidates",
   "get_candidate",
   "get_outreach_draft",
-  "get_job_post",
 ]);
 
 async function getUserFromRequest(request: Request): Promise<string | null> {
@@ -356,20 +343,18 @@ async function callOpenAI(
           listCandidatesTool,
           getCandidateTool,
           getOutreachDraftTool,
-          getJobPostTool,
         ]
       : [
           createJobTool,
           sourceCandidatesTool,
           askClarifyingQuestionsTool,
-          draftJobPostsTool,
+          publishJobTool,
           draftOutreachTool,
           getConversationContextTool,
           getJobTool,
           listCandidatesTool,
           getCandidateTool,
           getOutreachDraftTool,
-          getJobPostTool,
         ];
   return fetch(OPENAI_CHAT_COMPLETIONS_URL, {
     method: "POST",
