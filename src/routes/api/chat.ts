@@ -488,12 +488,19 @@ export const Route = createFileRoute("/api/chat")({
             .map((m) => ({ role: m.role as "user" | "assistant", content: m.content || "" })),
         ];
 
-        const apiKey = process.env.LOVABLE_API_KEY;
-        if (!apiKey) {
-          return new Response(JSON.stringify({ error: "LOVABLE_API_KEY missing" }), {
+        const apiKey = process.env.OPENAI_API_KEY;
+        const model = process.env.OPENAI_MODEL;
+        if (!apiKey || !model) {
+          return new Response(
+            JSON.stringify({
+              error:
+                "AI not configured: set OPENAI_API_KEY and OPENAI_MODEL secrets.",
+            }),
+            {
             status: 500,
             headers: { "content-type": "application/json" },
-          });
+            },
+          );
         }
 
         const encoder = new TextEncoder();
@@ -509,15 +516,15 @@ export const Route = createFileRoute("/api/chat")({
               mode?: "all" | "read_only",
               allowLeakRedirect: boolean = false,
             ): Promise<{ text: string; toolCalls: StreamedToolCall[] }> {
-              const upstream = await callGateway(messages, apiKey!, mode);
+              const upstream = await callOpenAI(messages, apiKey!, mode);
               if (!upstream.ok || !upstream.body) {
                 const text = await upstream.text().catch(() => "");
                 const errMsg =
                   upstream.status === 429
-                    ? "Rate limit reached. Try again in a moment."
+                    ? OPENAI_RATE_LIMIT_MESSAGE
                     : upstream.status === 402
                     ? "AI credits exhausted."
-                    : `AI gateway error (${upstream.status}). ${text.slice(0, 200)}`;
+                    : `OpenAI error (${upstream.status}). ${text.slice(0, 200)}`;
                 throw new Error(errMsg);
               }
               const reader = upstream.body.getReader();
