@@ -1,93 +1,68 @@
+# Migration Plan: Lovable Cloud Supabase → Your Own Supabase Project
 
-# Migrate Findable to your own Supabase project
+## Source & Target (verified)
 
-Goal: move the entire backend (schema, data, storage, auth users, config) from the Lovable-managed Supabase project (`srznzxyhaomvzwqgaego`) to a Supabase project in your own account. Lovable will continue to build the app against the new project via standard credentials.
+- **Source** (Lovable Cloud, ref `srznzxyhaomvzwqgaego`) — reachable via `SUPABASE_DB_URL` as restricted `sandbox_exec` role + `SUPABASE_SERVICE_ROLE_KEY` for admin operations.
+- **Target** (your project, ref `oqkgofqwgurvhzluuvsm`) — reachable via `MY_SUPABASE_DB_URL` as `postgres` (full privileges) + `MY_SUPABASE_SERVICE_ROLE_KEY`.
 
----
+Because the sandbox's source DB role cannot read `auth.*` or `storage.*` schemas, we cannot use `pg_dump` of the whole source. Instead we migrate each layer using the right API.
 
-## What you'll need to provide
+## Phase 1 — Schema (tables, RLS, functions, triggers, indexes)
 
-Once we're in build mode, I'll ask you for these as Lovable secrets:
+Apply the project's existing migration history (`supabase/migrations/*.sql`) to the target DB in order, via `psql` against `MY_SUPABASE_DB_URL`. This recreates:
+- 22 public tables with columns, defaults, constraints
+- RLS policies (already in the migrations)
+- Functions: `handle_new_user`, `set_updated_at`, `increment_sourcing_usage`, `has_role`
+- The `app_role` enum and `user_roles` setup
+- The `handle_new_user` trigger on `auth.users` (needs to be (re)created on target)
+- Storage buckets (`resumes`) and storage policies
 
-1. **`MY_SUPABASE_URL`** — e.g. `https://abcdefg.supabase.co`
-2. **`MY_SUPABASE_ANON_KEY`** — the publishable / anon key
-3. **`MY_SUPABASE_SERVICE_ROLE_KEY`** — service role key (used only for the migration script and server functions)
-4. **`MY_SUPABASE_DB_URL`** — the Postgres connection string from your project's Database settings (used for `pg_dump` / `pg_restore`)
+Verify schema parity at the end with a table/column diff between source and target.
 
-I'll never write the service role key or DB URL into the repo. They go into Lovable's secret store and are read as `process.env.*` at runtime.
+## Phase 2 — Auth users
 
----
+Use the Supabase Admin API (Node script in `/tmp`, never committed):
+1. Paginate `auth.admin.listUsers()` on source using `SUPABASE_SERVICE_ROLE_KEY`.
+2. For each user, call `auth.admin.createUser()` on target using `MY_SUPABASE_SERVICE_ROLE_KEY`, preserving `id`, `email`, `phone`, `email_confirmed_at`, `phone_confirmed_at`, `user_metadata`, `app_metadata`, `created_at`.
+3. Password hashes: migrate via `password_hash` field on `createUser` (Supabase accepts bcrypt hashes exported from source). If a hash can't be exported, users keep their account but must use "Forgot password" to set a new one — we'll confirm which behavior you want before running.
+4. Identities (Google OAuth links from `auth.identities`) get re-linked after first sign-in automatically.
 
-## Steps
+Run order matters: **auth users must exist before data import** because `public.profiles.id` and every `user_id` column references them.
 
-### 1. Pre-flight (read-only, on the current Cloud project)
-- Snapshot a manifest of everything that needs to move: 22 tables, 4 functions (`set_updated_at`, `handle_new_user`, `increment_sourcing_usage`, `has_role`), the `app_role` enum, all RLS policies, the `resumes` storage bucket, and the `auth.users` table.
-- Count rows per table so we can verify row-counts match post-migration.
+## Phase 3 — Public data (existing rows)
 
-### 2. Schema migration
-- Run `pg_dump --schema-only --schema=public --schema=auth` against the source DB to capture exact DDL, then apply it to your new project. This preserves:
-  - Tables, columns, defaults, constraints
-  - The `app_role` enum
-  - All 4 `public` functions (including `SECURITY DEFINER` and `search_path` settings)
-  - All RLS policies and `GRANT`s
-  - The `on_auth_user_created` trigger that calls `handle_new_user` (needs to be recreated on `auth.users` in the new project)
+For each public table (in FK-safe order), stream rows from source → target using `psql` `COPY ... TO STDOUT` piped to `COPY ... FROM STDIN` on the target. Order: `profiles, user_roles, conversations, messages, jobs, candidates, applications, agent_tasks, job_posts, outreach_drafts, outreach_threads, outreach_messages, sourcing_projects, sourcing_preview_candidates, sourcing_credits_usage, credit_ledger, user_gmail_connections, user_calendar_connections, prompts, prompt_partials, prompt_revisions`.
 
-### 3. Data migration
-- `pg_dump --data-only --schema=public` from source, `psql` into target. Order respects FK-free design (no FKs in this schema, so order is only about logical dependencies — conversations/jobs/etc. before children).
-- Disable triggers during load to avoid double-firing `handle_new_user`.
+Triggers like `handle_new_user` will be temporarily disabled during import to avoid duplicate-profile conflicts, then re-enabled.
 
-### 4. Auth users migration
-- Dump `auth.users`, `auth.identities`, `auth.mfa_factors` from source via `pg_dump --schema=auth`.
-- Restore into the new project. Passwords are preserved because `encrypted_password` is a bcrypt hash — Supabase will accept existing sessions/passwords without forcing resets.
-- Existing user UUIDs are preserved, so all `user_id` foreign references in public tables stay valid.
+## Phase 4 — Storage buckets + files
 
-### 5. Storage migration (`resumes` bucket)
-- Create the `resumes` bucket in the new project with the same privacy (private).
-- Recreate the bucket's RLS storage policies.
-- Use a Node script with both service-role keys: list every object in the source bucket, stream-download, re-upload to target preserving paths.
+1. Recreate buckets on target via SQL (`resumes`, private) — done in Phase 1.
+2. List all objects in source `resumes` bucket via `storage.from('resumes').list()` recursively (service role).
+3. Download each file → upload to target with the same path, content-type, and metadata.
+4. Verify object counts match.
 
-### 6. Auth configuration
-- Recreate in your new Supabase dashboard (these don't migrate via SQL):
-  - **Google OAuth provider** — add your Google client ID/secret, set the redirect URL to `https://<your-ref>.supabase.co/auth/v1/callback`, and update Google Cloud Console authorized redirect URIs.
-  - **Email auth settings** — site URL, redirect URLs (`https://findable.work`, `https://www.findable.work`, `https://findable-work.lovable.app`, preview URL), email templates if customized.
-  - **Auth email hook** (if used) — re-point at the same endpoint and set `AUTH_EMAIL_HOOK_SECRET`.
+## Phase 5 — Cutover
 
-### 7. Repoint the app
-- Add the 4 secrets above to Lovable's secret store.
-- Update `src/integrations/supabase/client.ts`, `client.server.ts`, and `auth-middleware.ts` to read from `MY_SUPABASE_*` (or override the existing `VITE_SUPABASE_URL` / `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` env vars at the Lovable secret layer so no code changes are needed — preferred).
-- Regenerate `src/integrations/supabase/types.ts` against the new project.
-- Re-create non-Supabase secrets in your new project's Edge Function secrets only if you migrate edge functions too — this app uses TanStack server functions, so `OPENAI_API_KEY`, `APOLLO_API_KEY`, `PDL_API_KEY`, `RESEND_API_KEY`, `LOVABLE_API_KEY` stay as Lovable runtime secrets and don't need to move.
+Hard cutover per your earlier choice:
+1. Update the Lovable project's connected Supabase project to point at `oqkgofqwgurvhzluuvsm`. **This is a manual step you do in Lovable's Cloud / Connectors UI** — the agent cannot reassign the connected project for you. After it's reassigned, `src/integrations/supabase/client.ts`, `.env` (`VITE_SUPABASE_*`), and `types.ts` regenerate automatically against the new project.
+2. Re-enable Google OAuth provider on the new project (`supabase--configure_social_auth`) — provider config does not migrate.
+3. Re-add any auth redirect URLs / Site URL on the new project to match `findable.work`, `www.findable.work`, `findable-work.lovable.app`, and preview URLs.
+4. Re-create the `handle_new_user` trigger on `auth.users` in the new project (included in Phase 1).
+5. Smoke-test: sign in (Google + email), load `/app`, open a conversation, view candidates, upload a resume.
 
-### 8. Verify, then cut over
-- Smoke test on preview: sign in (existing user), open a conversation, view candidates, check `resumes` downloads.
-- Compare row counts source vs. target for every table.
-- Once green: publish.
-- Disable Lovable Cloud on this project (Connectors → Lovable Cloud → Disable) so the old DB is no longer used.
+## Things that do NOT auto-migrate (you'll need to redo on the new project)
 
-### 9. Post-cutover
-- Old Lovable Cloud database stays read-only on Lovable's side for a grace period; export a final `pg_dump` to keep as a local backup.
-- You now manage Supabase billing, backups, point-in-time recovery, and dashboard access directly.
+- **Auth provider config** (Google OAuth client/secret, redirect URLs, email templates, SMTP settings)
+- **Edge Function secrets / project secrets** — the `MY_*`, `OPENAI_API_KEY`, `RESEND_API_KEY`, `APOLLO_API_KEY`, `PDL_API_KEY`, `AUTH_EMAIL_HOOK_SECRET`, `GOOGLE_APP_USER_CONNECTOR_CLIENT_ID` need to be set on the new project too if any server functions still rely on them at the Supabase layer (this project uses TanStack server functions, so most secrets stay in Lovable, but confirm).
+- **Webhooks, cron jobs (pg_cron), auth hooks** — none detected, but we'll double-check.
+- **Custom domain on Supabase Auth** (if any) — re-point.
 
----
+## Confirmations needed before I start (in build mode)
 
-## Technical details
+1. **Passwords**: migrate bcrypt hashes when possible (silent transition), OR force all users to reset password? Default: **migrate hashes**.
+2. **Email confirmation status**: preserve `email_confirmed_at` from source so users stay confirmed? Default: **yes**.
+3. **Downtime window**: can the app be in read-only / "we're migrating" mode for ~15 min during Phases 2–4 to avoid drift? If not, we accept that rows created during migration on the source will be lost.
+4. **Project reassignment**: after I finish Phases 1–4 and verify, you'll do the one-click Cloud project reassignment in Lovable, then I'll do the Google OAuth re-enable and smoke tests.
 
-```text
-Source (Lovable Cloud)               Target (your Supabase)
-─────────────────────────            ─────────────────────────
-ref: srznzxyhaomvzwqgaego     ───►   ref: <yours>
-public schema (22 tables)     ───►   pg_dump --schema=public
-auth.users + identities       ───►   pg_dump --schema=auth (selected tables)
-storage.objects (resumes/)    ───►   node migrate-storage.mjs
-on_auth_user_created trigger  ───►   recreated manually on target
-Google OAuth provider config  ───►   reconfigured in Supabase dashboard
-Lovable secret store (keys)   ───►   stays in Lovable (no move needed)
-```
-
-Risks & mitigations:
-- **Auth users with active sessions**: existing JWTs signed by the old project will be invalidated on cutover (different JWT secret). Users will need to sign in again once — passwords still work.
-- **Realtime subscriptions**: any `ALTER PUBLICATION supabase_realtime` we've set up needs to be re-applied on the target (none currently in use based on the schema, but we'll re-check).
-- **Lovable Cloud-specific files** (`client.ts`, `client.server.ts`, `auth-middleware.ts`, `auth-attacher.ts`, `types.ts`) are normally auto-managed. After cutover they become repo-owned — Lovable will stop auto-regenerating them. I'll regenerate `types.ts` manually when the schema changes.
-- **Downtime estimate**: ~5–15 minutes for the cutover window (dump → restore → flip env vars → redeploy).
-
-Approve this plan and I'll switch to build mode and ask you for the 4 secrets to start.
+Reply with any changes to defaults, otherwise I'll proceed with the defaults above once you switch me to build mode.
