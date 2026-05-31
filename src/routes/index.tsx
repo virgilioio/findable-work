@@ -18,33 +18,6 @@ import {
 } from "@/components/findable-icons";
 import { cn } from "@/lib/utils";
 
-// IMPORTANT: Run this BEFORE the supabase client lazily initializes.
-// The Lovable-managed OAuth flow returns tokens through its own broker and
-// calls supabase.auth.setSession() directly. If Supabase's own
-// detectSessionInUrl logic also processes the URL hash, the two race and the
-// PKCE exchange fails with "failed to exchange authorization code".
-// Capture and strip any OAuth-related hash here so Supabase never sees it.
-let __oauthHashCapture: string | null = null;
-if (typeof window !== "undefined") {
-  const h = window.location.hash || "";
-  if (
-    h.includes("access_token=") ||
-    h.includes("error=") ||
-    h.includes("error_description=")
-  ) {
-    __oauthHashCapture = h;
-    try {
-      window.history.replaceState(
-        null,
-        "",
-        window.location.pathname + window.location.search,
-      );
-    } catch {
-      /* ignore */
-    }
-  }
-}
-
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
@@ -191,22 +164,28 @@ function HomePage() {
   useEffect(() => {
     let handled = false;
 
-    // If we captured an OAuth error in the URL hash at module load, surface
-    // it now and stop — no session to claim.
-    if (__oauthHashCapture && __oauthHashCapture.includes("error")) {
-      const params = new URLSearchParams(__oauthHashCapture.replace(/^#/, ""));
-      const desc =
-        params.get("error_description")?.replace(/\+/g, " ") ||
-        params.get("error") ||
-        "Sign-in failed";
-      try {
-        sessionStorage.removeItem(CLAIM_PENDING_KEY);
-      } catch {
-        /* ignore */
+    // Surface OAuth errors that come back as ?error=... query params.
+    if (typeof window !== "undefined") {
+      const qp = new URLSearchParams(window.location.search);
+      const err = qp.get("error") || qp.get("error_description");
+      if (err) {
+        const desc =
+          qp.get("error_description")?.replace(/\+/g, " ") ||
+          qp.get("error") ||
+          "Sign-in failed";
+        try {
+          sessionStorage.removeItem(CLAIM_PENDING_KEY);
+        } catch {
+          /* ignore */
+        }
+        try {
+          window.history.replaceState(null, "", window.location.pathname);
+        } catch {
+          /* ignore */
+        }
+        toast.error(`Google sign-in failed: ${desc}. Please try again.`);
+        return;
       }
-      __oauthHashCapture = null;
-      toast.error(`Google sign-in failed: ${desc}. Please try again.`);
-      return;
     }
 
     const handleSignedIn = async () => {
@@ -227,26 +206,6 @@ function HomePage() {
         navigate({ to: "/app" });
       }
     };
-
-    // If we captured an access_token hash, hand it to Supabase explicitly
-    // and then proceed as signed-in.
-    if (__oauthHashCapture && __oauthHashCapture.includes("access_token=")) {
-      const params = new URLSearchParams(__oauthHashCapture.replace(/^#/, ""));
-      const access_token = params.get("access_token");
-      const refresh_token = params.get("refresh_token");
-      __oauthHashCapture = null;
-      if (access_token && refresh_token) {
-        void supabase.auth
-          .setSession({ access_token, refresh_token })
-          .then(({ error }) => {
-            if (error) {
-              toast.error(`Sign-in failed: ${error.message}`);
-              return;
-            }
-            void handleSignedIn();
-          });
-      }
-    }
 
     (async () => {
       const { data } = await supabase.auth.getUser();

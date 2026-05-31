@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable";
 import { Wordmark } from "@/components/findable-icons";
 import googleLogo from "@/assets/google-logo.png";
 
@@ -59,13 +58,12 @@ export function AuthDialog({
       } catch {
         /* ignore */
       }
-      const result = await lovable.auth.signInWithOAuth("google", {
-        redirect_uri: window.location.origin,
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: `${window.location.origin}/` },
       });
-      if (result.error) throw result.error;
-      if (result.redirected) return;
-      // Tokens received in-page (iframe/popup flow). The landing page's
-      // SIGNED_IN listener will navigate; just close the dialog.
+      if (error) throw error;
+      // Browser will redirect to Google; landing page handles SIGNED_IN on return.
       return;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Google sign-in failed");
