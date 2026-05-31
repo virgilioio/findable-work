@@ -3,18 +3,19 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import {
-  authorizeAppUserOAuth,
-  callAsAppUser,
-} from "@/integrations/lovable/appUserConnector";
+  GMAIL_SCOPES,
+  buildAuthorizeUrl,
+  exchangeCodeForTokens,
+  fetchUserInfo,
+  generateCodeChallenge,
+  generateCodeVerifier,
+  generateState,
+  googleFetch,
+} from "./google-oauth.server";
 
-const GMAIL_SCOPES = [
-  "https://www.googleapis.com/auth/gmail.send",
-  "https://www.googleapis.com/auth/gmail.modify",
-  "https://www.googleapis.com/auth/gmail.readonly",
-];
+const GMAIL_BASE = "https://gmail.googleapis.com/gmail/v1";
 
 function b64url(str: string) {
-  // btoa handles latin-1 only; encode UTF-8 first.
   const bytes = new TextEncoder().encode(str);
   let bin = "";
   bytes.forEach((b) => (bin += String.fromCharCode(b)));
@@ -49,14 +50,30 @@ export const startGmailConnect = createServerFn({ method: "POST" })
     z.object({ returnUrl: z.string().url() }).parse(input),
   )
   .handler(async ({ context, data }) => {
-    const clientId = process.env.GOOGLE_APP_USER_CONNECTOR_CLIENT_ID;
-    if (!clientId) throw new Error("Google connector client ID not configured");
-    const { authorizationUrl } = await authorizeAppUserOAuth({
-      connectorId: "google",
-      appUserId: context.userId,
-      connectorClientId: clientId,
-      returnUrl: data.returnUrl,
-      credentialsConfiguration: { scopes: GMAIL_SCOPES },
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    if (!clientId) throw new Error("GOOGLE_CLIENT_ID is not configured");
+
+    const codeVerifier = generateCodeVerifier();
+    const codeChallenge = await generateCodeChallenge(codeVerifier);
+    const state = generateState();
+
+    const { error } = await (supabaseAdmin as any)
+      .from("oauth_pkce_state")
+      .insert({
+        state,
+        user_id: context.userId,
+        code_verifier: codeVerifier,
+        kind: "gmail",
+        return_to: data.returnUrl,
+      });
+    if (error) throw new Error(error.message);
+
+    const authorizationUrl = buildAuthorizeUrl({
+      clientId,
+      redirectUri: data.returnUrl,
+      scopes: GMAIL_SCOPES,
+      state,
+      codeChallenge,
     });
     return { authorizationUrl };
   });
@@ -64,32 +81,49 @@ export const startGmailConnect = createServerFn({ method: "POST" })
 export const completeGmailConnect = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input) =>
-    z.object({ connectionId: z.string().min(1) }).parse(input),
+    z.object({
+      code: z.string().min(1),
+      state: z.string().min(1),
+      redirectUri: z.string().url(),
+    }).parse(input),
   )
   .handler(async ({ context, data }) => {
-    const res = await callAsAppUser({
-      connectionId: data.connectionId,
-      connectorId: "google_mail",
-      path: "/gmail/v1/users/me/profile",
-    });
-    if (!res.ok) {
-      throw new Error(`Gmail profile fetch failed (${res.status}): ${await res.text()}`);
+    const { data: pkce, error: pkceErr } = await (supabaseAdmin as any)
+      .from("oauth_pkce_state")
+      .select("user_id, code_verifier, created_at")
+      .eq("state", data.state)
+      .maybeSingle();
+    if (pkceErr) throw new Error(pkceErr.message);
+    if (!pkce) throw new Error("Invalid or expired OAuth state");
+    if (pkce.user_id !== context.userId) throw new Error("OAuth state user mismatch");
+    if (Date.now() - new Date(pkce.created_at).getTime() > 10 * 60 * 1000) {
+      throw new Error("OAuth state expired");
     }
-    const profile = (await res.json()) as { emailAddress?: string };
-    const email = profile.emailAddress ?? "unknown";
-    const { error } = await supabaseAdmin
+
+    await (supabaseAdmin as any).from("oauth_pkce_state").delete().eq("state", data.state);
+
+    const tokens = await exchangeCodeForTokens({
+      code: data.code,
+      codeVerifier: pkce.code_verifier,
+      redirectUri: data.redirectUri,
+    });
+    const info = await fetchUserInfo(tokens.access_token);
+
+    const row = {
+      user_id: context.userId,
+      email: info.email,
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token ?? null,
+      token_expires_at: new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
+      scope: tokens.scope,
+      updated_at: new Date().toISOString(),
+    };
+    const { error } = await (supabaseAdmin as any)
       .from("user_gmail_connections")
-      .upsert(
-        {
-          user_id: context.userId,
-          connection_id: data.connectionId,
-          email,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "user_id" },
-      );
+      .upsert(row, { onConflict: "user_id" });
     if (error) throw new Error(error.message);
-    return { email };
+
+    return { email: info.email };
   });
 
 export const disconnectGmail = createServerFn({ method: "POST" })
@@ -107,7 +141,7 @@ export const disconnectGmail = createServerFn({ method: "POST" })
 async function loadConnection(userId: string) {
   const { data, error } = await supabaseAdmin
     .from("user_gmail_connections")
-    .select("connection_id, email")
+    .select("email")
     .eq("user_id", userId)
     .maybeSingle();
   if (error) throw new Error(error.message);
@@ -166,15 +200,10 @@ export const sendOutreachEmail = createServerFn({ method: "POST" })
       body: data.body,
     });
 
-    const res = await callAsAppUser({
-      connectionId: conn.connection_id,
-      connectorId: "google_mail",
-      path: "/gmail/v1/users/me/messages/send",
-      init: {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ raw }),
-      },
+    const res = await googleFetch(userId, "gmail", `${GMAIL_BASE}/users/me/messages/send`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ raw }),
     });
     if (!res.ok) {
       throw new Error(`Gmail send failed (${res.status}): ${await res.text()}`);
@@ -220,7 +249,6 @@ export const sendOutreachEmail = createServerFn({ method: "POST" })
       });
     if (msgErr) throw new Error(msgErr.message);
 
-    // Mark candidate Contacted
     await supabaseAdmin
       .from("candidates")
       .update({
@@ -295,7 +323,6 @@ export const getOutreachThread = createServerFn({ method: "POST" })
       .eq("id", thread.candidate_id)
       .maybeSingle();
 
-    // Mark as read
     if (thread.unread) {
       await supabase
         .from("outreach_threads")
@@ -333,7 +360,6 @@ export const replyInThread = createServerFn({ method: "POST" })
       .single();
     if (!cand?.email) throw new Error("No candidate email");
 
-    // Get last inbound message id for proper threading headers
     const { data: lastInbound } = await supabaseAdmin
       .from("outreach_messages")
       .select("gmail_message_id")
@@ -354,15 +380,10 @@ export const replyInThread = createServerFn({ method: "POST" })
       references: lastInbound?.gmail_message_id ?? undefined,
     });
 
-    const res = await callAsAppUser({
-      connectionId: conn.connection_id,
-      connectorId: "google_mail",
-      path: "/gmail/v1/users/me/messages/send",
-      init: {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ raw, threadId: thread.gmail_thread_id }),
-      },
+    const res = await googleFetch(userId, "gmail", `${GMAIL_BASE}/users/me/messages/send`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ raw, threadId: thread.gmail_thread_id }),
     });
     if (!res.ok) {
       throw new Error(`Gmail send failed (${res.status}): ${await res.text()}`);
@@ -423,7 +444,7 @@ export const syncOutreachReplies = createServerFn({ method: "POST" })
     const { userId } = context;
     const { data: conn } = await supabaseAdmin
       .from("user_gmail_connections")
-      .select("connection_id, email")
+      .select("email")
       .eq("user_id", userId)
       .maybeSingle();
     if (!conn) return { synced: 0 };
@@ -438,11 +459,11 @@ export const syncOutreachReplies = createServerFn({ method: "POST" })
     let synced = 0;
     for (const t of threads) {
       if (!t.gmail_thread_id) continue;
-      const res = await callAsAppUser({
-        connectionId: conn.connection_id,
-        connectorId: "google_mail",
-        path: `/gmail/v1/users/me/threads/${t.gmail_thread_id}?format=full`,
-      });
+      const res = await googleFetch(
+        userId,
+        "gmail",
+        `${GMAIL_BASE}/users/me/threads/${t.gmail_thread_id}?format=full`,
+      );
       if (!res.ok) continue;
       const payload = (await res.json()) as { messages?: any[] };
       const msgs = payload.messages ?? [];
