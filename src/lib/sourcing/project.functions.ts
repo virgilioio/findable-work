@@ -83,7 +83,6 @@ export const refineSourcingProject = createServerFn({ method: "POST" })
 
     const refineSystem = await getPrompt("sourcing.refine");
     const completion = await openaiChat({
-      model: "gpt-4o-mini",
       messages: [
         { role: "system", content: refineSystem },
         {

@@ -1,6 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { getPrompt } from "@/lib/prompts/registry.server";
+import {
+  OPENAI_CHAT_COMPLETIONS_URL,
+  OPENAI_RATE_LIMIT_MESSAGE,
+  getOpenAIModel,
+} from "@/lib/ai/openai-model.server";
 
 /**
  * Public, unauthenticated chat endpoint used by the homepage guest
@@ -161,12 +166,12 @@ type ChatMessage = {
   name?: string;
 };
 
-async function callGateway(messages: ChatMessage[], apiKey: string) {
-  const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+async function callOpenAI(messages: ChatMessage[], apiKey: string) {
+  const res = await fetch(OPENAI_CHAT_COMPLETIONS_URL, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "openai/gpt-5-mini",
+      model: getOpenAIModel(),
       messages,
       tools: [createJobDraftTool, askClarifyingQuestionsTool, requestSignupTool],
     }),
@@ -175,10 +180,8 @@ async function callGateway(messages: ChatMessage[], apiKey: string) {
     const text = await res.text().catch(() => "");
     throw new Error(
       res.status === 429
-        ? "Rate limit reached. Try again in a moment."
-        : res.status === 402
-        ? "AI credits exhausted."
-        : `AI gateway error (${res.status}). ${text.slice(0, 200)}`,
+        ? OPENAI_RATE_LIMIT_MESSAGE
+        : `OpenAI error (${res.status}). ${text.slice(0, 200)}`,
     );
   }
   return res.json();
@@ -213,9 +216,13 @@ export const Route = createFileRoute("/api/public/guest-chat")({
           );
         }
 
-        const apiKey = process.env.LOVABLE_API_KEY;
-        if (!apiKey) {
-          return Response.json({ error: "AI not configured" }, { status: 500 });
+        const apiKey = process.env.OPENAI_API_KEY;
+        const model = process.env.OPENAI_MODEL;
+        if (!apiKey || !model) {
+          return Response.json(
+            { error: "AI not configured (OPENAI_API_KEY / OPENAI_MODEL)" },
+            { status: 500 },
+          );
         }
 
         const convo: ChatMessage[] = [
@@ -245,10 +252,21 @@ export const Route = createFileRoute("/api/public/guest-chat")({
 
         const MAX_ITERS = 4;
         for (let iter = 0; iter < MAX_ITERS; iter++) {
-          const completion = await callGateway(convo, apiKey).catch((err: Error) => {
+          const completion = await callOpenAI(convo, apiKey).catch((err: Error) => {
             return { error: err.message };
           });
           if ("error" in completion) {
+            // Friendly surface for rate limits — return 200 with an assistant
+            // message so the homepage chat shows it inline instead of toasting
+            // a generic error.
+            if (completion.error === OPENAI_RATE_LIMIT_MESSAGE) {
+              return Response.json({
+                assistant: OPENAI_RATE_LIMIT_MESSAGE,
+                toolEvents: [],
+                draftJob: nextDraft,
+                signupRequired: false,
+              });
+            }
             return Response.json({ error: completion.error }, { status: 502 });
           }
           const choice = completion.choices?.[0];

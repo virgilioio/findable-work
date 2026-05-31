@@ -23,7 +23,6 @@ export const normalizeJobSpecs = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<NormalizedSpecs> => {
     const system = await getPrompt("sourcing.normalize");
     const completion = await openaiChat({
-      model: "gpt-4o-mini",
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: system },

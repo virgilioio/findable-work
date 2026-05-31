@@ -1,7 +1,17 @@
-// Server-only: generate role-specific screening questions from a job description
-// using the Lovable AI Gateway (OpenAI tool-calling shape).
+// Server-only: generate role-specific screening questions from a job
+// description by calling OpenAI directly (tool-calling shape).
+//
+// The function NEVER throws — on any failure it logs loudly and returns
+// `defaultScreening()` so the public job page keeps rendering. The
+// `[screening] FALLBACK` log line is the signal to look for in worker
+// logs when questions look generic.
 
 import { getPrompt } from "@/lib/prompts/registry.server";
+import {
+  OPENAI_CHAT_COMPLETIONS_URL,
+  getOpenAIKey,
+  getOpenAIModel,
+} from "@/lib/ai/openai-model.server";
 
 export type ScreeningQuestion = {
   id: string;
@@ -94,10 +104,19 @@ export function defaultScreening(): ScreeningQuestion[] {
   ];
 }
 
+function logFallback(reason: string, extra: Record<string, unknown> = {}): void {
+  // Single grep target across all fallback paths.
+  console.error("[screening] FALLBACK to defaults", { reason, ...extra });
+}
+
 export async function generateScreeningQuestions(job: JobBrief): Promise<ScreeningQuestion[]> {
-  const apiKey = process.env.LOVABLE_API_KEY;
-  if (!apiKey) {
-    console.warn("[screening] LOVABLE_API_KEY missing — using defaults");
+  let apiKey: string;
+  let model: string;
+  try {
+    apiKey = getOpenAIKey();
+    model = getOpenAIModel();
+  } catch (e: any) {
+    logFallback("missing_env", { message: e?.message });
     return defaultScreening();
   }
 
@@ -117,14 +136,14 @@ export async function generateScreeningQuestions(job: JobBrief): Promise<Screeni
     .join("\n\n");
 
   try {
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const res = await fetch(OPENAI_CHAT_COMPLETIONS_URL, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model,
         messages: [
           { role: "system", content: system },
           { role: "user", content: userMsg || "Generate generic role screening questions." },
@@ -134,12 +153,25 @@ export async function generateScreeningQuestions(job: JobBrief): Promise<Screeni
       }),
     });
     if (!res.ok) {
-      console.error("[screening] gateway error", res.status, await res.text().catch(() => ""));
+      const body = await res.text().catch(() => "");
+      const reason =
+        res.status === 429
+          ? "openai_429"
+          : res.status >= 500
+            ? "openai_5xx"
+            : "openai_other";
+      logFallback(reason, { status: res.status, body: body.slice(0, 500) });
       return defaultScreening();
     }
     const json: any = await res.json();
     const call = json.choices?.[0]?.message?.tool_calls?.[0];
-    const args = call?.function?.arguments ? JSON.parse(call.function.arguments) : {};
+    let args: any = {};
+    try {
+      args = call?.function?.arguments ? JSON.parse(call.function.arguments) : {};
+    } catch (e: any) {
+      logFallback("parse_failed", { message: e?.message });
+      return defaultScreening();
+    }
     const raw = Array.isArray(args.questions) ? args.questions : [];
     const seen = new Set<string>();
     const out: ScreeningQuestion[] = [];
@@ -160,9 +192,13 @@ export async function generateScreeningQuestions(job: JobBrief): Promise<Screeni
       });
       if (out.length >= 6) break;
     }
-    return out.length >= 3 ? out : defaultScreening();
+    if (out.length < 3) {
+      logFallback("too_few_questions", { generated: out.length });
+      return defaultScreening();
+    }
+    return out;
   } catch (e: any) {
-    console.error("[screening] generation failed:", e?.message);
+    logFallback("exception", { message: e?.message });
     return defaultScreening();
   }
 }

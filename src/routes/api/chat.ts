@@ -5,6 +5,12 @@ import { runSourcingAgent, type TaskEvent } from "@/lib/sourcing/agent.server";
 import { buildJobPostArtifact } from "@/lib/job-posts/builder.server";
 import { getPrompt } from "@/lib/prompts/registry.server";
 import {
+  OPENAI_CHAT_COMPLETIONS_URL,
+  OPENAI_RATE_LIMIT_MESSAGE,
+  getOpenAIKey,
+  getOpenAIModel,
+} from "@/lib/ai/openai-model.server";
+import {
   DEFAULT_LINKEDIN,
   DEFAULT_EMAIL_SUBJECT,
   DEFAULT_EMAIL_BODY,
@@ -337,7 +343,7 @@ function extractLeakedClarify(
   return { payload: parsed, cleaned };
 }
 
-async function callGateway(
+async function callOpenAI(
   messages: ChatMessage[],
   apiKey: string,
   mode?: "all" | "read_only",
@@ -365,11 +371,11 @@ async function callGateway(
           getOutreachDraftTool,
           getJobPostTool,
         ];
-  return fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+  return fetch(OPENAI_CHAT_COMPLETIONS_URL, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "openai/gpt-5-mini",
+      model: getOpenAIModel(),
       stream: true,
       messages,
       tools,
@@ -482,12 +488,19 @@ export const Route = createFileRoute("/api/chat")({
             .map((m) => ({ role: m.role as "user" | "assistant", content: m.content || "" })),
         ];
 
-        const apiKey = process.env.LOVABLE_API_KEY;
-        if (!apiKey) {
-          return new Response(JSON.stringify({ error: "LOVABLE_API_KEY missing" }), {
+        const apiKey = process.env.OPENAI_API_KEY;
+        const model = process.env.OPENAI_MODEL;
+        if (!apiKey || !model) {
+          return new Response(
+            JSON.stringify({
+              error:
+                "AI not configured: set OPENAI_API_KEY and OPENAI_MODEL secrets.",
+            }),
+            {
             status: 500,
             headers: { "content-type": "application/json" },
-          });
+            },
+          );
         }
 
         const encoder = new TextEncoder();
@@ -503,15 +516,15 @@ export const Route = createFileRoute("/api/chat")({
               mode?: "all" | "read_only",
               allowLeakRedirect: boolean = false,
             ): Promise<{ text: string; toolCalls: StreamedToolCall[] }> {
-              const upstream = await callGateway(messages, apiKey!, mode);
+              const upstream = await callOpenAI(messages, apiKey!, mode);
               if (!upstream.ok || !upstream.body) {
                 const text = await upstream.text().catch(() => "");
                 const errMsg =
                   upstream.status === 429
-                    ? "Rate limit reached. Try again in a moment."
+                    ? OPENAI_RATE_LIMIT_MESSAGE
                     : upstream.status === 402
                     ? "AI credits exhausted."
-                    : `AI gateway error (${upstream.status}). ${text.slice(0, 200)}`;
+                    : `OpenAI error (${upstream.status}). ${text.slice(0, 200)}`;
                 throw new Error(errMsg);
               }
               const reader = upstream.body.getReader();

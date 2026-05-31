@@ -64,7 +64,6 @@ export const researchSourcingCriteria = createServerFn({ method: "POST" })
       `Return at most 3 titles, ${userPicked ? "0 companies (recruiter already picked)" : "3 companies"}, 5 keywords.`;
 
     const completion = await openaiChat({
-      model: "gpt-4o-mini",
       messages: [
         { role: "system", content: await getPrompt("sourcing.research") },
         { role: "user", content: userMsg },
