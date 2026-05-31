@@ -157,16 +157,23 @@ function HomePage() {
   }, [state.messages.length, sending]);
 
   // After a Google-OAuth round-trip we land back on `/` and Supabase
-  // processes the code in the URL asynchronously. The route's beforeLoad
-  // already ran (with no session yet), so we listen for SIGNED_IN here and
-  // either claim the guest conversation or navigate into the app.
+  // processes tokens from the URL asynchronously. Subscribe immediately
+  // (no `hydrated` gate) so no SIGNED_IN event is missed, and also poll
+  // getUser() in case the session is already restored before this runs.
   useEffect(() => {
-    if (!hydrated) return;
     let handled = false;
 
     const handleSignedIn = async () => {
       if (handled) return;
       handled = true;
+      // Clean OAuth tokens from URL so a refresh doesn't re-trigger.
+      if (typeof window !== "undefined" && window.location.hash.includes("access_token")) {
+        try {
+          window.history.replaceState(null, "", window.location.pathname + window.location.search);
+        } catch {
+          /* ignore */
+        }
+      }
       const s = loadGuestState();
       const hasGuestChat = s.messages.length > 0;
       const pending = sessionStorage.getItem(CLAIM_PENDING_KEY);
@@ -183,15 +190,13 @@ function HomePage() {
       }
     };
 
-    // Cover the case where the session is already hydrated by the time
-    // this effect runs (e.g. fast OAuth round-trip).
     (async () => {
       const { data } = await supabase.auth.getUser();
       if (data.user) await handleSignedIn();
     })();
 
     const { data: sub } = supabase.auth.onAuthStateChange((event) => {
-      if (event === "SIGNED_IN") {
+      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "INITIAL_SESSION") {
         void handleSignedIn();
       }
     });
@@ -199,7 +204,7 @@ function HomePage() {
       sub.subscription.unsubscribe();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hydrated]);
+  }, []);
 
   function openDialog(reason: AuthReason, dismissible: boolean) {
     setDialogReason(reason);
