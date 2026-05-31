@@ -5,6 +5,12 @@ import { runSourcingAgent, type TaskEvent } from "@/lib/sourcing/agent.server";
 import { buildJobPostArtifact } from "@/lib/job-posts/builder.server";
 import { getPrompt } from "@/lib/prompts/registry.server";
 import {
+  OPENAI_CHAT_COMPLETIONS_URL,
+  OPENAI_RATE_LIMIT_MESSAGE,
+  getOpenAIKey,
+  getOpenAIModel,
+} from "@/lib/ai/openai-model.server";
+import {
   DEFAULT_LINKEDIN,
   DEFAULT_EMAIL_SUBJECT,
   DEFAULT_EMAIL_BODY,
@@ -337,7 +343,7 @@ function extractLeakedClarify(
   return { payload: parsed, cleaned };
 }
 
-async function callGateway(
+async function callOpenAI(
   messages: ChatMessage[],
   apiKey: string,
   mode?: "all" | "read_only",
@@ -365,11 +371,11 @@ async function callGateway(
           getOutreachDraftTool,
           getJobPostTool,
         ];
-  return fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+  return fetch(OPENAI_CHAT_COMPLETIONS_URL, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "openai/gpt-5-mini",
+      model: getOpenAIModel(),
       stream: true,
       messages,
       tools,
