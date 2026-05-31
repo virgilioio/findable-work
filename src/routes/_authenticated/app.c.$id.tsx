@@ -310,15 +310,6 @@ function ConversationPage() {
               pulse={pulse && tab !== "job"}
             />
           )}
-          {jobPost && (
-            <TabButton
-              active={tab === "job_posts"}
-              onClick={() => setTab("job_posts")}
-              icon={<Megaphone size={14} />}
-              label="Job Posts"
-              pulse={jobPostsPulse && tab !== "job_posts"}
-            />
-          )}
           {job && (
             <TabButton
               active={tab === "candidates"}
@@ -391,10 +382,6 @@ function ConversationPage() {
                 router.navigate({ to: "/app/c/$id", params: { id: newId } });
               }}
             />
-          </div>
-        ) : tab === "job_posts" && jobPost ? (
-          <div className="flex-1 overflow-y-auto">
-            <JobPostsPanel jobPost={jobPost} conversationId={id} />
           </div>
         ) : tab === "candidates" && job ? (
           <CandidatesPanel conversationId={id} onAskFindable={askFindable} />
