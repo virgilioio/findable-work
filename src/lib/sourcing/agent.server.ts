@@ -123,6 +123,9 @@ export type SourceResult = {
     region: string;
     suggested_countries: string[];
   };
+  insufficient_credits?: boolean;
+  credits_required?: number;
+  credits_balance?: number;
 };
 
 export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
