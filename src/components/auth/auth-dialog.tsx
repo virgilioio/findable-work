@@ -119,7 +119,7 @@ export function AuthDialog({
         }}
       >
         <VisuallyHidden>
-          <DialogTitle>{mode === "signin" ? "Welcome back" : "Create your account"}</DialogTitle>
+          <DialogTitle>{mode === "signin" ? "Sign in to findable" : "Start hiring with findable"}</DialogTitle>
           <DialogDescription>{subtitle}</DialogDescription>
         </VisuallyHidden>
 
