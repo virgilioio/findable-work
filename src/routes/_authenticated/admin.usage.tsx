@@ -245,7 +245,7 @@ function AdminUsagePage() {
               </thead>
               <tbody>
                 {(tableQ.data ?? []).map((u) => (
-                  <>
+                  <Fragment key={u.id}>
                     <tr key={u.id} className="border-b border-border hover:bg-bg-hover">
                       <Td className="font-medium">{u.email ?? u.id.slice(0, 8)}</Td>
                       <Td>{u.plan}</Td>
@@ -299,7 +299,7 @@ function AdminUsagePage() {
                         </td>
                       </tr>
                     )}
-                  </>
+                  </Fragment>
                 ))}
                 {tableQ.isLoading && (
                   <tr>
