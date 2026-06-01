@@ -3,9 +3,42 @@ import { z } from "zod";
 import { requireAdmin } from "@/lib/prompts/require-admin.server";
 import { supabaseAdmin as _supabaseAdmin } from "@/integrations/supabase/client.server";
 
-// Types.ts is auto-generated; cast to any here so newly-added
-// table (assistant_chat_events) and RPC (admin_user_directory) compile.
-const supabaseAdmin = _supabaseAdmin as any;
+type LooseRow = Record<string, unknown>;
+type QueryError = { message: string } | null;
+type QueryResult<T = LooseRow> = {
+  data?: T[] | T | null;
+  error?: QueryError;
+  count?: number | null;
+};
+type DbQuery<T = LooseRow> = PromiseLike<QueryResult<T>> & {
+  select: (columns: string, options?: Record<string, unknown>) => DbQuery<T>;
+  gte: (column: string, value: string) => DbQuery<T>;
+  lte: (column: string, value: string) => DbQuery<T>;
+  eq: (column: string, value: unknown) => DbQuery<T>;
+  in: (column: string, values: string[]) => DbQuery<T>;
+  order: (column: string, options?: Record<string, unknown>) => DbQuery<T>;
+  limit: (count: number) => DbQuery<T>;
+};
+type AdminAuthUser = {
+  id: string;
+  email?: string | null;
+  created_at?: string;
+  last_sign_in_at?: string | null;
+};
+type LooseSupabaseAdmin = {
+  from: (table: string) => DbQuery;
+  auth: {
+    admin: {
+      listUsers: (args: {
+        page: number;
+        perPage: number;
+      }) => Promise<{ data?: { users?: AdminAuthUser[] }; error?: QueryError }>;
+    };
+  };
+};
+
+// Types.ts is auto-generated; use a narrow local interface for newly-added admin tables.
+const supabaseAdmin = _supabaseAdmin as unknown as LooseSupabaseAdmin;
 
 // ---------- helpers ----------
 
