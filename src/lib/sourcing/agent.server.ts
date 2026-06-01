@@ -339,7 +339,7 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
       requested: limit,
       pool_limited: false,
       broadened: false,
-      insufficient_credits: true as const,
+      insufficient_credits: true,
       credits_required: SOURCING_RUN_COST,
       credits_balance: spend.balance,
     };
