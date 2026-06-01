@@ -290,9 +290,9 @@ function Overview({ c }: { c: Candidate }) {
           `Out of credits — need ${r.required}, have ${r.balance}. Top up in Settings → Usage & billing.`,
         );
       else if (r.status === "pending" && r.alreadyPending)
-        toast("Phone reveal already in progress — Apollo usually returns results within a few minutes");
+        toast("Phone reveal already in progress — results usually arrive within a few minutes");
       else if (r.status === "pending")
-        toast("Phone reveal requested. Apollo usually returns a result within a few minutes — the profile will update automatically.");
+        toast("Phone reveal requested. Results usually arrive within a few minutes — the profile will update automatically.");
       else toast("Phone revealed");
     },
     onError: (e: any) => toast.error(e?.message ?? "Couldn't reveal phone"),
@@ -380,7 +380,7 @@ function Overview({ c }: { c: Candidate }) {
                 onClick={() => revealMut.mutate()}
                 disabled={disabled}
                 className="inline-flex items-center gap-1.5 rounded-md border border-border-strong bg-bg-elev px-2 py-0.5 text-[12px] text-text hover:bg-bg-hover disabled:opacity-50"
-                title="Apollo delivers phone numbers asynchronously — usually within a few minutes. 5 credits charged only if a number is found."
+                title="Phone numbers are delivered asynchronously — usually within a few minutes. 5 credits charged only if a number is found."
               >
                 <Sparkle size={11} />
                 {pending

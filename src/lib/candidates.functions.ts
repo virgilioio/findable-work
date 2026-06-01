@@ -207,7 +207,7 @@ export const revealCandidatePhone = createServerFn({ method: "POST" })
       by: "you",
       when: "Just now",
       at: new Date().toISOString(),
-      text: "Phone reveal requested — Apollo delivers within a few minutes",
+      text: "Phone reveal requested — results usually arrive within a few minutes",
     });
     const { error: updErr } = await supabase
       .from("candidates")
