@@ -14,6 +14,10 @@ import {
   X,
   Search as SearchIcon,
   Eye,
+  CreditCard,
+  Loader2,
+  TrendingDown,
+  TrendingUp,
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -62,12 +66,15 @@ import {
   getNotificationPrefs,
   updateNotificationPrefs,
 } from "@/lib/notifications.functions";
+import { getCreditsSummary } from "@/lib/billing/credits.functions";
+import { createCheckoutSession } from "@/lib/billing/checkout.functions";
 
 export type SettingsSection =
   | "general"
   | "notifications"
   | "personalization"
   | "connections"
+  | "billing"
   | "data"
   | "security"
   | "account"
@@ -78,6 +85,7 @@ const SECTIONS: { id: SettingsSection; label: string; icon: React.ComponentType<
   { id: "notifications", label: "Notifications", icon: Bell },
   { id: "personalization", label: "Personalization", icon: Sparkles },
   { id: "connections", label: "Connections", icon: Plug },
+  { id: "billing", label: "Usage & billing", icon: CreditCard },
   { id: "data", label: "Data controls", icon: Database },
   { id: "security", label: "Security", icon: Shield },
   { id: "account", label: "Account", icon: UserIcon },
@@ -167,6 +175,7 @@ export function SettingsDialog({
               {active === "notifications" && <NotificationsPane />}
               {active === "personalization" && <PersonalizationPane />}
               {active === "connections" && <ConnectionsPane />}
+              {active === "billing" && <BillingPane />}
               {active === "data" && <DataPane />}
               {active === "security" && <SecurityPane onClose={() => onOpenChange(false)} />}
               {active === "account" && <AccountPane />}
@@ -1004,6 +1013,232 @@ function HelpPane() {
           Contact support
         </a>
       </div>
+    </div>
+  );
+}
+/* ------------------------------ Usage & billing --------------------------- */
+
+function BillingPane() {
+  const summaryFn = useServerFn(getCreditsSummary);
+  const checkoutFn = useServerFn(createCheckoutSession);
+  const qc = useQueryClient();
+
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["credits-summary"],
+    queryFn: () => summaryFn({}),
+  });
+
+  const checkoutMut = useMutation({
+    mutationFn: (bundleKey: string) =>
+      checkoutFn({
+        data: {
+          bundleKey: bundleKey as never,
+          returnUrl: typeof window === "undefined" ? "https://findable.work/app" : `${window.location.origin}/app`,
+        },
+      }),
+    onSuccess: ({ url }) => {
+      if (url && typeof window !== "undefined") window.location.href = url;
+    },
+    onError: (e) => {
+      toast.error(e instanceof Error ? e.message : "Could not start checkout");
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex h-40 items-center justify-center text-text-mute">
+        <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading usage…
+      </div>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <div className="rounded-lg border border-border bg-bg-elev p-4 text-[12.5px] text-text-mute">
+        Couldn't load your credit balance.{" "}
+        <button
+          onClick={() => qc.invalidateQueries({ queryKey: ["credits-summary"] })}
+          className="underline hover:text-text"
+        >
+          Try again
+        </button>
+        .
+      </div>
+    );
+  }
+
+  const { balance, sourcingRunCost, phoneRevealCost, bundles, stats30d, ledger } = data;
+  const low = balance < sourcingRunCost;
+
+  return (
+    <div className="space-y-6">
+      {/* Balance hero */}
+      <div className="rounded-xl border border-border bg-bg-elev p-4">
+        <div className="flex items-baseline justify-between">
+          <div>
+            <div className="text-[11px] font-medium uppercase tracking-wide text-text-faint">
+              Credit balance
+            </div>
+            <div className="mt-1 flex items-baseline gap-2">
+              <div className="text-[28px] font-semibold leading-none text-text tabular-nums">
+                {balance.toLocaleString()}
+              </div>
+              <div className="text-[12px] text-text-mute">credits</div>
+            </div>
+          </div>
+          <div className="text-right text-[11.5px] text-text-mute">
+            <div>{sourcingRunCost} credits / sourcing run</div>
+            <div>{phoneRevealCost} credit / phone reveal</div>
+          </div>
+        </div>
+        {low && (
+          <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-700 dark:text-amber-300">
+            You're running low. Top up to keep sourcing without interruption.
+          </div>
+        )}
+      </div>
+
+      {/* 30d stats */}
+      <div className="grid grid-cols-2 gap-3">
+        <StatCard
+          icon={<TrendingDown className="h-3.5 w-3.5" />}
+          label="Spent · last 30 days"
+          value={stats30d.spent.toLocaleString()}
+          sub={`${stats30d.sourcingRuns} runs · ${stats30d.phoneReveals} reveals`}
+        />
+        <StatCard
+          icon={<TrendingUp className="h-3.5 w-3.5" />}
+          label="Added · last 30 days"
+          value={stats30d.added.toLocaleString()}
+          sub="From top-ups & bonuses"
+        />
+      </div>
+
+      {/* Bundles */}
+      <div>
+        <SectionTitle>Top up</SectionTitle>
+        <div className="mt-2 grid grid-cols-2 gap-3">
+          {bundles.map((b) => {
+            const isPending = checkoutMut.isPending && checkoutMut.variables === b.key;
+            return (
+              <div
+                key={b.key}
+                className={cn(
+                  "relative flex flex-col rounded-xl border bg-bg-elev p-4",
+                  b.highlight ? "border-text" : "border-border",
+                )}
+              >
+                {b.highlight && (
+                  <span className="absolute -top-2 left-3 rounded-full bg-text px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-text-invert">
+                    Most popular
+                  </span>
+                )}
+                <div className="text-[13px] font-semibold text-text">{b.name}</div>
+                <div className="mt-1 text-[12px] text-text-mute">{b.tagline}</div>
+                <div className="mt-3 flex items-baseline gap-1">
+                  <span className="text-[22px] font-semibold text-text tabular-nums">
+                    ${(b.amountCents / 100).toFixed(0)}
+                  </span>
+                  <span className="text-[11.5px] text-text-mute">USD</span>
+                </div>
+                <div className="text-[11.5px] text-text-mute">
+                  {b.credits.toLocaleString()} credits
+                </div>
+                <button
+                  onClick={() => checkoutMut.mutate(b.key)}
+                  disabled={checkoutMut.isPending}
+                  className={cn(
+                    "mt-4 flex items-center justify-center gap-2 rounded-lg px-3 py-1.5 text-[12.5px] font-medium transition disabled:opacity-60",
+                    b.highlight
+                      ? "bg-text text-text-invert hover:opacity-90"
+                      : "border border-border bg-bg text-text hover:bg-bg-hover",
+                  )}
+                >
+                  {isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  {isPending ? "Redirecting…" : "Buy"}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+        <p className="mt-2 text-[11px] text-text-faint">
+          Secure checkout via Stripe. Credits never expire.
+        </p>
+      </div>
+
+      {/* Ledger */}
+      <div>
+        <SectionTitle>Recent activity</SectionTitle>
+        {ledger.length === 0 ? (
+          <p className="mt-2 rounded-lg border border-border bg-bg-elev p-4 text-[12.5px] text-text-mute">
+            No activity yet.
+          </p>
+        ) : (
+          <div className="mt-2 overflow-hidden rounded-lg border border-border bg-bg-elev">
+            <table className="w-full text-[12.5px]">
+              <thead className="bg-bg-side text-[11px] uppercase tracking-wide text-text-faint">
+                <tr>
+                  <th className="px-3 py-2 text-left font-medium">When</th>
+                  <th className="px-3 py-2 text-left font-medium">Reason</th>
+                  <th className="px-3 py-2 text-right font-medium">Δ</th>
+                  <th className="px-3 py-2 text-right font-medium">Balance</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ledger.map((row) => (
+                  <tr key={row.id} className="border-t border-border">
+                    <td className="px-3 py-2 text-text-mute">
+                      {new Date(row.created_at).toLocaleString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </td>
+                    <td className="px-3 py-2 text-text">{row.reason}</td>
+                    <td
+                      className={cn(
+                        "px-3 py-2 text-right tabular-nums",
+                        row.delta < 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400",
+                      )}
+                    >
+                      {row.delta > 0 ? `+${row.delta}` : row.delta}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-text-mute">
+                      {row.balance_after ?? "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function StatCard({
+  icon,
+  label,
+  value,
+  sub,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  sub: string;
+}) {
+  return (
+    <div className="rounded-xl border border-border bg-bg-elev p-3">
+      <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-text-faint">
+        {icon}
+        {label}
+      </div>
+      <div className="mt-1 text-[20px] font-semibold leading-none text-text tabular-nums">
+        {value}
+      </div>
+      <div className="mt-1 text-[11.5px] text-text-mute">{sub}</div>
     </div>
   );
 }
