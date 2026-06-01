@@ -58,7 +58,7 @@ export function getBundle(key: string): CreditBundle | undefined {
 }
 
 export const SOURCING_RUN_COST = 10;
-export const PHONE_REVEAL_COST = 1;
+export const PHONE_REVEAL_COST = 5;
 
 /**
  * Server-only: resolve the Stripe Price ID for a tier + kind from env.
