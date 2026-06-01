@@ -19,6 +19,7 @@ import { Route as ApiChatRouteImport } from './routes/api/chat'
 import { Route as AuthenticatedAppRouteImport } from './routes/_authenticated/app'
 import { Route as AuthenticatedAppIndexRouteImport } from './routes/_authenticated/app.index'
 import { Route as ApiPublicGuestChatRouteImport } from './routes/api/public/guest-chat'
+import { Route as AuthenticatedAdminUsageRouteImport } from './routes/_authenticated/admin.usage'
 import { Route as AuthenticatedAdminPromptsRouteImport } from './routes/_authenticated/admin.prompts'
 import { Route as ApiPublicJobsSlugRouteImport } from './routes/api/public/jobs/$slug'
 import { Route as ApiPublicAuthEmailHookRouteImport } from './routes/api/public/auth/email-hook'
@@ -77,6 +78,11 @@ const ApiPublicGuestChatRoute = ApiPublicGuestChatRouteImport.update({
   path: '/api/public/guest-chat',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedAdminUsageRoute = AuthenticatedAdminUsageRouteImport.update({
+  id: '/admin/usage',
+  path: '/admin/usage',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 const AuthenticatedAdminPromptsRoute =
   AuthenticatedAdminPromptsRouteImport.update({
     id: '/admin/prompts',
@@ -129,6 +135,7 @@ export interface FileRoutesByFullPath {
   '/api/chat': typeof ApiChatRoute
   '/jobs/$slug': typeof JobsSlugRoute
   '/admin/prompts': typeof AuthenticatedAdminPromptsRoute
+  '/admin/usage': typeof AuthenticatedAdminUsageRoute
   '/api/public/guest-chat': typeof ApiPublicGuestChatRoute
   '/app/': typeof AuthenticatedAppIndexRoute
   '/app/c/$id': typeof AuthenticatedAppCIdRoute
@@ -147,6 +154,7 @@ export interface FileRoutesByTo {
   '/api/chat': typeof ApiChatRoute
   '/jobs/$slug': typeof JobsSlugRoute
   '/admin/prompts': typeof AuthenticatedAdminPromptsRoute
+  '/admin/usage': typeof AuthenticatedAdminUsageRoute
   '/api/public/guest-chat': typeof ApiPublicGuestChatRoute
   '/app': typeof AuthenticatedAppIndexRoute
   '/app/c/$id': typeof AuthenticatedAppCIdRoute
@@ -168,6 +176,7 @@ export interface FileRoutesById {
   '/api/chat': typeof ApiChatRoute
   '/jobs/$slug': typeof JobsSlugRoute
   '/_authenticated/admin/prompts': typeof AuthenticatedAdminPromptsRoute
+  '/_authenticated/admin/usage': typeof AuthenticatedAdminUsageRoute
   '/api/public/guest-chat': typeof ApiPublicGuestChatRoute
   '/_authenticated/app/': typeof AuthenticatedAppIndexRoute
   '/_authenticated/app/c/$id': typeof AuthenticatedAppCIdRoute
@@ -189,6 +198,7 @@ export interface FileRouteTypes {
     | '/api/chat'
     | '/jobs/$slug'
     | '/admin/prompts'
+    | '/admin/usage'
     | '/api/public/guest-chat'
     | '/app/'
     | '/app/c/$id'
@@ -207,6 +217,7 @@ export interface FileRouteTypes {
     | '/api/chat'
     | '/jobs/$slug'
     | '/admin/prompts'
+    | '/admin/usage'
     | '/api/public/guest-chat'
     | '/app'
     | '/app/c/$id'
@@ -227,6 +238,7 @@ export interface FileRouteTypes {
     | '/api/chat'
     | '/jobs/$slug'
     | '/_authenticated/admin/prompts'
+    | '/_authenticated/admin/usage'
     | '/api/public/guest-chat'
     | '/_authenticated/app/'
     | '/_authenticated/app/c/$id'
@@ -324,6 +336,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicGuestChatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/admin/usage': {
+      id: '/_authenticated/admin/usage'
+      path: '/admin/usage'
+      fullPath: '/admin/usage'
+      preLoaderRoute: typeof AuthenticatedAdminUsageRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/admin/prompts': {
       id: '/_authenticated/admin/prompts'
       path: '/admin/prompts'
@@ -399,12 +418,14 @@ const AuthenticatedAppRouteWithChildren =
 interface AuthenticatedRouteChildren {
   AuthenticatedAppRoute: typeof AuthenticatedAppRouteWithChildren
   AuthenticatedAdminPromptsRoute: typeof AuthenticatedAdminPromptsRoute
+  AuthenticatedAdminUsageRoute: typeof AuthenticatedAdminUsageRoute
   AuthenticatedOauthGoogleReturnRoute: typeof AuthenticatedOauthGoogleReturnRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedAppRoute: AuthenticatedAppRouteWithChildren,
   AuthenticatedAdminPromptsRoute: AuthenticatedAdminPromptsRoute,
+  AuthenticatedAdminUsageRoute: AuthenticatedAdminUsageRoute,
   AuthenticatedOauthGoogleReturnRoute: AuthenticatedOauthGoogleReturnRoute,
 }
 

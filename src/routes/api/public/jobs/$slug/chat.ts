@@ -225,7 +225,7 @@ export const Route = createFileRoute("/api/public/jobs/$slug/chat")({
         const { data: job, error: jobErr } = await supabaseAdmin
           .from("jobs")
           .select(
-            "title, company, location, employment_type, salary_min, salary_max, currency, summary, description, requirements, responsibilities, must_have, nice_to_have, screening",
+            "id, user_id, title, company, location, employment_type, salary_min, salary_max, currency, summary, description, requirements, responsibilities, must_have, nice_to_have, screening",
           )
           .eq("slug", slug)
           .eq("published", true)
@@ -239,6 +239,23 @@ export const Route = createFileRoute("/api/public/jobs/$slug/chat")({
         }
 
         const lastUser = [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
+        const isSpanish = /[áéíóúñ¿¡]|proceso|entrevista|remoto/.test(lastUser.toLowerCase());
+        const logEvent = (usedFallback: boolean, reason?: string) => {
+          // Best-effort, fire-and-forget. Never blocks the response.
+          (supabaseAdmin as any)
+            .from("assistant_chat_events")
+            .insert({
+              job_id: (job as any).id,
+              job_slug: slug,
+              recruiter_user_id: (job as any).user_id,
+              lang: isSpanish ? "es" : "en",
+              question_length: lastUser.length,
+              had_form_context: Boolean(formContext && Object.keys(formContext).length),
+              used_fallback: usedFallback,
+              fallback_reason: reason ?? null,
+            })
+            .then(() => {}, (e: any) => console.error("[jobs-chat] log error", e?.message));
+        };
 
         const grounding = buildGrounding(job as PublicJob, formContext);
 
@@ -251,6 +268,7 @@ export const Route = createFileRoute("/api/public/jobs/$slug/chat")({
           model = getOpenAIModel();
         } catch (e: any) {
           logFallback("missing_env", { message: e?.message });
+          logEvent(true, "missing_env");
           return Response.json({ assistant: scriptedFallback(job as PublicJob, lastUser) });
         }
 
@@ -273,17 +291,21 @@ export const Route = createFileRoute("/api/public/jobs/$slug/chat")({
           if (!res.ok) {
             const body = await res.text().catch(() => "");
             logFallback("openai_error", { status: res.status, body: body.slice(0, 300) });
+            logEvent(true, "openai_error");
             return Response.json({ assistant: scriptedFallback(job as PublicJob, lastUser) });
           }
           const data: any = await res.json();
           const txt = data?.choices?.[0]?.message?.content?.trim();
           if (!txt) {
             logFallback("empty_completion");
+            logEvent(true, "empty_completion");
             return Response.json({ assistant: scriptedFallback(job as PublicJob, lastUser) });
           }
+          logEvent(false);
           return Response.json({ assistant: txt });
         } catch (e: any) {
           logFallback("exception", { message: e?.message });
+          logEvent(true, "exception");
           return Response.json({ assistant: scriptedFallback(job as PublicJob, lastUser) });
         }
       },
