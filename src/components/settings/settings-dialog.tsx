@@ -870,59 +870,88 @@ function DataPane() {
 /* -------------------------------- Security -------------------------------- */
 
 function SecurityPane({ onClose }: { onClose: () => void }) {
-  const [twofa, setTwofa] = usePersistedState<boolean>("findable:2fa", false);
+  const [signOutOpen, setSignOutOpen] = useState(false);
+  const [pwSending, setPwSending] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+
   const signOutAll = async () => {
-    await supabase.auth.signOut({ scope: "global" });
-    onClose();
+    setSigningOut(true);
+    try {
+      await supabase.auth.signOut({ scope: "global" });
+      toast.success("Signed out everywhere");
+      onClose();
+      window.location.href = "/login";
+    } catch (e) {
+      toast.error((e as Error).message || "Sign out failed");
+      setSigningOut(false);
+    }
   };
   const changePassword = async () => {
-    const { data } = await supabase.auth.getUser();
-    if (!data.user?.email) {
-      toast.error("No email on account");
-      return;
+    setPwSending(true);
+    try {
+      const { data } = await supabase.auth.getUser();
+      if (!data.user?.email) {
+        toast.error("No email on account");
+        return;
+      }
+      const { error } = await supabase.auth.resetPasswordForEmail(data.user.email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      if (error) toast.error(error.message);
+      else toast.success("Password reset email sent — check your inbox.");
+    } finally {
+      setPwSending(false);
     }
-    const { error } = await supabase.auth.resetPasswordForEmail(data.user.email, {
-      redirectTo: `${window.location.origin}/login`,
-    });
-    if (error) toast.error(error.message);
-    else toast.success("Password reset email sent");
   };
   return (
     <div>
-      <Row
-        label="Two-factor authentication"
-        description="Require a second factor at sign-in."
-      >
-        <Switch checked={twofa} onCheckedChange={setTwofa} />
-      </Row>
       <Row
         label="Change password"
         description="Send a password reset email to your account."
       >
         <button
           onClick={changePassword}
-          className="rounded-lg border border-border bg-bg px-3 py-1.5 text-[12.5px] text-text transition hover:bg-bg-hover"
+          disabled={pwSending}
+          className="flex items-center gap-2 rounded-lg border border-border bg-bg px-3 py-1.5 text-[12.5px] text-text transition hover:bg-bg-hover disabled:opacity-60"
         >
-          Send email
+          {pwSending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+          {pwSending ? "Sending…" : "Send email"}
         </button>
       </Row>
       <Row
         label="Active sessions"
-        description="Devices currently signed in to this account."
+        description="This device is currently signed in. Use “Log out all devices” to end any other active sessions."
       >
-        <span className="text-[12px] text-text-mute">1 active</span>
+        <span className="text-[12px] text-text-mute">This device</span>
       </Row>
       <Row
         label="Log out all devices"
         description="End every signed-in session, including this one."
       >
         <button
-          onClick={signOutAll}
+          onClick={() => setSignOutOpen(true)}
           className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-1.5 text-[12.5px] font-medium text-destructive transition hover:bg-destructive/15"
         >
           Log out all
         </button>
       </Row>
+      <AlertDialog open={signOutOpen} onOpenChange={setSignOutOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Sign out of every device?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You'll be signed out here and on every other device where you're
+              currently logged in. You can sign back in any time.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={signingOut}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={signOutAll} disabled={signingOut}>
+              {signingOut ? "Signing out…" : "Sign out everywhere"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
