@@ -111,7 +111,7 @@ export const Route = createFileRoute("/api/public/apollo/phone")({
           type: "phone_revealed",
           by: "apollo",
           when: "Just now",
-          text: "Phone number revealed (1 Apollo credit used)",
+          text: "Phone number revealed (5 credits used)",
         });
 
         const { error: updErr } = await supabaseAdmin
@@ -125,7 +125,7 @@ export const Route = createFileRoute("/api/public/apollo/phone")({
 
         const { error: rpcErr } = await supabaseAdmin.rpc("increment_sourcing_usage", {
           _user_id: cand.user_id,
-          _count: 1,
+          _count: 5,
         });
         if (rpcErr) console.error("increment_sourcing_usage failed:", rpcErr.message);
 
