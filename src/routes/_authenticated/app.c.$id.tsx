@@ -814,6 +814,27 @@ function JobPanel({
   const [duplicating, setDuplicating] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [statusMenu, setStatusMenu] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const shareRef = useRef<HTMLDivElement | null>(null);
+  const [copiedInShare, setCopiedInShare] = useState(false);
+
+  useEffect(() => {
+    if (!shareOpen) return;
+    function onDown(e: MouseEvent) {
+      if (shareRef.current && !shareRef.current.contains(e.target as Node)) {
+        setShareOpen(false);
+      }
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setShareOpen(false);
+    }
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [shareOpen]);
 
   const { data: applications } = useQuery({
     queryKey: ["applications", conversationId],
