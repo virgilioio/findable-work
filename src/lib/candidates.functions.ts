@@ -162,17 +162,27 @@ export const revealCandidatePhone = createServerFn({ method: "POST" })
     const { supabase, userId } = context;
     const { data: cand, error: loadErr } = await supabase
       .from("candidates")
-      .select("id, apollo_id, phone, activity, has_direct_phone")
+      .select("id, apollo_id, phone, activity")
       .eq("id", data.id)
       .single();
     if (loadErr) throw new Error(loadErr.message);
     if (!cand) throw new Error("Candidate not found");
     if (cand.phone) return { phone: cand.phone, alreadyRevealed: true };
     if (!cand.apollo_id) throw new Error("This candidate did not come from Apollo, no phone to reveal.");
-    if (!cand.has_direct_phone) throw new Error("No direct phone available for this candidate.");
 
     const phone = await revealApolloPhone(cand.apollo_id);
-    if (!phone) throw new Error("Apollo did not return a phone number for this profile.");
+    if (!phone) {
+      const activity = Array.isArray(cand.activity) ? [...(cand.activity as any[])] : [];
+      activity.push({
+        id: activity.length + 1,
+        type: "phone_reveal_attempted",
+        by: "you",
+        when: "Just now",
+        text: "Phone reveal attempted — no number on file",
+      });
+      await supabase.from("candidates").update({ activity }).eq("id", data.id);
+      return { phone: null, alreadyRevealed: false, noNumber: true };
+    }
 
     const activity = Array.isArray(cand.activity) ? [...(cand.activity as any[])] : [];
     activity.push({
