@@ -1300,7 +1300,7 @@ function BillingPane() {
             </div>
           </div>
           <div className="text-right text-[11.5px] text-text-mute">
-            <div>{sourcingRunCost} credits / sourcing run</div>
+            <div>{candidateAddCost ?? 1} credit / candidate sourced</div>
             <div>{phoneRevealCost} credits / phone reveal</div>
           </div>
         </div>
