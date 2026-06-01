@@ -38,7 +38,7 @@ async function getOrCreateCustomerId(
   userId: string,
   email: string | undefined,
 ): Promise<string> {
-  const { data: profile, error } = await supabaseAdmin
+  const { data: profile, error } = await (supabaseAdmin as any)
     .from("profiles")
     .select("stripe_customer_id")
     .eq("id", userId)
