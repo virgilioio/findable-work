@@ -11,7 +11,7 @@ import {
   type SearchCriteria,
 } from "./budget";
 import { spendCreditsAdmin } from "@/lib/billing/credits.functions";
-import { SOURCING_RUN_COST } from "@/lib/billing/bundles";
+import { CANDIDATE_ADD_COST } from "@/lib/billing/bundles";
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -68,19 +68,20 @@ export const runSourcingSearch = createServerFn({ method: "POST" })
       }
     }
 
-    // Charge 10 credits per fresh sourcing run (skipped above on cache hit).
-    const spend = await spendCreditsAdmin({
-      userId,
-      amount: SOURCING_RUN_COST,
-      type: "sourcing_run",
-      reason: "Sourcing run",
-      metadata: { project_id: data.project_id },
-    });
-    if (!spend.ok) {
+    // Billing moved to per-candidate: previews themselves are free. We still
+    // pre-check that the user has at least 1 credit so we don't burn external
+    // API quota for a balance-zero account that can't collect anything.
+    const { data: balRow } = await supabaseAdmin
+      .from("profiles")
+      .select("credits_remaining")
+      .eq("id", userId)
+      .single();
+    const balance = balRow?.credits_remaining ?? 0;
+    if (balance < CANDIDATE_ADD_COST) {
       return {
         status: "insufficient_credits" as const,
-        balance: spend.balance,
-        required: SOURCING_RUN_COST,
+        balance,
+        required: CANDIDATE_ADD_COST,
         from_cache: false,
         previews: [] as any[],
       };
