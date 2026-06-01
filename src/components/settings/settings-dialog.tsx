@@ -240,20 +240,20 @@ function GeneralPane() {
 
   return (
     <div>
-      <Row label="Appearance" description="Light or dark theme.">
+      <Row label={t("settings.appearance", "Appearance")} description={t("settings.appearance.desc", "Light or dark theme.")}>
         <Select value={theme} onValueChange={() => toggle()}>
           <SelectTrigger className="h-8 w-[140px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="light">Light</SelectItem>
-            <SelectItem value="dark">Dark</SelectItem>
+            <SelectItem value="light">{t("settings.appearance.light", "Light")}</SelectItem>
+            <SelectItem value="dark">{t("settings.appearance.dark", "Dark")}</SelectItem>
           </SelectContent>
         </Select>
       </Row>
-      <Row label="Accent" description="Color used for primary actions.">
+      <Row label={t("settings.accent", "Accent")} description={t("settings.accent.desc", "Color used for primary actions.")}>
         <span className="rounded-full border border-border bg-bg-input px-2.5 py-0.5 text-[11.5px] text-text-mute">
-          Monochrome
+          {t("settings.accent.value", "Monochrome")}
         </span>
       </Row>
       <Row
