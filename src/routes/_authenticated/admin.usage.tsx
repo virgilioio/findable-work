@@ -1,5 +1,5 @@
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import {
@@ -41,6 +41,8 @@ const METRIC_LABEL: Record<Metric, string> = {
   outreach: "Outreach sent",
   assistant_chats: "Assistant chats",
 };
+
+const ADMIN_PLAN_OPTIONS = ["all", "free", "starter", "growth", "pro", "scale"];
 
 function pct(now: number, prev: number) {
   if (!prev) return now ? "+∞" : "0%";
@@ -89,11 +91,7 @@ function AdminUsagePage() {
   });
 
   const s = summaryQ.data;
-  const plans = useMemo(() => {
-    const set = new Set<string>();
-    (tableQ.data ?? []).forEach((u) => set.add(u.plan));
-    return ["all", ...Array.from(set)];
-  }, [tableQ.data]);
+  const plans = ADMIN_PLAN_OPTIONS;
 
   return (
     <div className="min-h-screen bg-bg text-text">
@@ -151,11 +149,7 @@ function AdminUsagePage() {
                 : undefined
             }
           />
-          <Card
-            label="Sourcing credits"
-            value={s?.sourcingCreditsThisMonth}
-            hint="this month"
-          />
+          <Card label="Sourcing credits" value={s?.sourcingCreditsThisMonth} hint="this month" />
         </section>
 
         {/* Chart */}
@@ -179,11 +173,7 @@ function AdminUsagePage() {
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={tsQ.data ?? []}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                <XAxis
-                  dataKey="day"
-                  tickFormatter={(v: string) => v.slice(5)}
-                  fontSize={10}
-                />
+                <XAxis dataKey="day" tickFormatter={(v: string) => v.slice(5)} fontSize={10} />
                 <YAxis fontSize={10} allowDecimals={false} />
                 <Tooltip
                   contentStyle={{
@@ -247,7 +237,7 @@ function AdminUsagePage() {
               </thead>
               <tbody>
                 {(tableQ.data ?? []).map((u) => (
-                  <>
+                  <Fragment key={u.id}>
                     <tr key={u.id} className="border-b border-border hover:bg-bg-hover">
                       <Td className="font-medium">{u.email ?? u.id.slice(0, 8)}</Td>
                       <Td>{u.plan}</Td>
@@ -301,7 +291,7 @@ function AdminUsagePage() {
                         </td>
                       </tr>
                     )}
-                  </>
+                  </Fragment>
                 ))}
                 {tableQ.isLoading && (
                   <tr>
@@ -319,15 +309,7 @@ function AdminUsagePage() {
   );
 }
 
-function Card({
-  label,
-  value,
-  hint,
-}: {
-  label: string;
-  value: number | undefined;
-  hint?: string;
-}) {
+function Card({ label, value, hint }: { label: string; value: number | undefined; hint?: string }) {
   return (
     <div className="rounded-lg border border-border p-3">
       <p className="text-[11px] text-text-mute">{label}</p>
@@ -337,13 +319,7 @@ function Card({
   );
 }
 
-function Th({
-  children,
-  align,
-}: {
-  children?: React.ReactNode;
-  align?: "right";
-}) {
+function Th({ children, align }: { children?: React.ReactNode; align?: "right" }) {
   return (
     <th
       className={`px-3 py-2 font-normal text-[11px] uppercase tracking-wide ${

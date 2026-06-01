@@ -3,9 +3,42 @@ import { z } from "zod";
 import { requireAdmin } from "@/lib/prompts/require-admin.server";
 import { supabaseAdmin as _supabaseAdmin } from "@/integrations/supabase/client.server";
 
-// Types.ts is auto-generated; cast to any here so newly-added
-// table (assistant_chat_events) and RPC (admin_user_directory) compile.
-const supabaseAdmin = _supabaseAdmin as any;
+type LooseRow = Record<string, unknown>;
+type QueryError = { message: string } | null;
+type QueryResult<T = LooseRow> = {
+  data?: T[] | null;
+  error?: QueryError;
+  count?: number | null;
+};
+type DbQuery<T = LooseRow> = PromiseLike<QueryResult<T>> & {
+  select: (columns: string, options?: Record<string, unknown>) => DbQuery<T>;
+  gte: (column: string, value: string) => DbQuery<T>;
+  lte: (column: string, value: string) => DbQuery<T>;
+  eq: (column: string, value: unknown) => DbQuery<T>;
+  in: (column: string, values: string[]) => DbQuery<T>;
+  order: (column: string, options?: Record<string, unknown>) => DbQuery<T>;
+  limit: (count: number) => DbQuery<T>;
+};
+type AdminAuthUser = {
+  id: string;
+  email?: string | null;
+  created_at?: string;
+  last_sign_in_at?: string | null;
+};
+type LooseSupabaseAdmin = {
+  from: (table: string) => DbQuery;
+  auth: {
+    admin: {
+      listUsers: (args: {
+        page: number;
+        perPage: number;
+      }) => Promise<{ data?: { users?: AdminAuthUser[] }; error?: QueryError }>;
+    };
+  };
+};
+
+// Types.ts is auto-generated; use a narrow local interface for newly-added admin tables.
+const supabaseAdmin = _supabaseAdmin as unknown as LooseSupabaseAdmin;
 
 // ---------- helpers ----------
 
@@ -22,12 +55,74 @@ function range(input: { from?: string; to?: string }) {
   return { from, to };
 }
 
+const PLAN_KEYS = ["free", "starter", "growth", "pro", "scale"] as const;
+const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "trialing", "past_due"]);
+
+type PlanKey = (typeof PLAN_KEYS)[number];
+
+function normalizePlan(plan: unknown): PlanKey {
+  const value = String(plan ?? "free").toLowerCase();
+  return (PLAN_KEYS as readonly string[]).includes(value) ? (value as PlanKey) : "free";
+}
+
+function chunk<T>(items: T[], size = 500): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
+async function listAuthUsers(): Promise<AdminAuthUser[]> {
+  const users: AdminAuthUser[] = [];
+  const perPage = 1000;
+  for (let page = 1; page <= 100; page += 1) {
+    const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage });
+    if (error) throw new Error(`auth users: ${error.message}`);
+    const batch = ((data?.users ?? []) as AdminAuthUser[]).filter((u) => u.id);
+    users.push(...batch);
+    if (batch.length < perPage) break;
+  }
+  return users;
+}
+
+async function selectByIds(table: string, select: string, col: string, ids: string[]) {
+  const rows: LooseRow[] = [];
+  for (const group of chunk(ids)) {
+    const { data, error } = await supabaseAdmin
+      .from(table)
+      .select(select)
+      .in(col, group)
+      .limit(50000);
+    if (error) throw new Error(`${table}: ${error.message}`);
+    rows.push(...(data ?? []));
+  }
+  return rows;
+}
+
+function text(row: LooseRow | undefined, key: string): string | null {
+  const value = row?.[key];
+  return typeof value === "string" ? value : null;
+}
+
+function numberValue(row: LooseRow | undefined, key: string): number {
+  const value = row?.[key];
+  return typeof value === "number" ? value : 0;
+}
+
+function signupCount(users: AdminAuthUser[], from: Date, to: Date) {
+  const fromMs = from.getTime();
+  const toMs = to.getTime();
+  return users.reduce((acc, u) => {
+    const t = u.created_at ? new Date(u.created_at).getTime() : Number.NaN;
+    return Number.isFinite(t) && t >= fromMs && t <= toMs ? acc + 1 : acc;
+  }, 0);
+}
+
 async function countRows(
   table: string,
   col: string,
   from: Date,
   to: Date,
-  extra?: (q: any) => any,
+  extra?: (q: DbQuery) => DbQuery,
 ) {
   let q = supabaseAdmin
     .from(table)
@@ -50,10 +145,9 @@ export const getUsageSummary = createServerFn({ method: "GET" })
     const span = to.getTime() - from.getTime();
     const prevFrom = new Date(from.getTime() - span);
     const prevTo = from;
+    const authUsers = await listAuthUsers();
 
     const [
-      signups,
-      prevSignups,
       jobsCreated,
       jobsPublished,
       applications,
@@ -62,8 +156,6 @@ export const getUsageSummary = createServerFn({ method: "GET" })
       assistantChats,
       assistantFallbacks,
     ] = await Promise.all([
-      countRows("profiles", "created_at", from, to),
-      countRows("profiles", "created_at", prevFrom, prevTo),
       countRows("jobs", "created_at", from, to),
       countRows("jobs", "published_at", from, to, (q) => q.eq("published", true)),
       countRows("applications", "created_at", from, to),
@@ -75,10 +167,8 @@ export const getUsageSummary = createServerFn({ method: "GET" })
       ),
     ]);
 
-    // Total users + active users
-    const { count: totalUsers } = await supabaseAdmin
-      .from("profiles")
-      .select("id", { count: "exact", head: true });
+    const signups = signupCount(authUsers, from, to);
+    const prevSignups = signupCount(authUsers, prevFrom, prevTo);
 
     // Active = had any job/application/candidate/outreach/message activity in range
     const activeIds = new Set<string>();
@@ -91,6 +181,15 @@ export const getUsageSummary = createServerFn({ method: "GET" })
         .limit(5000);
       (rows ?? []).forEach((r: any) => r.user_id && activeIds.add(r.user_id));
     }
+    const { data: appActiveRows } = await supabaseAdmin
+      .from("applications")
+      .select("recruiter_user_id")
+      .gte("created_at", from.toISOString())
+      .lte("created_at", to.toISOString())
+      .limit(5000);
+    (appActiveRows ?? []).forEach(
+      (r: any) => r.recruiter_user_id && activeIds.add(r.recruiter_user_id),
+    );
 
     // Sourcing credits used in current month (sum)
     const period = new Date().toISOString().slice(0, 7);
@@ -105,7 +204,7 @@ export const getUsageSummary = createServerFn({ method: "GET" })
 
     return {
       range: { from: from.toISOString(), to: to.toISOString() },
-      totalUsers: totalUsers ?? 0,
+      totalUsers: authUsers.length,
       activeUsers: activeIds.size,
       signups,
       prevSignups,
@@ -132,11 +231,33 @@ const metricSchema = z.enum([
 
 export const getUsageTimeseries = createServerFn({ method: "GET" })
   .middleware([requireAdmin])
-  .inputValidator((d) =>
-    rangeSchema.extend({ metric: metricSchema }).parse(d),
-  )
+  .inputValidator((d) => rangeSchema.extend({ metric: metricSchema }).parse(d))
   .handler(async ({ data }) => {
     const { from, to } = range(data);
+    if (data.metric === "signups") {
+      const users = await listAuthUsers();
+      const byDay = new Map<string, number>();
+      users.forEach((u) => {
+        if (!u.created_at) return;
+        const t = new Date(u.created_at).getTime();
+        if (t < from.getTime() || t > to.getTime()) return;
+        const day = u.created_at.slice(0, 10);
+        byDay.set(day, (byDay.get(day) ?? 0) + 1);
+      });
+
+      const out: { day: string; count: number }[] = [];
+      const cursor = new Date(from);
+      cursor.setUTCHours(0, 0, 0, 0);
+      const endDay = new Date(to);
+      endDay.setUTCHours(0, 0, 0, 0);
+      while (cursor.getTime() <= endDay.getTime()) {
+        const day = cursor.toISOString().slice(0, 10);
+        out.push({ day, count: byDay.get(day) ?? 0 });
+        cursor.setUTCDate(cursor.getUTCDate() + 1);
+      }
+      return out;
+    }
+
     const cfg: Record<
       z.infer<typeof metricSchema>,
       { table: string; col: string; filter?: (q: any) => any }
@@ -201,8 +322,41 @@ export const getUserUsageTable = createServerFn({ method: "GET" })
       .parse(d ?? {}),
   )
   .handler(async ({ data }) => {
-    const { data: dir, error } = await supabaseAdmin.rpc("admin_user_directory");
-    if (error) throw new Error(error.message);
+    const authUsers = await listAuthUsers();
+    const authIds = authUsers.map((u) => u.id);
+
+    const [profileRows, subscriptionRows] = authIds.length
+      ? await Promise.all([
+          selectByIds(
+            "profiles",
+            "id, plan, credits_remaining, sourcing_projects_used",
+            "id",
+            authIds,
+          ),
+          selectByIds(
+            "subscriptions",
+            "user_id, tier_key, status, created_at, current_period_end",
+            "user_id",
+            authIds,
+          ).catch((err) => {
+            console.error("[admin usage] subscriptions read failed:", err.message);
+            return [];
+          }),
+        ])
+      : [[], []];
+
+    const profilesById = new Map<string, any>();
+    profileRows.forEach((p) => profilesById.set(p.id, p));
+
+    const activeSubscriptionByUser = new Map<string, any>();
+    subscriptionRows.forEach((sub) => {
+      if (!ACTIVE_SUBSCRIPTION_STATUSES.has(String(sub.status))) return;
+      const previous = activeSubscriptionByUser.get(sub.user_id);
+      const prevSort = previous?.current_period_end ?? previous?.created_at ?? "";
+      const nextSort = sub.current_period_end ?? sub.created_at ?? "";
+      if (!previous || nextSort > prevSort) activeSubscriptionByUser.set(sub.user_id, sub);
+    });
+
     const users: Array<{
       id: string;
       email: string | null;
@@ -211,7 +365,19 @@ export const getUserUsageTable = createServerFn({ method: "GET" })
       plan: string;
       credits_remaining: number;
       sourcing_projects_used: number;
-    }> = dir ?? [];
+    }> = authUsers.map((u) => {
+      const profile = profilesById.get(u.id);
+      const activeSub = activeSubscriptionByUser.get(u.id);
+      return {
+        id: u.id,
+        email: u.email ?? null,
+        created_at: u.created_at ?? new Date(0).toISOString(),
+        last_sign_in_at: u.last_sign_in_at ?? null,
+        plan: normalizePlan(activeSub?.tier_key ?? profile?.plan),
+        credits_remaining: Number(profile?.credits_remaining ?? 0),
+        sourcing_projects_used: Number(profile?.sourcing_projects_used ?? 0),
+      };
+    });
 
     const ids = users.map((u) => u.id);
     if (ids.length === 0) return [];
@@ -278,9 +444,7 @@ export const getUserUsageTable = createServerFn({ method: "GET" })
 
     if (data.search) {
       const q = data.search.toLowerCase();
-      result = result.filter(
-        (r) => (r.email ?? "").toLowerCase().includes(q) || r.id.includes(q),
-      );
+      result = result.filter((r) => (r.email ?? "").toLowerCase().includes(q) || r.id.includes(q));
     }
     if (data.plan && data.plan !== "all") {
       result = result.filter((r) => r.plan === data.plan);
