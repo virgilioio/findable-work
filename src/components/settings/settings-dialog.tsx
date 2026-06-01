@@ -85,16 +85,21 @@ export type SettingsSection =
   | "account"
   | "help";
 
-const SECTIONS: { id: SettingsSection; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
-  { id: "general", label: "General", icon: SettingsIcon },
-  { id: "notifications", label: "Notifications", icon: Bell },
-  { id: "personalization", label: "Personalization", icon: Sparkles },
-  { id: "connections", label: "Connections", icon: Plug },
-  { id: "billing", label: "Usage & billing", icon: CreditCard },
-  { id: "data", label: "Data controls", icon: Database },
-  { id: "security", label: "Security", icon: Shield },
-  { id: "account", label: "Account", icon: UserIcon },
-  { id: "help", label: "Help", icon: LifeBuoy },
+const SECTION_DEFS: {
+  id: SettingsSection;
+  labelKey: string;
+  labelFallback: string;
+  icon: React.ComponentType<{ className?: string }>;
+}[] = [
+  { id: "general", labelKey: "settings.general", labelFallback: "General", icon: SettingsIcon },
+  { id: "notifications", labelKey: "settings.notifications", labelFallback: "Notifications", icon: Bell },
+  { id: "personalization", labelKey: "settings.personalization", labelFallback: "Personalization", icon: Sparkles },
+  { id: "connections", labelKey: "settings.connections", labelFallback: "Connections", icon: Plug },
+  { id: "billing", labelKey: "settings.billing", labelFallback: "Usage & billing", icon: CreditCard },
+  { id: "data", labelKey: "settings.data", labelFallback: "Data controls", icon: Database },
+  { id: "security", labelKey: "settings.security", labelFallback: "Security", icon: Shield },
+  { id: "account", labelKey: "settings.account", labelFallback: "Account", icon: UserIcon },
+  { id: "help", labelKey: "settings.help", labelFallback: "Help", icon: LifeBuoy },
 ];
 
 function usePersistedState<T>(key: string, initial: T): [T, (v: T) => void] {
@@ -128,6 +133,8 @@ export function SettingsDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const [active, setActive] = useState<SettingsSection>(section ?? "general");
+  const { t } = useLanguage();
+  const sections = SECTION_DEFS.map((s) => ({ ...s, label: t(s.labelKey, s.labelFallback) }));
 
   useEffect(() => {
     if (open && section) setActive(section);
@@ -136,7 +143,7 @@ export function SettingsDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl h-[600px] p-0 gap-0 overflow-hidden flex flex-col">
-        <DialogTitle className="sr-only">Settings</DialogTitle>
+        <DialogTitle className="sr-only">{t("settings.title", "Settings")}</DialogTitle>
         <DialogDescription className="sr-only">
           Manage your preferences, integrations and account.
         </DialogDescription>
@@ -144,10 +151,10 @@ export function SettingsDialog({
           {/* Rail */}
           <aside className="w-56 shrink-0 border-r border-border bg-bg-side py-4">
             <div className="px-4 pb-3 text-[13px] font-semibold text-text">
-              Settings
+              {t("settings.title", "Settings")}
             </div>
             <nav className="space-y-0.5 px-2">
-              {SECTIONS.map((s) => {
+              {sections.map((s) => {
                 const Icon = s.icon;
                 const on = active === s.id;
                 return (
@@ -172,7 +179,7 @@ export function SettingsDialog({
           <div className="flex flex-1 min-w-0 min-h-0 flex-col overflow-hidden">
             <header className="flex h-12 items-center justify-between border-b border-border px-5">
               <h2 className="text-[14px] font-semibold text-text">
-                {SECTIONS.find((s) => s.id === active)?.label}
+                {sections.find((s) => s.id === active)?.label}
               </h2>
             </header>
             <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5">
