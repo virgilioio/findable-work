@@ -318,16 +318,29 @@ export async function enrichApolloProfiles(
 }
 
 /**
- * Reveal phone number for a single Apollo profile. This DOES consume
- * Apollo export credits — only call when the user explicitly opts in.
+ * Request an async phone-number reveal for a single Apollo profile.
+ * Apollo requires a webhook URL for phone reveals and delivers results
+ * asynchronously (minutes later) to that webhook. This call returns
+ * once Apollo has accepted the request — the phone is saved by the
+ * webhook handler at /api/public/apollo/phone when it arrives.
+ *
+ * Credits are only consumed when a number is actually returned, which
+ * we account for in the webhook handler.
  */
-export async function revealApolloPhone(apolloId: string): Promise<string | null> {
-  if (!apolloId) return null;
-  const data = await apolloFetch("/people/bulk_match", {
+export async function requestApolloPhoneReveal(
+  apolloId: string,
+): Promise<{ queued: boolean }> {
+  if (!apolloId) throw new Error("Missing Apollo person id");
+  const webhookUrl = process.env.APOLLO_WEBHOOK_URL;
+  if (!webhookUrl) {
+    throw new Error(
+      "APOLLO_WEBHOOK_URL is not configured. Set it to the public phone-reveal webhook URL (including the ?token=... secret).",
+    );
+  }
+  await apolloFetch("/people/bulk_match", {
     details: [{ id: apolloId }],
     reveal_phone_number: true,
+    webhook_url: webhookUrl,
   });
-  const m = data.matches?.[0];
-  if (!m) return null;
-  return m.phone_numbers?.[0]?.sanitized_number ?? m.phone_numbers?.[0]?.raw_number ?? null;
+  return { queued: true };
 }
