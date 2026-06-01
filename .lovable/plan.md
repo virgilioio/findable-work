@@ -1,95 +1,137 @@
+
 ## Goal
 
-Move credit billing from "flat 10 credits per sourcing run" to **1 credit per candidate actually added** (free for internal/cached reuse), keep **5 credits per phone reveal** unchanged, and update the Settings → Usage & Billing legends so the math reflects the new model.
+Right now the chat can talk about an "interview loop" but the **Interviews tab doesn't exist** in the conversation workspace. We'll add it, make it editable, and let the chat AI build/edit it via a tool — same pattern as `create_job` / `draft_outreach`. We'll also wire the **Schedule** view to Google Calendar (which already has OAuth + token refresh in `user_calendar_connections`).
 
-## Current behavior (bug)
+## 1. Data model (one SQL migration, you run manually)
 
-- `SOURCING_RUN_COST = 10` is debited **upfront**, once per run, regardless of how many candidates come back. Phone reveal already correctly charges 5 per reveal via `spendCreditsAdmin` in `candidates.functions.ts`.
-- Source-more path never spends credits at all (it only increments `sourcing_credits_usage`, not the real ledger).
-- Bundle taglines say "~50 / ~150 / ~400 / ~1000 sourcing runs" computed as `credits / 10`. With the new model, 500 credits should correspond to ~25 runs (1 initial 20 + N×10 source-more), not 50.
+New table `interview_loops` (one per job/conversation):
 
-## Target model
-
-- **Initial sourcing run** = up to 20 new candidates → up to 20 credits.
-- **Source again** = up to 10 new candidates → up to 10 credits.
-- **Phone reveal** = 5 credits each (unchanged).
-- Internal reuse (clone existing candidate row across conversations) stays **free**.
-- Cached run hits (within 24h) stay **free**.
-- Charging is **per candidate actually inserted** (not per row attempted), debited right after each successful insert.
-- If balance hits 0 mid-run, stop inserting further fresh candidates, surface a partial-success state with `credits_exhausted: true` so the UI/chat can tell the user.
-
-## Backend changes
-
-### 1. `src/lib/billing/bundles.ts`
-- Add `CANDIDATE_ADD_COST = 1`.
-- Keep `PHONE_REVEAL_COST = 5`.
-- Deprecate `SOURCING_RUN_COST` (keep export = 1 for backwards-compat references, but stop using it for the run gate).
-- Rewrite taglines using the new math: `initial 20 + remaining/10 source-mores`. For 500 credits → "~1 initial run + ~48 source-mores (≈500 candidates)". Final copy in implementation step — short and honest, e.g.:
-  - Starter 500 → "≈500 candidates · ~49 source-mores"
-  - Growth 1,500 → "≈1,500 candidates · ~149 source-mores"
-  - Pro 4,000 → "≈4,000 candidates"
-  - Scale 10,000 → "≈10,000 candidates"
-
-### 2. `src/lib/sourcing/search.functions.ts` (initial run)
-- Remove the upfront `spendCreditsAdmin({ amount: SOURCING_RUN_COST })` block.
-- Keep a **balance pre-check** (read `profiles.credits_remaining`); if `balance < 1`, short-circuit with the existing `insufficient_credits` shape so the UI behavior is unchanged.
-- After each successful candidate `INSERT INTO candidates` for fresh Apollo/PDL rows, call `spendCreditsAdmin({ amount: 1, type: "candidate_add", reason: "Candidate sourced", metadata: { project_id, source: "apollo"|"pdl", candidate_id } })`.
-- Track `creditsSpent` and `creditsExhausted` and return them in the response so the chat/UI can surface "added 14 of 20 — out of credits".
-
-### 3. `src/lib/sourcing/agent.server.ts` (chat-agent run)
-- Same change as `search.functions.ts`: drop the upfront `SOURCING_RUN_COST` debit, replace with balance pre-check + per-insert `candidate_add` debit.
-- Update the structured `insufficient_credits` payload returned to the agent to use `credits_required: 1` (or surface `creditsSpent` + `creditsExhausted` for partial runs).
-
-### 4. `src/lib/sourcing/source-more.functions.ts`
-- Add the same balance pre-check + per-insert `candidate_add` debit for both Apollo-fresh and PDL-fresh branches.
-- Internal reuse (`cloneInternal`) stays free.
-- Keep the existing `increment_sourcing_usage` call for the analytics counter, but it's no longer the source of truth for billing.
-
-### 5. `src/routes/api/chat.ts`
-- Update the `insufficient_credits` tool-result message wording from "Each sourcing run costs N credits" to "Each candidate costs 1 credit, phone reveals cost 5".
-
-### 6. `src/lib/billing/credits.functions.ts` (`getCreditsSummary`)
-- Count `candidate_add` ledger rows in 30d stats: return `candidatesAdded30d` alongside the existing `sourcingRuns30d` (which we'll keep counting from `sourcing_run` rows for backwards-compat with historical data).
-- Add `candidateAddCost: 1` to the returned shape.
-
-## Frontend changes
-
-### 7. `src/components/settings/settings-dialog.tsx` (Usage & billing)
-- Hero strip: replace "{sourcingRunCost} credits / sourcing run" with two lines:
-  - "1 credit / candidate sourced"
-  - "{phoneRevealCost} credits / phone reveal"
-- 30-day stats sub-line: "{stats30d.candidatesAdded} candidates · {stats30d.phoneReveals} reveals" (drop the misleading "runs" count, or keep it as a small secondary).
-- Plan + top-up cards: render the new taglines from `bundles[i].tagline`.
-- "Low balance" threshold: change from `balance < sourcingRunCost` to `balance < 20` (one initial run's worth).
-
-### 8. Any other UI mention of "10 credits per run"
-- Quick grep for "sourcing run" / "10 credits" copy in onboarding, empty states, and tooltips, and align wording with "1 credit per candidate · 5 per phone reveal".
-
-## Database / SQL (you run manually)
-
-A single idempotent migration script. Schema-only: no changes to existing functions; we just need a new ledger `type` value to be acceptable (already free-text `text`, so no schema change required) and ideally an index for the new query. Final SQL we'll generate, but the gist:
-
-```sql
--- Optional: helpful index for stats queries on candidate_add rows
-CREATE INDEX IF NOT EXISTS credit_ledger_user_type_created_idx
-  ON public.credit_ledger (user_id, type, created_at DESC);
-
-NOTIFY pgrst, 'reload schema';
+```text
+id uuid pk
+user_id uuid
+conversation_id uuid unique  -- one loop per project
+job_id uuid nullable
+stages jsonb default '[]'    -- ordered array (see shape below)
+context text default ''      -- AI-written interview context / what to assess
+prep_tips text default ''    -- AI-written prep tips
+created_at, updated_at
 ```
 
-No data backfill — historical `sourcing_run` ledger rows stay as-is.
+`stages[]` shape:
+```text
+{ id, order, name, format: "video"|"async"|"onsite"|"phone",
+  duration_min: number,
+  interviewers: [{ name, role, email? }],
+  description, focus_areas[], suggested_questions[] }
+```
 
-## Verification
+New table `interview_schedules` (the booked slots):
+```text
+id uuid pk, user_id, conversation_id, loop_id,
+candidate_id uuid nullable, candidate_name text,
+stage_id text, stage_name text,
+start_at timestamptz nullable, end_at timestamptz nullable,
+is_async bool default false,
+google_event_id text nullable,
+status text default 'pending'  -- pending|confirmed|sent|cancelled
+```
 
-1. Fresh account with 50 seed credits → run a sourcing search from the chat → confirm `credit_ledger` shows N `candidate_add` rows (one per inserted candidate), balance drops by N.
-2. Run "Source again" → confirm up to 10 more `candidate_add` rows added.
-3. Drain balance to 3 → run a fresh search → confirm exactly 3 candidates get inserted and response signals `credits_exhausted: true`.
-4. Reveal a phone → confirm 5-credit `phone_reveal` row appears, balance drops by 5.
-5. Run the same search again within 24h → confirm cache hit, zero new ledger rows.
-6. Settings → Usage & billing: hero shows "1 / candidate · 5 / phone reveal", taglines match new math, 30d stats show candidates+reveals.
+Both tables: RLS scoped to `auth.uid() = user_id`, GRANTs to `authenticated` + `service_role`, `NOTIFY pgrst, 'reload schema'`.
+
+## 2. Server functions (`src/lib/interviews/*.functions.ts`)
+
+- `getInterviewLoop({ conversationId })` — loop + schedules.
+- `upsertInterviewLoop({ conversationId, stages, context?, prep_tips? })` — used by both the UI (manual edits) and the chat tool. Validates with Zod, reorders by `order`.
+- `updateStage`, `addStage`, `removeStage`, `reorderStages` — thin wrappers for the UI's edit affordances.
+- `addInterviewSchedule({ candidateId|name, stageId, start_at })` — manual add (chat agent or user).
+- `confirmSchedule({ scheduleId })` and `confirmAllSchedules({ loopId })` — see §4.
+- `cancelSchedule({ scheduleId })` — deletes Google event if present.
+
+## 3. AI agent integration (`src/routes/api/chat.ts`)
+
+Add one tool that mirrors `create_job`:
+
+- **`build_interview_loop`** — args: `stages[]` (name, format, duration_min, interviewers[]), optional `context`, `prep_tips`. Server-side: calls `upsertInterviewLoop`, then for stages missing `description`/`focus_areas`/`suggested_questions` runs a single OpenAI completion to fill them (using the existing `openaiChat` helper + job context). Returns `{ loop_id, stages }`. Chat result triggers a tab pulse + auto-open Interviews tab (same `onOpenTab` hook as Job/Outreach).
+
+System-prompt rule (added as a new partial under `src/lib/prompts/`): whenever the user asks for an interview process / loop / "set up interviews", the agent **must** first ask via `ask_clarifying_questions`:
+1. Stages (names, in order)
+2. Who interviews each one (name + role; email optional)
+3. Duration per stage
+
+Once those are answered, call `build_interview_loop` and the AI fills in context, prep tips, focus areas, and suggested questions itself.
+
+Also: extend `get_conversation_context` to include loop stages so follow-up turns can reference them in prose.
+
+## 4. Google Calendar wiring
+
+Reuse existing `googleFetch(userId, "calendar", url, init)` from `src/lib/outreach/google-oauth.server.ts`.
+
+- New helper `src/lib/interviews/calendar.server.ts`:
+  - `createCalendarEvent({ userId, schedule, stage, candidate })` → POST to `https://www.googleapis.com/calendar/v3/calendars/primary/events` with attendees (interviewers + candidate email if present), `conferenceData` for Google Meet auto-link, description = stage.description + prep tips. Stores returned `id` in `interview_schedules.google_event_id` and flips `status='confirmed'`.
+  - `deleteCalendarEvent` for cancel.
+  - `listBusyForWeek({ userId, weekStart })` — freebusy query, optional, used by a future "reshuffle" action (out of scope to fully implement; stub returns empty).
+
+- `confirmAllSchedules` loops over pending schedules and calls `createCalendarEvent`. Surfaces per-row errors instead of failing the whole batch.
+
+If `user_calendar_connections` row missing → server fn throws structured `{ code: "calendar_not_connected" }`, UI shows connect CTA in Schedule view.
+
+## 5. Public candidate-facing chat
+
+`src/routes/api/public/jobs/$slug/chat.ts`: load the job's `interview_loops` row (via `conversation_id`) using `supabaseAdmin` (no auth). Inject a compact system message:
+
+```text
+Interview process for this role:
+1) Recruiter screen — 30 min video with Ana Torres. Motivation, comp expectations, basic fit.
+2) Sales challenge — 60 min async. …
+```
+
+So when a candidate asks "what's the interview process?" the public AI can answer.
+
+## 6. UI — `src/components/interviews/interviews-panel.tsx`
+
+Match the visual guidelines from the attached screenshots — same toolbar, same card/divider treatment as Job and Candidates panels (semantic tokens only).
+
+**Subheader**: title + "{N}-stage loop · {M} interviews scheduled this week" + Loop/Schedule segmented control + "Send invites →" button.
+
+**Loop view** (default, also the only view when calendar isn't connected):
+- "Interview loop" heading, "{total} total · {count} stages" right-aligned.
+- Numbered stage cards. Each row inline-editable:
+  - Stage name (click-to-edit text input)
+  - Format pill (select: Video / Async / Onsite / Phone)
+  - Duration (number input + "min")
+  - Interviewer avatar + name (combobox; suggestions from previously-used interviewers)
+  - Description (expandable textarea)
+  - `…` menu: Move up, Move down, Duplicate, Delete
+- Drag handle on left for reordering (use `@dnd-kit/core` — already in deps if present, otherwise simple up/down buttons; check before adding).
+- "+ Add stage" dashed button at bottom.
+- All edits debounced-save via the upsert server fn; optimistic UI.
+
+**Schedule view**:
+- If `user_calendar_connections` missing → centered card: "Connect Google Calendar to schedule interviews" + button reusing `startCalendarConnect` from `src/lib/outreach/calendar.functions.ts`.
+- Else: Week header with `<` `>` arrows, Mon–Fri columns, each cell shows scheduled `interview_schedules` rows (time, candidate, stage, "with {interviewer}"). Bottom action bar: "Findable has pre-blocked these slots…" + Reshuffle (stubbed) + Confirm all (calls `confirmAllSchedules`).
+
+## 7. Tabbar integration
+
+`src/routes/_authenticated/app.c.$id.tsx`:
+- Add `"interviews"` to the `tab` union.
+- Add `<TabButton label="Interviews" />` after Outreach.
+- Render `<InterviewsPanel conversationId={...} />` when active.
+- Add `interviewsPulse` (true when `build_interview_loop` tool ran in the last turn) — same mechanism as `outreachPulse`.
 
 ## Out of scope
 
-- Refunds/reversals for historical `sourcing_run` debits.
-- Refactoring the duplicated Apollo+PDL insert logic across `search.functions.ts`, `agent.server.ts`, and `source-more.functions.ts` into one shared helper (worth doing later given we're touching all three).
-- Changing the Stripe bundle prices or `monthly_credits` values.
+- "Reshuffle" actually re-solving against free/busy (stubbed button).
+- Per-candidate interview history / scorecards.
+- Editing screening questions from this tab (already lives in Job tab).
+- Migrating historical conversations that referenced loops in chat — they'll just need to be re-built once.
+
+## Verification
+
+1. Run the migration manually.
+2. In a fresh conversation, ask the chat to "set up the interview process". Verify it asks the three required questions (stages, interviewers, durations) before doing anything.
+3. Answer → confirm `build_interview_loop` runs, Interviews tab pulses, and the loop renders with AI-filled descriptions + focus areas.
+4. Edit a stage name, reorder, add a stage, delete one — refresh, persists.
+5. Without Google Calendar connected → Schedule view shows connect CTA.
+6. Connect → manually add a schedule via chat ("book Roberto for the recruiter screen Monday 10am"), click Confirm all → Google Calendar event created with attendees + Meet link, schedule row flips to `confirmed`.
+7. On the public job page (`/jobs/$slug`), ask the AI "what's the interview process?" → it lists the stages.
