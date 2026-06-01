@@ -794,14 +794,41 @@ function PermissionsPreviewDialog({
 
 function DataPane() {
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const exportFn = useServerFn(exportCandidatesCsv);
+  const exportMut = useMutation({
+    mutationFn: () => exportFn({}),
+    onSuccess: ({ csv, count }) => {
+      if (count === 0) {
+        toast.message("No unlocked candidates to export yet.");
+        return;
+      }
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const date = new Date().toISOString().slice(0, 10);
+      a.href = url;
+      a.download = `findable-candidates-${date}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success(`Exported ${count} candidate${count === 1 ? "" : "s"}`);
+    },
+    onError: (e) => toast.error((e as Error).message || "Export failed"),
+  });
   return (
     <div>
-      <Row label="Export data" description="Download your conversations and candidates.">
+      <Row
+        label="Export data"
+        description="Download a CSV of the candidates you've unlocked in this account."
+      >
         <button
-          disabled
-          className="rounded-lg border border-border bg-bg px-3 py-1.5 text-[12.5px] text-text-mute opacity-60"
+          onClick={() => exportMut.mutate()}
+          disabled={exportMut.isPending}
+          className="flex items-center gap-2 rounded-lg border border-border bg-bg px-3 py-1.5 text-[12.5px] text-text transition hover:bg-bg-hover disabled:opacity-60"
         >
-          Export
+          {exportMut.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+          {exportMut.isPending ? "Exporting…" : "Export CSV"}
         </button>
       </Row>
       <Row
