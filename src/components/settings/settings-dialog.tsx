@@ -874,11 +874,32 @@ function SecurityPane({ onClose }: { onClose: () => void }) {
 
 function AccountPane() {
   const [email, setEmail] = useState<string>("");
-  const [name, setName] = usePersistedState<string>("findable:display-name", "");
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const qc = useQueryClient();
+  const getProfileFn = useServerFn(getProfile);
+  const updateNameFn = useServerFn(updateDisplayName);
+
+  const { data: profile, isLoading: profileLoading } = useQuery({
+    queryKey: ["profile"],
+    queryFn: () => getProfileFn(),
+  });
+
+  const updateNameMut = useMutation({
+    mutationFn: (name: string) => updateNameFn({ data: { displayName: name } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["profile"] });
+      toast.success("Display name updated");
+    },
+    onError: (err) => {
+      toast.error("Failed to update name: " + (err as Error).message);
+    },
+  });
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? ""));
   }, []);
+
+  const name = profile?.displayName ?? "";
   const initial = (name || email || "?")[0]?.toUpperCase() ?? "?";
   return (
     <div>
@@ -896,7 +917,8 @@ function AccountPane() {
       <Row label="Display name" description="Shown to your teammates.">
         <Input
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={(e) => updateNameMut.mutate(e.target.value)}
+          disabled={profileLoading || updateNameMut.isPending}
           className="h-8 w-[220px]"
           placeholder="Your name"
         />
