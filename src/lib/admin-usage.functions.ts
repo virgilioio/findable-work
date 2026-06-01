@@ -197,6 +197,30 @@ export const getUsageTimeseries = createServerFn({ method: "GET" })
   )
   .handler(async ({ data }) => {
     const { from, to } = range(data);
+    if (data.metric === "signups") {
+      const users = await listAuthUsers();
+      const byDay = new Map<string, number>();
+      users.forEach((u) => {
+        if (!u.created_at) return;
+        const t = new Date(u.created_at).getTime();
+        if (t < from.getTime() || t > to.getTime()) return;
+        const day = u.created_at.slice(0, 10);
+        byDay.set(day, (byDay.get(day) ?? 0) + 1);
+      });
+
+      const out: { day: string; count: number }[] = [];
+      const cursor = new Date(from);
+      cursor.setUTCHours(0, 0, 0, 0);
+      const endDay = new Date(to);
+      endDay.setUTCHours(0, 0, 0, 0);
+      while (cursor.getTime() <= endDay.getTime()) {
+        const day = cursor.toISOString().slice(0, 10);
+        out.push({ day, count: byDay.get(day) ?? 0 });
+        cursor.setUTCDate(cursor.getUTCDate() + 1);
+      }
+      return out;
+    }
+
     const cfg: Record<
       z.infer<typeof metricSchema>,
       { table: string; col: string; filter?: (q: any) => any }
