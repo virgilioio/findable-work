@@ -126,6 +126,8 @@ export type SourceResult = {
   insufficient_credits?: boolean;
   credits_required?: number;
   credits_balance?: number;
+  credits_spent?: number;
+  credits_exhausted?: boolean;
 };
 
 export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
