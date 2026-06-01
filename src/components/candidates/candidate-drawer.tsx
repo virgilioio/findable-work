@@ -283,9 +283,13 @@ function Overview({ c }: { c: Candidate }) {
     mutationFn: () => reveal({ data: { id: c.id } }),
     onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ["candidates", c.conversation_id] });
-      if ((res as any).noNumber) toast("No phone on file for this candidate");
-      else if (res.alreadyRevealed) toast("Phone already on file");
-      else toast("Phone revealed (1 credit)");
+      const r = res as any;
+      if (r.alreadyRevealed) toast("Phone already on file");
+      else if (r.status === "pending" && r.alreadyPending)
+        toast("Phone reveal already in progress — Apollo usually returns results within a few minutes");
+      else if (r.status === "pending")
+        toast("Phone reveal requested. Apollo usually returns a result within a few minutes — the profile will update automatically.");
+      else toast("Phone revealed");
     },
     onError: (e: any) => toast.error(e?.message ?? "Couldn't reveal phone"),
   });
