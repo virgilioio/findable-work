@@ -42,6 +42,8 @@ import {
   Upload,
   Check,
   Search as SearchIcon,
+  Linkedin,
+  ArrowRight as ArrowRightIcon,
 } from "@/components/findable-icons";
 import { cn } from "@/lib/utils";
 import { CandidatesPanel } from "@/components/candidates/candidates-panel";
@@ -814,6 +816,27 @@ function JobPanel({
   const [duplicating, setDuplicating] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [statusMenu, setStatusMenu] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const shareRef = useRef<HTMLDivElement | null>(null);
+  const [copiedInShare, setCopiedInShare] = useState(false);
+
+  useEffect(() => {
+    if (!shareOpen) return;
+    function onDown(e: MouseEvent) {
+      if (shareRef.current && !shareRef.current.contains(e.target as Node)) {
+        setShareOpen(false);
+      }
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setShareOpen(false);
+    }
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [shareOpen]);
 
   const { data: applications } = useQuery({
     queryKey: ["applications", conversationId],
@@ -1024,6 +1047,106 @@ function JobPanel({
               label={publishing ? "Publishing…" : "Publish"}
               primary
             />
+          )}
+          {published && publicUrl && (
+            <div className="relative" ref={shareRef}>
+              <HeaderBtn
+                onClick={() => setShareOpen((v) => !v)}
+                icon={<ShareIcon size={13} />}
+                label="Share"
+                primary
+              />
+              {shareOpen && (
+                <div className="absolute right-0 top-[calc(100%+4px)] z-30 w-[300px] rounded-lg border border-border-strong bg-bg-elev p-1 shadow-[var(--shadow-md)]">
+                  {/* URL row */}
+                  <div className="flex items-center gap-2 rounded-md px-2 py-1.5">
+                    <GlobeIcon size={14} className="shrink-0 text-text-mute" />
+                    <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-text">
+                      {publicUrl.replace(/^https?:\/\//, "")}
+                    </span>
+                    <button
+                      onClick={() => {
+                        if (!publicUrl) return;
+                        navigator.clipboard.writeText(publicUrl);
+                        setCopiedInShare(true);
+                        setTimeout(() => setCopiedInShare(false), 1800);
+                      }}
+                      className="flex h-6 shrink-0 items-center gap-1 rounded border border-border bg-bg px-1.5 text-[11px] text-text-mute hover:bg-bg-hover hover:text-text"
+                    >
+                      <Copy size={11} />
+                      {copiedInShare ? "Copied" : "Copy"}
+                    </button>
+                  </div>
+                  <div className="my-1 h-px bg-border" />
+                  <div className="px-2 pb-1 pt-0.5 text-[10px] font-medium uppercase tracking-wide text-text-faint">
+                    Share to
+                  </div>
+                  {(() => {
+                    const text = `We're hiring — ${form.title ?? ""}`;
+                    const u = encodeURIComponent(publicUrl);
+                    const t = encodeURIComponent(text);
+                    function open(url: string) {
+                      window.open(url, "_blank", "noopener");
+                      setShareOpen(false);
+                    }
+                    const canNativeShare =
+                      typeof navigator !== "undefined" &&
+                      typeof (navigator as any).share === "function";
+                    async function nativeShare() {
+                      try {
+                        await (navigator as any).share({
+                          title: form.title ?? "Job opening",
+                          text,
+                          url: publicUrl,
+                        });
+                      } catch {
+                        // user cancel or fallback
+                      } finally {
+                        setShareOpen(false);
+                      }
+                    }
+                    return (
+                      <>
+                        <ShareRow
+                          icon={<Linkedin size={14} />}
+                          label="LinkedIn"
+                          onClick={() =>
+                            open(`https://www.linkedin.com/sharing/share-offsite/?url=${u}`)
+                          }
+                        />
+                        <ShareRow
+                          icon={<WhatsAppIcon size={14} />}
+                          label="WhatsApp"
+                          onClick={() => open(`https://wa.me/?text=${t}%20${u}`)}
+                        />
+                        <ShareRow
+                          icon={<MailIcon size={14} />}
+                          label="Email"
+                          onClick={() =>
+                            open(
+                              `mailto:?subject=${t}&body=${encodeURIComponent(text + "\n\n" + publicUrl)}`,
+                            )
+                          }
+                        />
+                        {canNativeShare && (
+                          <ShareRow
+                            icon={<Dots size={14} />}
+                            label="More…"
+                            onClick={nativeShare}
+                          />
+                        )}
+                        <div className="my-1 h-px bg-border" />
+                        <ShareRow
+                          icon={<ArrowRightIcon size={14} />}
+                          label="Open posting"
+                          onClick={() => open(publicUrl)}
+                        />
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>
@@ -1387,5 +1510,60 @@ function HeaderBtn({
       {icon}
       <span>{label}</span>
     </button>
+  );
+}
+
+function ShareRow({
+  icon,
+  label,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-[13px] text-text hover:bg-bg-hover"
+    >
+      <span className="text-text-mute">{icon}</span>
+      <span>{label}</span>
+    </button>
+  );
+}
+
+function ShareIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M10 3v10 M5 8 L10 3 L15 8 M4 13v3a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-3" />
+    </svg>
+  );
+}
+
+function GlobeIcon({ size = 14, className }: { size?: number; className?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={className}>
+      <circle cx="10" cy="10" r="7" />
+      <path d="M3 10h14 M10 3c2 2.5 3 5 3 7s-1 4.5-3 7c-2-2.5-3-5-3-7s1-4.5 3-7Z" />
+    </svg>
+  );
+}
+
+function MailIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="5" width="14" height="10" rx="1.5" />
+      <path d="M3.5 6 L10 11 L16.5 6" />
+    </svg>
+  );
+}
+
+function WhatsAppIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M10 3a7 7 0 0 0-6 10.6L3 17l3.5-1a7 7 0 1 0 3.5-13Z" />
+      <path d="M7.5 8.5c.2 1.5 1.5 3 3 3.5l1-1c.5.2 1.4.5 1.8.6.1.5-.1 1.2-.4 1.5-1 .9-2.7.3-3.9-.6-1.2-.9-2.1-2.4-2.2-3.5 0-.4.3-1 .8-1.3.2 0 1 .1 1.2.2.1.4.3 1.3.4 1.7l-1 0-.7-1.1Z" />
+    </svg>
   );
 }
