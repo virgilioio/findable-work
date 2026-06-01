@@ -56,29 +56,30 @@ export const getInterviewLoop = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     const { supabase, userId } = context;
+    const sb = supabase as any;
     const [{ data: loop }, { data: schedules }, { data: calendarConn }] =
       await Promise.all([
-        supabase
+        sb
           .from("interview_loops")
           .select("*")
           .eq("conversation_id", data.conversationId)
           .maybeSingle(),
-        supabase
+        sb
           .from("interview_schedules")
           .select("*")
           .eq("conversation_id", data.conversationId)
           .order("start_at", { ascending: true, nullsFirst: false }),
-        supabase
+        sb
           .from("user_calendar_connections")
           .select("email")
           .eq("user_id", userId)
           .maybeSingle(),
       ]);
     return {
-      loop: loop ?? null,
-      schedules: schedules ?? [],
+      loop: (loop ?? null) as any,
+      schedules: (schedules ?? []) as any[],
       calendarConnected: Boolean(calendarConn),
-      calendarEmail: calendarConn?.email ?? null,
+      calendarEmail: (calendarConn as any)?.email ?? null,
     };
   });
 
@@ -99,6 +100,7 @@ export const upsertInterviewLoop = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     const { supabase, userId } = context;
+    const sb = supabase as any;
     const { data: job } = await supabase
       .from("jobs")
       .select("id")
@@ -108,7 +110,7 @@ export const upsertInterviewLoop = createServerFn({ method: "POST" })
     const patch: Record<string, unknown> = { stages };
     if (typeof data.context === "string") patch.context = data.context;
     if (typeof data.prep_tips === "string") patch.prep_tips = data.prep_tips;
-    const { data: row, error } = await supabase
+    const { data: row, error } = await sb
       .from("interview_loops")
       .upsert(
         {
@@ -122,14 +124,14 @@ export const upsertInterviewLoop = createServerFn({ method: "POST" })
       .select("*")
       .single();
     if (error) throw new Error(error.message);
-    return row;
+    return row as any;
   });
 
 // --------------------------------------------------------------------------
 // Single-stage mutations (used by the inline editor)
 
-async function loadLoopOwned(supabase: any, conversationId: string, userId: string) {
-  const { data: loop, error } = await supabase
+async function loadLoopOwned(sb: any, conversationId: string, userId: string) {
+  const { data: loop, error } = await sb
     .from("interview_loops")
     .select("*")
     .eq("conversation_id", conversationId)
@@ -137,7 +139,7 @@ async function loadLoopOwned(supabase: any, conversationId: string, userId: stri
   if (error) throw new Error(error.message);
   if (!loop) throw new Error("Interview loop not found");
   if (loop.user_id !== userId) throw new Error("Forbidden");
-  return loop;
+  return loop as any;
 }
 
 export const updateStage = createServerFn({ method: "POST" })
@@ -153,12 +155,13 @@ export const updateStage = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     const { supabase, userId } = context;
-    const loop = await loadLoopOwned(supabase, data.conversationId, userId);
+    const sb = supabase as any;
+    const loop = await loadLoopOwned(sb, data.conversationId, userId);
     const stages = Array.isArray(loop.stages) ? (loop.stages as InterviewStage[]) : [];
     const next = stages.map((s) =>
       s.id === data.stageId ? ({ ...s, ...data.patch, id: s.id } as InterviewStage) : s,
     );
-    const { error } = await supabase
+    const { error } = await sb
       .from("interview_loops")
       .update({ stages: reorder(next) })
       .eq("id", loop.id);
@@ -178,7 +181,8 @@ export const addStage = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     const { supabase, userId } = context;
-    const loop = await loadLoopOwned(supabase, data.conversationId, userId);
+    const sb = supabase as any;
+    const loop = await loadLoopOwned(sb, data.conversationId, userId);
     const stages = (loop.stages as InterviewStage[]) ?? [];
     const newStage: InterviewStage = {
       id: newStageId(),
@@ -194,15 +198,14 @@ export const addStage = createServerFn({ method: "POST" })
     let next: InterviewStage[];
     if (data.afterStageId) {
       const idx = stages.findIndex((s) => s.id === data.afterStageId);
-      next = idx === -1 ? [...stages, newStage] : [
-        ...stages.slice(0, idx + 1),
-        newStage,
-        ...stages.slice(idx + 1),
-      ];
+      next =
+        idx === -1
+          ? [...stages, newStage]
+          : [...stages.slice(0, idx + 1), newStage, ...stages.slice(idx + 1)];
     } else {
       next = [...stages, newStage];
     }
-    const { error } = await supabase
+    const { error } = await sb
       .from("interview_loops")
       .update({ stages: reorder(next) })
       .eq("id", loop.id);
@@ -222,10 +225,11 @@ export const removeStage = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     const { supabase, userId } = context;
-    const loop = await loadLoopOwned(supabase, data.conversationId, userId);
+    const sb = supabase as any;
+    const loop = await loadLoopOwned(sb, data.conversationId, userId);
     const stages = (loop.stages as InterviewStage[]) ?? [];
     const next = stages.filter((s) => s.id !== data.stageId);
-    const { error } = await supabase
+    const { error } = await sb
       .from("interview_loops")
       .update({ stages: reorder(next) })
       .eq("id", loop.id);
@@ -245,7 +249,8 @@ export const reorderStages = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     const { supabase, userId } = context;
-    const loop = await loadLoopOwned(supabase, data.conversationId, userId);
+    const sb = supabase as any;
+    const loop = await loadLoopOwned(sb, data.conversationId, userId);
     const stages = (loop.stages as InterviewStage[]) ?? [];
     const byId = new Map(stages.map((s) => [s.id, s]));
     const next: InterviewStage[] = [];
@@ -253,11 +258,10 @@ export const reorderStages = createServerFn({ method: "POST" })
       const s = byId.get(id);
       if (s) next.push({ ...s, order: i });
     });
-    // Append any stages that weren't in the list (defensive).
     stages.forEach((s) => {
       if (!data.stageIds.includes(s.id)) next.push({ ...s, order: next.length });
     });
-    const { error } = await supabase
+    const { error } = await sb
       .from("interview_loops")
       .update({ stages: next })
       .eq("id", loop.id);
@@ -286,7 +290,8 @@ export const addInterviewSchedule = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     const { supabase, userId } = context;
-    const loop = await loadLoopOwned(supabase, data.conversationId, userId);
+    const sb = supabase as any;
+    const loop = await loadLoopOwned(sb, data.conversationId, userId);
     const stages = (loop.stages as InterviewStage[]) ?? [];
     const stage = stages.find((s) => s.id === data.stageId);
     if (!stage) throw new Error("Unknown stage");
@@ -294,7 +299,7 @@ export const addInterviewSchedule = createServerFn({ method: "POST" })
     const end = start
       ? new Date(start.getTime() + (stage.duration_min ?? 30) * 60_000).toISOString()
       : null;
-    const { data: row, error } = await supabase
+    const { data: row, error } = await sb
       .from("interview_schedules")
       .insert({
         user_id: userId,
@@ -314,7 +319,7 @@ export const addInterviewSchedule = createServerFn({ method: "POST" })
       .select("*")
       .single();
     if (error) throw new Error(error.message);
-    return row;
+    return row as any;
   });
 
 export const cancelSchedule = createServerFn({ method: "POST" })
@@ -324,7 +329,8 @@ export const cancelSchedule = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     const { supabase, userId } = context;
-    const { data: row } = await supabase
+    const sb = supabase as any;
+    const { data: row } = await sb
       .from("interview_schedules")
       .select("*")
       .eq("id", data.scheduleId)
@@ -337,7 +343,7 @@ export const cancelSchedule = createServerFn({ method: "POST" })
         console.error("calendar delete failed", e);
       }
     }
-    const { error } = await supabase
+    const { error } = await sb
       .from("interview_schedules")
       .delete()
       .eq("id", data.scheduleId);
@@ -352,15 +358,16 @@ export const confirmAllSchedules = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     const { supabase, userId } = context;
+    const sb = supabase as any;
     const connected = await hasCalendarConnection(userId);
     if (!connected) {
-      return { ok: false, code: "calendar_not_connected" as const };
+      return { ok: false as const, code: "calendar_not_connected" as const };
     }
-    const loop = await loadLoopOwned(supabase, data.conversationId, userId);
+    const loop = await loadLoopOwned(sb, data.conversationId, userId);
     const stages = (loop.stages as StageRef[]) ?? [];
     const stageById = new Map(stages.map((s) => [s.id, s]));
     const [{ data: pendingRows }, { data: job }] = await Promise.all([
-      supabase
+      sb
         .from("interview_schedules")
         .select("*")
         .eq("conversation_id", data.conversationId)
@@ -373,11 +380,7 @@ export const confirmAllSchedules = createServerFn({ method: "POST" })
         .eq("conversation_id", data.conversationId)
         .maybeSingle(),
     ]);
-    const results: Array<{
-      id: string;
-      ok: boolean;
-      error?: string;
-    }> = [];
+    const results: Array<{ id: string; ok: boolean; error?: string }> = [];
     for (const row of (pendingRows ?? []) as ScheduleRow[]) {
       const stage = stageById.get(row.stage_id);
       if (!stage) {
@@ -390,9 +393,9 @@ export const confirmAllSchedules = createServerFn({ method: "POST" })
           schedule: row,
           stage,
           prepTips: loop.prep_tips || null,
-          jobTitle: job?.title,
+          jobTitle: (job as any)?.title,
         });
-        await supabaseAdmin
+        await (supabaseAdmin as any)
           .from("interview_schedules")
           .update({
             google_event_id: created.google_event_id,
@@ -406,7 +409,7 @@ export const confirmAllSchedules = createServerFn({ method: "POST" })
       }
     }
     return {
-      ok: true,
+      ok: true as const,
       results,
       confirmed: results.filter((r) => r.ok).length,
       failed: results.filter((r) => !r.ok).length,
