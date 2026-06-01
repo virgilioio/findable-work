@@ -1082,9 +1082,13 @@ function JobPanel({
                     Share to
                   </div>
                   {(() => {
-                    const text = `We're hiring — ${form.title ?? ""}`;
+                    const title = form.title ?? "";
+                    const subject = `We're hiring for our ${title} role`;
+                    const text = `We're hiring for our ${title} role.\n\nSee if this role is right for you on Findable.`;
                     const u = encodeURIComponent(publicUrl);
                     const t = encodeURIComponent(text);
+                    const tu = encodeURIComponent(`${text}\n\n${publicUrl}`);
+                    const subj = encodeURIComponent(subject);
                     function open(url: string) {
                       window.open(url, "_blank", "noopener");
                       setShareOpen(false);
@@ -1095,7 +1099,7 @@ function JobPanel({
                     async function nativeShare() {
                       try {
                         await (navigator as any).share({
-                          title: form.title ?? "Job opening",
+                          title: subject,
                           text,
                           url: publicUrl,
                         });
@@ -1117,14 +1121,30 @@ function JobPanel({
                         <ShareRow
                           icon={<WhatsAppIcon size={14} />}
                           label="WhatsApp"
-                          onClick={() => open(`https://wa.me/?text=${t}%20${u}`)}
+                          onClick={() => open(`https://wa.me/?text=${tu}`)}
+                        />
+                        <ShareRow
+                          icon={<XLogoIcon size={14} />}
+                          label="X"
+                          onClick={() =>
+                            open(`https://twitter.com/intent/tweet?text=${tu}`)
+                          }
+                        />
+                        <ShareRow
+                          icon={<RedditIcon size={14} />}
+                          label="Reddit"
+                          onClick={() =>
+                            open(
+                              `https://www.reddit.com/submit?url=${u}&title=${subj}`,
+                            )
+                          }
                         />
                         <ShareRow
                           icon={<MailIcon size={14} />}
                           label="Email"
                           onClick={() =>
                             open(
-                              `mailto:?subject=${t}&body=${encodeURIComponent(text + "\n\n" + publicUrl)}`,
+                              `mailto:?subject=${subj}&body=${encodeURIComponent(text + "\n\n" + publicUrl)}`,
                             )
                           }
                         />
