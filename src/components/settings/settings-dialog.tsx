@@ -510,12 +510,12 @@ function PersonalizationPane() {
 /* ----------------------------- Connections ------------------------------ */
 
 function ConnectionsPane() {
+  const { t } = useLanguage();
   const [previewKind, setPreviewKind] = useState<"gmail" | "calendar" | null>(null);
   return (
     <div className="space-y-3">
       <p className="text-[12.5px] text-text-mute">
-        Connect your own Google account so Findable can send emails and read your
-        calendar on your behalf.
+        {t("settings.conn.intro", "Connect your own Google account so Findable can send emails and read your calendar on your behalf.")}
       </p>
       <GmailRow onPreview={() => setPreviewKind("gmail")} />
       <CalendarRow onPreview={() => setPreviewKind("calendar")} />
@@ -546,6 +546,7 @@ function ConnectionCard({
   busy?: boolean;
   onPreview?: () => void;
 }) {
+  const { t } = useLanguage();
   const connected = Boolean(connectedEmail);
   return (
     <div className="flex items-start gap-3 rounded-xl border border-border bg-bg-elev p-4">
@@ -558,7 +559,7 @@ function ConnectionCard({
           {connected && (
             <span className="flex items-center gap-1 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-600 dark:text-emerald-400">
               <CheckCircle2 className="h-3 w-3" />
-              Connected
+              {t("settings.conn.connected", "Connected")}
             </span>
           )}
         </div>
@@ -576,7 +577,7 @@ function ConnectionCard({
               title="See exactly which permissions Findable will request"
             >
               <Eye className="h-3.5 w-3.5" />
-              Preview permissions
+              {t("settings.conn.preview", "Preview permissions")}
             </button>
           )}
           {connected ? (
@@ -585,7 +586,7 @@ function ConnectionCard({
             disabled={busy}
             className="rounded-lg border border-border bg-bg px-3 py-1.5 text-[12.5px] text-text transition hover:bg-bg-hover disabled:opacity-60"
           >
-            Disconnect
+            {t("common.disconnect", "Disconnect")}
           </button>
         ) : (
           <button
@@ -593,7 +594,7 @@ function ConnectionCard({
             disabled={busy}
             className="rounded-lg bg-text px-3 py-1.5 text-[12.5px] font-medium text-text-invert transition hover:opacity-90 disabled:opacity-60"
           >
-            {busy ? "Opening Google…" : "Connect"}
+            {busy ? t("settings.conn.opening", "Opening Google…") : t("common.connect", "Connect")}
           </button>
         )}
         </div>
