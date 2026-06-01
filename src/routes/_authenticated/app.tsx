@@ -18,6 +18,7 @@ import {
 } from "@/lib/conversations.functions";
 import { adminCheck } from "@/lib/prompts/prompts.functions";
 import { getProfile } from "@/lib/profile.functions";
+import { useLanguage } from "@/lib/i18n";
 import {
   Logo,
   Wordmark,
