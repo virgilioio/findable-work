@@ -346,6 +346,7 @@ function NotificationsPane() {
 const REGIONS = ["LATAM", "US", "EU", "APAC"];
 
 function PersonalizationPane() {
+  const { t } = useLanguage();
   const qc = useQueryClient();
   const getProfileFn = useServerFn(getProfile);
   const updateFn = useServerFn(updatePersonalization);
@@ -384,7 +385,7 @@ function PersonalizationPane() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["profile"] });
     },
-    onError: (e) => toast.error((e as Error).message || "Couldn't save"),
+    onError: (e) => toast.error((e as Error).message || t("settings.pers.save_error", "Couldn't save")),
   });
 
   const commit = (patch: Partial<typeof draft>) => mut.mutate(patch);
@@ -400,7 +401,7 @@ function PersonalizationPane() {
   if (isLoading) {
     return (
       <div className="flex h-32 items-center justify-center text-text-mute">
-        <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading…
+        <Loader2 className="mr-2 h-4 w-4 animate-spin" /> {t("common.loading", "Loading…")}
       </div>
     );
   }
@@ -408,10 +409,9 @@ function PersonalizationPane() {
   return (
     <div className="space-y-1">
       <p className="mb-3 text-[12.5px] text-text-mute">
-        Tell Findable about you and your company. The AI uses this to draft
-        outreach, job posts, and replies that actually sound like you.
+        {t("settings.pers.intro", "Tell Findable about you and your company. The AI uses this to draft outreach, job posts, and replies that actually sound like you.")}
       </p>
-      <Row label="Your role" description="e.g. Head of Talent, Founder.">
+      <Row label={t("settings.pers.role", "Your role")} description={t("settings.pers.role.desc", "e.g. Head of Talent, Founder.")}>
         <Input
           value={draft.userRole}
           onChange={(e) => setDraft({ ...draft, userRole: e.target.value })}
@@ -420,7 +420,7 @@ function PersonalizationPane() {
           placeholder="Head of Talent"
         />
       </Row>
-      <Row label="Company name" description="The company you're hiring for.">
+      <Row label={t("settings.pers.company", "Company name")} description={t("settings.pers.company.desc", "The company you're hiring for.")}>
         <Input
           value={draft.companyName}
           onChange={(e) => setDraft({ ...draft, companyName: e.target.value })}
@@ -429,7 +429,7 @@ function PersonalizationPane() {
           placeholder="Acme Inc."
         />
       </Row>
-      <Row label="Company website" description="Public URL.">
+      <Row label={t("settings.pers.website", "Company website")} description={t("settings.pers.website.desc", "Public URL.")}>
         <Input
           value={draft.companyWebsite}
           onChange={(e) => setDraft({ ...draft, companyWebsite: e.target.value })}
@@ -439,9 +439,9 @@ function PersonalizationPane() {
         />
       </Row>
       <div className="border-b border-border py-3">
-        <div className="text-[13px] font-medium text-text">One-liner</div>
+        <div className="text-[13px] font-medium text-text">{t("settings.pers.oneliner", "One-liner")}</div>
         <div className="mt-0.5 text-[12px] text-text-mute">
-          A single sentence that captures what the company does.
+          {t("settings.pers.oneliner.desc", "A single sentence that captures what the company does.")}
         </div>
         <Input
           value={draft.companyOneLiner}
@@ -452,10 +452,9 @@ function PersonalizationPane() {
         />
       </div>
       <div className="border-b border-border py-3">
-        <div className="text-[13px] font-medium text-text">About the company</div>
+        <div className="text-[13px] font-medium text-text">{t("settings.pers.about", "About the company")}</div>
         <div className="mt-0.5 text-[12px] text-text-mute">
-          Mission, product, team, culture — anything the AI should weave into
-          outreach and job posts.
+          {t("settings.pers.about.desc", "Mission, product, team, culture — anything the AI should weave into outreach and job posts.")}
         </div>
         <Textarea
           value={draft.companyDescription}
@@ -466,9 +465,9 @@ function PersonalizationPane() {
         />
       </div>
       <div className="border-b border-border py-3">
-        <div className="text-[13px] font-medium text-text">Hiring context</div>
+        <div className="text-[13px] font-medium text-text">{t("settings.pers.hiring", "Hiring context")}</div>
         <div className="mt-0.5 text-[12px] text-text-mute">
-          What you typically hire for: roles, seniority, locations, must-haves.
+          {t("settings.pers.hiring.desc", "What you typically hire for: roles, seniority, locations, must-haves.")}
         </div>
         <Textarea
           value={draft.hiringContext}
@@ -479,9 +478,9 @@ function PersonalizationPane() {
         />
       </div>
       <div className="py-3">
-        <div className="text-[13px] font-medium text-text">Sourcing regions</div>
+        <div className="text-[13px] font-medium text-text">{t("settings.pers.regions", "Sourcing regions")}</div>
         <div className="mt-0.5 text-[12px] text-text-mute">
-          Default regions when sourcing candidates.
+          {t("settings.pers.regions.desc", "Default regions when sourcing candidates.")}
         </div>
         <div className="mt-2 flex flex-wrap gap-1.5">
           {REGIONS.map((r) => {
