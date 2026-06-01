@@ -42,6 +42,8 @@ import {
   Upload,
   Check,
   Search as SearchIcon,
+  Linkedin,
+  ArrowRight as ArrowRightIcon,
 } from "@/components/findable-icons";
 import { cn } from "@/lib/utils";
 import { CandidatesPanel } from "@/components/candidates/candidates-panel";
