@@ -1,51 +1,38 @@
-## Why nothing applied
+## Problem
 
-Your `src/integrations/supabase/client.ts` points at your own Supabase project (`oqkgofqwgurvhzluuvsm.supabase.co`), not Lovable Cloud. The migration files in `supabase/migrations/` are only auto-run against Lovable Cloud's managed database. For your external Supabase, you need to apply the SQL yourself — that's why `oauth_pkce_state` is missing.
+The Reveal phone button exists in the candidate drawer but never appears for any candidate, so no phone numbers are ever collected.
 
-## What to do
+Root cause: it's gated on `c.has_direct_phone`, which comes from Apollo's `/mixed_people/api_search` response field `phone_numbers`. That endpoint doesn't return phone data — only the `bulk_match` enrichment endpoint does, and we call it with `reveal_phone_number: false`. So `has_direct_phone` is effectively always `false`, the button never renders, and the server function also rejects the call when it would be made.
 
-Run this SQL in your Supabase project (Dashboard → SQL Editor, or `supabase db push` if you have the CLI linked to project `oqkgofqwgurvhzluuvsm`):
+## Fix
 
-```sql
-ALTER TABLE public.user_gmail_connections
-  ALTER COLUMN connection_id DROP NOT NULL,
-  ADD COLUMN IF NOT EXISTS access_token text,
-  ADD COLUMN IF NOT EXISTS refresh_token text,
-  ADD COLUMN IF NOT EXISTS token_expires_at timestamptz,
-  ADD COLUMN IF NOT EXISTS scope text;
+Let the user trigger a reveal attempt for any Apollo-sourced candidate. Apollo charges a credit only when a number is actually returned, and "no phone on file" is now feedback the user can see instead of a flag we guess at upfront.
 
-ALTER TABLE public.user_calendar_connections
-  ALTER COLUMN connection_id DROP NOT NULL,
-  ADD COLUMN IF NOT EXISTS access_token text,
-  ADD COLUMN IF NOT EXISTS refresh_token text,
-  ADD COLUMN IF NOT EXISTS token_expires_at timestamptz,
-  ADD COLUMN IF NOT EXISTS scope text;
+### 1. `src/lib/candidates.functions.ts` — `revealCandidatePhone`
 
-CREATE UNIQUE INDEX IF NOT EXISTS user_gmail_connections_user_id_key
-  ON public.user_gmail_connections(user_id);
-CREATE UNIQUE INDEX IF NOT EXISTS user_calendar_connections_user_id_key
-  ON public.user_calendar_connections(user_id);
+- Drop the `has_direct_phone` precondition.
+- Keep the existing checks: candidate must exist, must have `apollo_id`, and must not already have a `phone`.
+- If Apollo returns no number, return `{ phone: null, alreadyRevealed: false, noNumber: true }` instead of throwing — and do NOT increment credit usage (no credit consumed on empty reveals per Apollo's billing model). Also append an activity entry "Phone reveal attempted — no number on file".
+- When Apollo returns a number, behave exactly as today (save phone, append activity, increment usage by 1).
 
-CREATE TABLE IF NOT EXISTS public.oauth_pkce_state (
-  state text PRIMARY KEY,
-  user_id uuid NOT NULL,
-  code_verifier text NOT NULL,
-  kind text NOT NULL,
-  return_to text,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
+### 2. `src/components/candidates/candidate-drawer.tsx`
 
-GRANT ALL ON public.oauth_pkce_state TO service_role;
-ALTER TABLE public.oauth_pkce_state ENABLE ROW LEVEL SECURITY;
--- No policies: only service_role reads/writes this table (server bypasses RLS).
-```
+Replace the three-branch phone block with:
 
-Then refresh the schema cache (Dashboard → Settings → API → "Reload schema cache", or it auto-reloads within ~60s) and retry **Connect**.
+- `c.phone` present → show the number.
+- `c.phone` missing AND candidate has `apollo_id` → show the Reveal button (regardless of `has_direct_phone`). Tooltip clarifies: "Uses 1 Apollo credit only if a number is found".
+- `c.phone` missing AND no `apollo_id` (e.g. Internal/manual candidates) → show "No phone on file".
 
-## Also confirm
+Update the mutation's `onSuccess` to handle the new `noNumber` case with a neutral toast ("No phone on file for this candidate") instead of a success toast.
 
-Your server-side env must point at the same Supabase project. The TanStack server uses `process.env.MY_SUPABASE_URL` / `MY_SUPABASE_SERVICE_ROLE_KEY` (your secrets list has both). Make sure those match `oqkgofqwgurvhzluuvsm`, otherwise the admin client is writing PKCE state to a different DB than the one the app reads from.
+### 3. Candidates list panel (optional polish)
 
-## Optional cleanup
+If `src/components/candidates/candidates-panel.tsx` shows a phone column or icon, mirror the same treatment: surface a small "Reveal" affordance for Apollo candidates without a phone. I'll inspect the file before deciding whether to include this — happy to scope it out if you want the smallest change first.
 
-If you'd like, I can delete the stale `supabase/migrations/20260531120000_direct_google_oauth.sql` and the one I just added — they won't run against your external project anyway and only clutter the repo. Let me know.
+## Out of scope
+
+- Auto-reveal during Collect / Source more (kept opt-in to control credit spend).
+- Bulk-reveal action across multiple candidates.
+- PDL phone reveal (PDL requires a different enrichment call and separate credit pool).
+
+Both can be follow-ups once this baseline works.
