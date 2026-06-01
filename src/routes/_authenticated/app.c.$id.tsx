@@ -1512,3 +1512,58 @@ function HeaderBtn({
     </button>
   );
 }
+
+function ShareRow({
+  icon,
+  label,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-[13px] text-text hover:bg-bg-hover"
+    >
+      <span className="text-text-mute">{icon}</span>
+      <span>{label}</span>
+    </button>
+  );
+}
+
+function ShareIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M10 3v10 M5 8 L10 3 L15 8 M4 13v3a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-3" />
+    </svg>
+  );
+}
+
+function GlobeIcon({ size = 14, className }: { size?: number; className?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={className}>
+      <circle cx="10" cy="10" r="7" />
+      <path d="M3 10h14 M10 3c2 2.5 3 5 3 7s-1 4.5-3 7c-2-2.5-3-5-3-7s1-4.5 3-7Z" />
+    </svg>
+  );
+}
+
+function MailIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="5" width="14" height="10" rx="1.5" />
+      <path d="M3.5 6 L10 11 L16.5 6" />
+    </svg>
+  );
+}
+
+function WhatsAppIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M10 3a7 7 0 0 0-6 10.6L3 17l3.5-1a7 7 0 1 0 3.5-13Z" />
+      <path d="M7.5 8.5c.2 1.5 1.5 3 3 3.5l1-1c.5.2 1.4.5 1.8.6.1.5-.1 1.2-.4 1.5-1 .9-2.7.3-3.9-.6-1.2-.9-2.1-2.4-2.2-3.5 0-.4.3-1 .8-1.3.2 0 1 .1 1.2.2.1.4.3 1.3.4 1.7l-1 0-.7-1.1Z" />
+    </svg>
+  );
+}
