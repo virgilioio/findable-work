@@ -1,69 +1,53 @@
-## Goal
+## Answers first
 
-Tighten the Settings dialog for MVP: remove fluff, make every visible control actually work, and fix the `display_name` write error in Account.
+1. **Language** — Today the i18n shim only translates a few Settings labels. Picking Spanish/French/etc. won't visibly change the app. We should expand coverage so the visible UI chrome (sidebar, top bar, common dialogs, settings, empty states, buttons) reacts to the language choice. The AI continues to auto-detect the user's language in chat — i18n is purely the UI shell.
+2. **Personalization** — The fields save to `profiles`, but nothing reads them when building AI prompts yet. So right now they're effectively placeholder. We'll inject `company_name`, `company_one_liner`, `company_description`, `hiring_context`, `user_role`, `sourcing regions` into the system prompts used by chat, the outreach drafter, and the job-post drafter.
+3. **Display name error** — A reload migration exists, but the live schema snapshot still shows `profiles` without `display_name` (and without the personalization columns). The previous migrations likely haven't been applied on this instance, or PostgREST's cache is still cold. We'll add a fresh idempotent migration that re-adds all the columns and forces a reload, plus harden the client-side error surface.
 
-## Changes by section
+## Plan
 
-### General (`GeneralPane`)
-- Remove the **Show sidebar** row entirely (and its `usePersistedState`).
-- Make **Language** real:
-  - Add a tiny i18n shim at `src/lib/i18n.tsx`: React context with `lang`, `setLang`, `t(key, fallback)`, persisted to `localStorage("findable:language")`, defaulting to `en`. Wrap the app in `__root.tsx` and set `document.documentElement.lang`.
-  - Offer `en`, `es`, `pt`, `fr`, `de`. Scope translations to Settings dialog labels/descriptions for now so users see immediate effect; everywhere else falls back to English via `t(key, "English string")`. Extensible later.
+### 1. Fix `display_name` update for real
+- New migration `20260604000000_profiles_columns_resync.sql`:
+  - `ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS` for: `display_name`, `company_name`, `company_website`, `company_one_liner`, `company_description`, `hiring_context`, `user_role`, `notify_on_new_applicant`, `notify_daily_digest`, `sourcing_regions` (whatever the personalization pane writes).
+  - Re-issue `GRANT UPDATE(col)` for each to `authenticated`.
+  - `NOTIFY pgrst, 'reload schema';` at end.
+- In `AccountPane`, when the update fails, show the actual Postgres error message in the toast (not just "Failed to update name") so we can diagnose if it recurs.
 
-### Notifications (`NotificationsPane`) — keep in rail, fix the toggles
-- Remove the **Replies**, **Interview reminders**, and **Mentions** rows (and the related local `Notifications` state). The pane only renders server-backed rows.
-- The two remaining rows (**New applicants**, **Daily digest**) already call `updateNotificationPrefs` — verify the optimistic update path and ensure the switches reflect the latest server state immediately (currently they read `prefs?.notifyOnNewApplicant ?? true` which is correct; just remove the unused local state and tighten loading/disabled handling).
-- Quiet runtime fix: `getNotificationPrefs` is throwing because `profiles.notify_on_new_applicant` / `notify_daily_digest` columns are missing on the live instance. The migration `20260601200000_notification_prefs.sql` either didn't apply or PostgREST's schema cache is stale. Add `supabase/migrations/20260603020000_notification_prefs_reload.sql` that re-runs `ADD COLUMN IF NOT EXISTS` for both columns, re-issues the relevant `GRANT UPDATE(...)`s, and `NOTIFY pgrst, 'reload schema';`. Also make `getNotificationPrefs` defensive (try full select; on column-missing error, return defaults `{ notifyOnNewApplicant: true, notifyDailyDigest: false }`) so the pane never crashes.
+### 2. Wire Personalization into AI prompts
+- In `src/lib/profile.functions.ts`, export a small helper `buildPersonalizationContext(profile)` that returns a formatted string like:
+  ```
+  About the recruiter:
+  - Role: {user_role}
+  Company: {company_name} ({company_website})
+  One-liner: {company_one_liner}
+  About the company: {company_description}
+  Hiring context: {hiring_context}
+  ```
+  Skips empty fields.
+- Inject that string into the system prompt of:
+  - `src/routes/api/chat.ts` (main chat) — prepend after the base system prompt.
+  - Outreach drafter (wherever outreach emails/LinkedIn templates are generated).
+  - Job-post drafter (job description generation).
+  - Job creation (`jobs_candidate_assistant_prompt` flow) so generated JDs reflect the company voice.
+- Each of these already loads the authenticated `userId`; fetch the profile row once and pass the context string in.
 
-### Personalization (`PersonalizationPane`)
-Rewrite around "tell the AI about you and your company". New fields, persisted on `public.profiles` via `supabase/migrations/20260603000000_profiles_personalization.sql` (adds columns + `GRANT UPDATE(col)` for each + `NOTIFY pgrst, 'reload schema'`):
-- `company_name text`
-- `company_website text`
-- `company_one_liner text`
-- `company_description text` (mission, product, team, culture)
-- `hiring_context text` (typical roles, seniority, locations)
-- `user_role text`
-- Keep **Sourcing regions** (multi-select chips).
-- Drop **Assistant name**, **Outreach tone**, **Auto-personalize**, **Email signature**.
+### 3. Make Language switch the actual UI
+- Expand `src/lib/i18n.tsx` translation dictionaries (`en`, `es`, `pt`, `fr`, `de`) to cover the visible app chrome:
+  - Sidebar nav labels (Chat, Jobs, Candidates, Outreach, Settings, etc.)
+  - Top bar / user menu items (Sign out, Settings, Billing, Help)
+  - Common buttons (Save, Cancel, Delete, Confirm, Loading…)
+  - Empty-state copy on main panels (chat empty, candidates empty, jobs empty)
+  - All Settings panes (already partially covered — finish coverage)
+  - Auth dialog headings/CTAs ("Sign in to findable", "Start hiring with findable", email/password labels)
+- Replace hard-coded English in those components with `t("namespace.key", "English fallback")`.
+- Set `<html lang={lang}>` from `LanguageProvider` so screen readers + SEO pick it up.
+- Out of scope (clearly note in UI): AI-generated content stays in whatever language the user writes in — only the UI shell switches.
 
-Server: extend `getProfile` and add `updatePersonalization` in `src/lib/profile.functions.ts`. Inject `company_description` + `hiring_context` into the system prompts that draft outreach + job posts (read profile inside those server fns and prepend an "About the user's company" block) — touches `src/routes/api/chat.ts` and the outreach/job-post drafters.
+### 4. Verification
+- After migration runs: change Display name → confirm no error, value persists across reload.
+- Save Personalization → start a new chat, ask AI to draft an outreach email → confirm it references the company info.
+- Switch language to Spanish → sidebar, top bar, settings, auth dialogs all switch; chat content stays as the user typed.
 
-### Data controls (`DataPane`)
-Make **Export data** real: download CSV of the user's **unlocked candidates**.
-- New server fn `exportCandidatesCsv` (`src/lib/data-export.functions.ts`) protected by `requireSupabaseAuth`; selects from `candidates` where `user_id = auth.uid()` and `is_locked = false`. Returns CSV with: name, role, company, location, email, phone, linkedin, source, stage, tags (joined), starred, created_at.
-- Client triggers a Blob download (`findable-candidates-YYYY-MM-DD.csv`).
-- RLS already scopes per-user → no cross-tenant leakage; the server fn also filters by `userId` for defense in depth.
-
-### Security (`SecurityPane`)
-- Remove the **Two-factor authentication** row (and `findable:2fa` state).
-- **Change password**: keep `resetPasswordForEmail`; show pending state on the button and a clear toast.
-- **Active sessions**: replace static "1 active" with "This device" + helper copy explaining "Sign out everywhere" ends any other sessions. (Real session enumeration needs the admin API; out of scope for MVP.)
-- **Log out all devices**: keep `supabase.auth.signOut({ scope: "global" })`, add a confirmation `AlertDialog`, then redirect to `/login`.
-
-### Account (`AccountPane`)
-- **Display name update error** (`Could not find the 'display_name' column ... in the schema cache`):
-  - Migration `20260602010000_profiles_display_name.sql` exists but PostgREST's schema cache wasn't reloaded on the live instance. Add `supabase/migrations/20260603010000_profiles_display_name_reload.sql` that re-runs `ALTER TABLE ... ADD COLUMN IF NOT EXISTS display_name text;`, re-issues `GRANT UPDATE(display_name) ON public.profiles TO authenticated;`, and `NOTIFY pgrst, 'reload schema';`.
-  - Debounce the Display name input (save on blur or after 600ms idle) instead of firing on every keystroke.
-- **Delete account**: make it real.
-  - New server fn `deleteOwnAccount` in `src/lib/account.functions.ts`, protected by `requireSupabaseAuth`. Uses `supabaseAdmin.auth.admin.deleteUser(userId)`. Verify/add `ON DELETE CASCADE` from dependent tables to `auth.users` so the user's rows are cleaned up.
-  - Client: confirm dialog → call fn → `supabase.auth.signOut()` → redirect to `/`.
-
-## Out of scope
-
-- Real multi-language coverage beyond Settings labels.
-- Real per-session listing (needs admin API + new table).
-- 2FA enrollment / recovery codes.
-
-## Files touched
-
-- `src/components/settings/settings-dialog.tsx` (all panes above)
-- `src/lib/profile.functions.ts` (extend + personalization update)
-- `src/lib/notifications.functions.ts` (defensive select)
-- `src/lib/data-export.functions.ts` (new — CSV export)
-- `src/lib/account.functions.ts` (new — delete account)
-- `src/lib/i18n.tsx` (new — language shim)
-- `src/routes/__root.tsx` (wrap with `LanguageProvider`, set `<html lang>`)
-- `src/routes/api/chat.ts` + outreach/job-post drafter prompts (inject company context)
-- `supabase/migrations/20260603000000_profiles_personalization.sql` (new columns + grants + reload)
-- `supabase/migrations/20260603010000_profiles_display_name_reload.sql` (force schema cache reload for display_name)
-- `supabase/migrations/20260603020000_notification_prefs_reload.sql` (ensure notify_* columns + schema cache reload)
+### Files touched
+- New: `supabase/migrations/20260604000000_profiles_columns_resync.sql`
+- Edited: `src/lib/profile.functions.ts`, `src/lib/i18n.tsx`, `src/routes/api/chat.ts`, outreach drafter fn, job-post drafter fn, `src/components/settings/settings-dialog.tsx` (AccountPane error surface), sidebar + top-bar + auth-dialog + main panel empty states for i18n.
