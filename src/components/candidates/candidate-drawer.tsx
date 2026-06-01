@@ -362,19 +362,32 @@ function Overview({ c }: { c: Candidate }) {
           </KV>
         )}
         {c.phone && <KV label="Phone" value={c.phone} />}
-        {!c.phone && c.apollo_id && (
-          <KV label="Phone">
-            <button
-              onClick={() => revealMut.mutate()}
-              disabled={revealMut.isPending}
-              className="inline-flex items-center gap-1.5 rounded-md border border-border-strong bg-bg-elev px-2 py-0.5 text-[12px] text-text hover:bg-bg-hover disabled:opacity-50"
-              title="Uses 1 Apollo credit only if a number is found"
-            >
-              <Sparkle size={11} />
-              {revealMut.isPending ? "Revealing…" : "Reveal phone (1 credit)"}
-            </button>
-          </KV>
-        )}
+        {!c.phone && c.apollo_id && (() => {
+          const pending = (c.activity ?? []).some(
+            (a: any) =>
+              a?.type === "phone_reveal_pending" &&
+              a?.at &&
+              Date.now() - new Date(a.at).getTime() < 10 * 60 * 1000,
+          );
+          const disabled = revealMut.isPending || pending;
+          return (
+            <KV label="Phone">
+              <button
+                onClick={() => revealMut.mutate()}
+                disabled={disabled}
+                className="inline-flex items-center gap-1.5 rounded-md border border-border-strong bg-bg-elev px-2 py-0.5 text-[12px] text-text hover:bg-bg-hover disabled:opacity-50"
+                title="Apollo delivers phone numbers asynchronously — usually within a few minutes. 1 credit charged only if a number is found."
+              >
+                <Sparkle size={11} />
+                {pending
+                  ? "Reveal pending…"
+                  : revealMut.isPending
+                    ? "Requesting…"
+                    : "Reveal phone (1 credit if found)"}
+              </button>
+            </KV>
+          );
+        })()}
         {!c.phone && !c.apollo_id && (
           <KV label="Phone" value="No phone on file" />
         )}
