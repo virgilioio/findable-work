@@ -1046,6 +1046,106 @@ function JobPanel({
               primary
             />
           )}
+          {published && publicUrl && (
+            <div className="relative" ref={shareRef}>
+              <HeaderBtn
+                onClick={() => setShareOpen((v) => !v)}
+                icon={<ShareIcon size={13} />}
+                label="Share"
+                primary
+              />
+              {shareOpen && (
+                <div className="absolute right-0 top-[calc(100%+4px)] z-30 w-[300px] rounded-lg border border-border-strong bg-bg-elev p-1 shadow-[var(--shadow-md)]">
+                  {/* URL row */}
+                  <div className="flex items-center gap-2 rounded-md px-2 py-1.5">
+                    <GlobeIcon size={14} className="shrink-0 text-text-mute" />
+                    <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-text">
+                      {publicUrl.replace(/^https?:\/\//, "")}
+                    </span>
+                    <button
+                      onClick={() => {
+                        if (!publicUrl) return;
+                        navigator.clipboard.writeText(publicUrl);
+                        setCopiedInShare(true);
+                        setTimeout(() => setCopiedInShare(false), 1800);
+                      }}
+                      className="flex h-6 shrink-0 items-center gap-1 rounded border border-border bg-bg px-1.5 text-[11px] text-text-mute hover:bg-bg-hover hover:text-text"
+                    >
+                      <Copy size={11} />
+                      {copiedInShare ? "Copied" : "Copy"}
+                    </button>
+                  </div>
+                  <div className="my-1 h-px bg-border" />
+                  <div className="px-2 pb-1 pt-0.5 text-[10px] font-medium uppercase tracking-wide text-text-faint">
+                    Share to
+                  </div>
+                  {(() => {
+                    const text = `We're hiring — ${form.title ?? ""}`;
+                    const u = encodeURIComponent(publicUrl);
+                    const t = encodeURIComponent(text);
+                    function open(url: string) {
+                      window.open(url, "_blank", "noopener");
+                      setShareOpen(false);
+                    }
+                    const canNativeShare =
+                      typeof navigator !== "undefined" &&
+                      typeof (navigator as any).share === "function";
+                    async function nativeShare() {
+                      try {
+                        await (navigator as any).share({
+                          title: form.title ?? "Job opening",
+                          text,
+                          url: publicUrl,
+                        });
+                      } catch {
+                        // user cancel or fallback
+                      } finally {
+                        setShareOpen(false);
+                      }
+                    }
+                    return (
+                      <>
+                        <ShareRow
+                          icon={<Linkedin size={14} />}
+                          label="LinkedIn"
+                          onClick={() =>
+                            open(`https://www.linkedin.com/sharing/share-offsite/?url=${u}`)
+                          }
+                        />
+                        <ShareRow
+                          icon={<WhatsAppIcon size={14} />}
+                          label="WhatsApp"
+                          onClick={() => open(`https://wa.me/?text=${t}%20${u}`)}
+                        />
+                        <ShareRow
+                          icon={<MailIcon size={14} />}
+                          label="Email"
+                          onClick={() =>
+                            open(
+                              `mailto:?subject=${t}&body=${encodeURIComponent(text + "\n\n" + publicUrl)}`,
+                            )
+                          }
+                        />
+                        {canNativeShare && (
+                          <ShareRow
+                            icon={<Dots size={14} />}
+                            label="More…"
+                            onClick={nativeShare}
+                          />
+                        )}
+                        <div className="my-1 h-px bg-border" />
+                        <ShareRow
+                          icon={<ArrowRightIcon size={14} />}
+                          label="Open posting"
+                          onClick={() => open(publicUrl)}
+                        />
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
