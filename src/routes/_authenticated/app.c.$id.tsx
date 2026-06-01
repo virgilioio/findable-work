@@ -460,6 +460,7 @@ function ChatPanel({
   clarifyAnswers: Record<string, Record<string, string[]>>;
   onSubmitClarify: (taskId: string, formatted: string, answers: Record<string, string[]>) => void;
 }) {
+  const { t } = useLanguage();
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -477,9 +478,9 @@ function ChatPanel({
   const empty = messages.length === 0 && !streaming;
 
   const suggestions = [
-    "Senior backend engineer, Berlin, Go + Postgres",
-    "Product designer, remote EU, fintech",
-    "Sales lead, NYC, SaaS",
+    t("chat.suggest.backend", "Senior backend engineer, Berlin, Go + Postgres"),
+    t("chat.suggest.designer", "Product designer, remote EU, fintech"),
+    t("chat.suggest.sales", "Sales lead, NYC, SaaS"),
   ];
 
   if (empty) {
@@ -488,10 +489,10 @@ function ChatPanel({
         <div className="w-full max-w-[640px] text-center">
           <AppIcon size={48} className="mx-auto mb-5" />
           <h1 className="text-[24px] font-semibold tracking-tight text-text">
-            What hire can I help with?
+            {t("chat.empty.title", "What hire can I help with?")}
           </h1>
           <p className="mt-2 text-[13px] text-text-mute">
-            Describe the role. I'll ask the right questions, then draft a Job in a new tab.
+            {t("chat.empty.subtitle_conv", "Describe the role. I'll ask the right questions, then draft a Job in a new tab.")}
           </p>
 
           <form onSubmit={submit} className="mt-7">
@@ -679,13 +680,14 @@ function Composer({
   sending: boolean;
   onSubmit: (e: React.FormEvent) => void;
 }) {
+  const { t } = useLanguage();
   return (
     <div className="flex flex-col gap-2 rounded-[14px] border border-border bg-bg-elev p-2.5 shadow-[var(--shadow-sm)] focus-within:border-border-strong">
       <textarea
         autoFocus
         value={text}
         onChange={(e) => setText(e.target.value)}
-        placeholder="Message findable…"
+        placeholder={t("chat.composer.placeholder", "Message findable…")}
         rows={1}
         className="min-h-[28px] w-full resize-none bg-transparent px-2 py-1 text-[14px] outline-none placeholder:text-text-faint"
         onKeyDown={(e) => {
@@ -701,13 +703,13 @@ function Composer({
             type="button"
             className="flex items-center gap-1 rounded-md px-2 py-1 text-[12px] text-text-mute transition hover:bg-bg-hover hover:text-text"
           >
-            <Attach size={14} /> Attach
+            <Attach size={14} /> {t("chat.composer.attach", "Attach")}
           </button>
           <button
             type="button"
             className="flex items-center gap-1 rounded-full border border-border bg-bg px-2.5 py-1 text-[12px] text-text-mute transition hover:bg-bg-hover hover:text-text"
           >
-            <Sparkle size={12} /> Hiring mode
+            <Sparkle size={12} /> {t("chat.composer.hiring_mode", "Hiring mode")}
           </button>
         </div>
         <button
