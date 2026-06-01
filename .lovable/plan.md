@@ -1,48 +1,69 @@
-# Share dropdown: Reddit, X, and Findable preset messages
 
-## What gets added
+## Goal
 
-Two new share targets (Reddit and X) and a unified Findable-branded preset message applied to every platform that supports pre-filled text. Single file: `src/routes/_authenticated/app.c.$id.tsx`.
+Add a floating "Questions about this role?" pill to the public job page (`/jobs/$slug`) that opens a clean "Hiring assistant" chat panel. The assistant answers candidate questions about the role, process, and their own profile — grounded strictly in the public job data + whatever the candidate has typed into the application form so far.
 
-## Preset copy (Findable marketing-driven)
+## Scope
 
-Single source of truth at the top of the share helpers:
+Single page: `src/routes/jobs/$slug.tsx`. New public server route for the chat. New system prompt entry. No DB changes.
 
-```ts
-const SHARE_TEXT = `We're hiring for our ${form.title} role.\n\nSee if this role is right for you on Findable.`;
-```
+## Files
 
-Applied per platform:
+1. **New: `src/routes/api/public/jobs/$slug/chat.ts`** — TanStack server route, public (no auth).
+   - `POST` handler validates body with Zod:
+     - `slug: string`
+     - `messages: [{role: 'user'|'assistant', content: string (≤2000)}]` (max 20)
+     - `formContext?: { name?, email?, linkedin?, location?, resume_filename?, answers?: Record<string, string|string[]> }` — only non-sensitive snippets the candidate already typed; trimmed/length-capped server-side.
+   - Loads job via `supabaseAdmin` using `SELECT` (only public fields: title, company, location, employment_type, salary_min/max, currency, summary, description, responsibilities, must_have, nice_to_have, requirements, screening) where `published = true`. 404 if not.
+   - Per-IP + per-slug in-memory rate limit (20 req / 10 min), matching guest-chat style.
+   - Builds grounding context (role, process if available, must-have, nice-to-have, screening questions + candidate-provided answers).
+   - Loads system prompt via `getPrompt("jobs.candidate_assistant")` (new prompt, see below).
+   - Calls OpenAI via `OPENAI_CHAT_COMPLETIONS_URL` + `getOpenAIModel()` / `getOpenAIKey()` (mirrors `screening.server.ts` pattern). No tools — plain chat completion.
+   - On any failure (missing keys, 429, 5xx, exception), returns a scripted fallback answer keyed off the latest user message (process / timeline / remote / feedback / default) so the chat never dead-ends. Logs `[jobs-chat] FALLBACK` with reason.
+   - Returns `{ assistant: string }`.
 
-- **X (Twitter)** — text param: `${SHARE_TEXT}\n\n${publicUrl}`
-  Opens `https://twitter.com/intent/tweet?text=${encodeURIComponent(xText)}`
+2. **New: `src/components/jobs/hiring-assistant.tsx`** — client component.
+   - Floating pill bottom-right: "✨ Questions about this role?" → opens panel.
+   - Panel: header ("Hiring assistant" + green dot "Answers about this role"), close X, scrollable message list (Markdown via `@/components/ui/markdown`), 4 suggested-question chips shown only on first open (Interview process / Total timeline / Remote vs in-person / Feedback on my profile), input + send button.
+   - Footer microcopy: "AI assistant · answers may be approximate".
+   - Replies in the candidate's language — handled by the system prompt ("reply in the same language as the user's last message").
+   - POSTs to `/api/public/jobs/{slug}/chat` with messages + `formContext` snapshot.
+   - On non-2xx or network error, surfaces the inline message returned by the route (which is the scripted fallback for known intents).
+   - Styled with existing semantic tokens (`bg-bg-elev`, `border-border`, `text-text-mute`, etc.) to match the existing public page aesthetic. Mobile: panel becomes near-fullscreen.
 
-- **WhatsApp** — text param: `${SHARE_TEXT}\n\n${publicUrl}`
-  Opens `https://wa.me/?text=${encodeURIComponent(whatsappText)}`
+3. **Edit: `src/routes/_authenticated/...` — none.** This is candidate-facing only.
 
-- **Reddit** — title param = `We're hiring for our ${form.title} role` (shortened for Reddit's title field); url param = `publicUrl`.
-  Opens `https://www.reddit.com/submit?url=${encodeURIComponent(publicUrl)}&title=${encodeURIComponent(redditTitle)}`
+4. **Edit: `src/routes/jobs/$slug.tsx`**
+   - Lift `form` state high enough (already top-level in `ApplyPage`) and pass a slim `formContext` (name, email, linkedin, location, resume_filename, answers) + `job` into `<HiringAssistant />` mounted at the bottom of the page (outside the grid so it floats over everything).
+   - Render only when `!submitted`.
 
-- **Email** — subject = `We're hiring for our ${form.title} role`; body = `${SHARE_TEXT}\n\n${publicUrl}`
+5. **New prompt row: `jobs.candidate_assistant`** — inserted via a new timestamped migration in `supabase/migrations/`.
+   - System prompt rules (matches your spec):
+     - Warm, concise, 2–4 short sentences or tight bullets.
+     - Answer ONLY from provided CONTEXT (role, process, requirements, candidate's form data).
+     - If asked something not in context (exact comp beyond what's posted, visa specifics, interviewer names), say you don't have that detail and suggest they ask in the intro call.
+     - Decline to discuss compensation specifics beyond what's posted; never make outcome promises ("you'll get the job", "you're a great fit guaranteed").
+     - Steer off-topic questions back to the role.
+     - For "feedback on my profile": compare candidate's typed answers + resume filename + linkedin against must-have / nice-to-have. Kind + constructive. Never a yes/no verdict.
+     - Reply in the same language as the user's last message (English / Spanish).
+     - Uses `{{var:grounding}}` placeholder filled by the server route.
 
-- **LinkedIn** — URL only (platform limitation; LinkedIn fetches OG tags from the public job page).
+## Technical notes
 
-- **More… (native share)** — `navigator.share({ title: "We're hiring", text: SHARE_TEXT, url: publicUrl })`
-
-## New share targets in the dropdown
-
-Inserted after Email, before More…:
-
-- **X** — inline SVG X logo (monochrome stroke style). Opens tweet intent in new tab.
-- **Reddit** — inline SVG Snoo / Reddit logo (monochrome). Opens Reddit submit in new tab.
-
-Both reuse the existing `ShareRow` component.
-
-## Icons
-
-Add two inline SVGs alongside existing share icons (`XIcon`, `RedditIcon`) using `stroke="currentColor"` / `strokeWidth={1.5}` to match the monochrome icon style.
+- **AI provider:** reuses the project's existing OpenAI server helpers (`@/lib/ai/openai-model.server`) so it works without new secrets and matches `generateScreeningQuestions` style.
+- **Security:** public route — slug-scoped, only published jobs, no PII echoed back, no DB writes, formContext fields length-capped and trimmed, hard cap of 20 messages and ~2KB per message.
+- **Fallback dispatcher** (server-side, when model unreachable): keyword match on user's last message → returns one of:
+  - process → bulleted steps from `job` if present, else generic 3-step ("Intro call · Hiring manager interview · Practical exercise").
+  - timeline → "Usually 1–3 weeks end to end."
+  - remote/in-person → derived from `job.location` / `employment_type`.
+  - feedback → "I can't reach the assistant right now — try again in a moment, or share your background in your application and the team will review it."
+  - default → "I can't reach the assistant right now. Please try again in a moment."
+- **No streaming** in v1 — single request/response keeps the route simple and matches the rest of the public surface. Easy upgrade later.
 
 ## Out of scope
 
-- LinkedIn API posting / OAuth connector
-- Changes to `Duplicate`, `Edit`, `Live▼`, Publish flow, public job page OG tags
+- Persisting candidate chat transcripts.
+- Showing the assistant to recruiters in the workspace view.
+- Compensation negotiation, visa/legal advice, outcome promises.
+- Streaming responses.
+- The recruiter-side workspace UI on `app.c.$id.tsx` (untouched).

@@ -6,6 +6,7 @@ import { getPublicJob } from "@/lib/public-jobs.functions";
 import { Markdown } from "@/components/ui/markdown";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { HiringAssistant } from "@/components/jobs/hiring-assistant";
 
 type Screening = Array<{
   id: string;
@@ -413,6 +414,20 @@ function ApplyPage() {
           </form>
         </aside>
       </div>
+
+      {!submitted && (
+        <HiringAssistant
+          slug={job.slug}
+          formContext={{
+            name: form.name || undefined,
+            email: form.email || undefined,
+            linkedin: form.linkedin || undefined,
+            location: form.location || undefined,
+            resume_filename: form.resume_filename || undefined,
+            answers: form.answers,
+          }}
+        />
+      )}
     </div>
   );
 }
