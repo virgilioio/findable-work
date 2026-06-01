@@ -229,7 +229,7 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 
 function GeneralPane() {
   const { theme, toggle } = useTheme();
-  const { lang, setLang } = useLanguage();
+  const { lang, setLang, t } = useLanguage();
 
   return (
     <div>
