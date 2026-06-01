@@ -1263,13 +1263,15 @@ function BillingPane() {
   const {
     balance,
     sourcingRunCost,
+    candidateAddCost,
     phoneRevealCost,
     bundles,
     stats30d,
     ledger,
     subscription,
   } = data;
-  const low = balance < sourcingRunCost;
+  // One initial sourcing run targets ~20 candidates → 20 credits.
+  const low = balance < 20;
   const subActive =
     !!subscription && (subscription.status === "active" || subscription.status === "trialing");
   const currentTierKey = subActive ? subscription!.tierKey : null;
@@ -1298,7 +1300,7 @@ function BillingPane() {
             </div>
           </div>
           <div className="text-right text-[11.5px] text-text-mute">
-            <div>{sourcingRunCost} credits / sourcing run</div>
+            <div>{candidateAddCost ?? 1} credit / candidate sourced</div>
             <div>{phoneRevealCost} credits / phone reveal</div>
           </div>
         </div>
@@ -1357,7 +1359,7 @@ function BillingPane() {
           icon={<TrendingDown className="h-3.5 w-3.5" />}
           label="Spent · last 30 days"
           value={stats30d.spent.toLocaleString()}
-          sub={`${stats30d.sourcingRuns} runs · ${stats30d.phoneReveals} reveals`}
+          sub={`${stats30d.candidatesAdded ?? 0} candidates · ${stats30d.phoneReveals} reveals`}
         />
         <StatCard
           icon={<TrendingUp className="h-3.5 w-3.5" />}

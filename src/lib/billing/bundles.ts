@@ -24,7 +24,7 @@ export const CREDIT_BUNDLES: CreditBundle[] = [
     credits: 500,
     amountCents: 4900,
     currency: "usd",
-    tagline: "~50 sourcing runs",
+    tagline: "≈500 candidates · ~49 source-mores",
   },
   {
     key: "growth",
@@ -33,7 +33,7 @@ export const CREDIT_BUNDLES: CreditBundle[] = [
     amountCents: 12900,
     currency: "usd",
     highlight: true,
-    tagline: "~150 sourcing runs",
+    tagline: "≈1,500 candidates · ~149 source-mores",
   },
   {
     key: "pro",
@@ -41,7 +41,7 @@ export const CREDIT_BUNDLES: CreditBundle[] = [
     credits: 4000,
     amountCents: 29900,
     currency: "usd",
-    tagline: "~400 sourcing runs",
+    tagline: "≈4,000 candidates",
   },
   {
     key: "scale",
@@ -49,7 +49,7 @@ export const CREDIT_BUNDLES: CreditBundle[] = [
     credits: 10000,
     amountCents: 69900,
     currency: "usd",
-    tagline: "~1000 sourcing runs",
+    tagline: "≈10,000 candidates",
   },
 ];
 
@@ -57,8 +57,16 @@ export function getBundle(key: string): CreditBundle | undefined {
   return CREDIT_BUNDLES.find((b) => b.key === key);
 }
 
-export const SOURCING_RUN_COST = 10;
+// New model: charge per candidate actually inserted. Phone reveals unchanged.
+// SOURCING_RUN_COST is kept as a legacy export (= 1) so any remaining imports
+// don't crash; do NOT use it to gate runs — use CANDIDATE_ADD_COST + a balance
+// pre-check, and debit per insert.
+export const CANDIDATE_ADD_COST = 1;
 export const PHONE_REVEAL_COST = 5;
+export const SOURCING_RUN_COST = CANDIDATE_ADD_COST;
+// Typical fresh-insert quotas, used for the "low balance" warning and copy.
+export const INITIAL_RUN_TARGET = 20;
+export const SOURCE_MORE_TARGET = 10;
 
 /**
  * Server-only: resolve the Stripe Price ID for a tier + kind from env.
