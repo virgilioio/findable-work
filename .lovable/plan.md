@@ -1,19 +1,20 @@
-## Goal
-Use the Alice serif font for the "findable" wordmark in all six email templates so the brand stays consistent with the app's logo fallback.
+## Add spark icon to email templates
 
-## Changes
-For each file in `supabase/email-templates/` (confirm-signup, magic-link, reset-password, invite, email-change, reauthentication):
+Extract the 4-pointed spark/star from `src/assets/findable-wordmark.svg` and inline it as an SVG to the left of the "findable" wordmark in all 6 email templates.
 
-1. Add a Google Fonts `<link>` for Alice in the `<head>`:
-   ```html
-   <link href="https://fonts.googleapis.com/css2?family=Alice&display=swap" rel="stylesheet">
-   ```
-2. Update the wordmark `<div>` to use Alice with a serif fallback:
-   ```html
-   <div style="font-size:24px;font-weight:400;letter-spacing:-0.01em;color:#0a0a0a;font-family:'Alice',Georgia,'Times New Roman',serif;">findable</div>
-   ```
+### Templates to update
+1. `supabase/email-templates/confirm-signup.html`
+2. `supabase/email-templates/email-change.html`
+3. `supabase/email-templates/invite.html`
+4. `supabase/email-templates/magic-link.html`
+5. `supabase/email-templates/reauthentication.html`
+6. `supabase/email-templates/reset-password.html`
 
-## Notes
-- Many email clients (notably Outlook) strip web fonts — the serif fallback (Georgia) keeps the wordmark on-brand even without Alice loading.
-- After approval, re-paste each updated HTML file into the matching Supabase email template in the dashboard.
-- Body text remains in the system sans-serif stack; only the wordmark uses Alice.
+### Approach
+- Extract the spark path data from the wordmark SVG and create a small standalone inline SVG (width: 20px, fill: #0a0a0a)
+- Replace the current wordmark `<div>` in each template with a layout that places the spark SVG inline to the left of the "findable" text
+- Use email-safe HTML: `vertical-align: middle` on both the SVG and a wrapping text span, avoiding flexbox (which breaks in Outlook)
+- Keep the Alice font and all existing styling intact
+
+### After implementation
+The user will need to copy-paste each updated template HTML into the matching Supabase Auth email template settings (same process as before).
