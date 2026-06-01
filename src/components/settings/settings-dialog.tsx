@@ -69,7 +69,10 @@ import {
 import { getCreditsSummary } from "@/lib/billing/credits.functions";
 import { createCheckoutSession } from "@/lib/billing/checkout.functions";
 import { openBillingPortal } from "@/lib/billing/portal.functions";
-import { getProfile, updateDisplayName } from "@/lib/profile.functions";
+import { getProfile, updateDisplayName, updatePersonalization } from "@/lib/profile.functions";
+import { exportCandidatesCsv } from "@/lib/data-export.functions";
+import { deleteOwnAccount } from "@/lib/account.functions";
+import { LANGUAGES, useLanguage } from "@/lib/i18n";
 
 export type SettingsSection =
   | "general"
@@ -226,14 +229,7 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 
 function GeneralPane() {
   const { theme, toggle } = useTheme();
-  const [showSidebar, setShowSidebar] = usePersistedState<boolean>(
-    "findable:show-sidebar",
-    true,
-  );
-  const [language, setLanguage] = usePersistedState<string>(
-    "findable:language",
-    "en",
-  );
+  const { lang, setLang } = useLanguage();
 
   return (
     <div>
@@ -253,17 +249,17 @@ function GeneralPane() {
           Monochrome
         </span>
       </Row>
-      <Row label="Show sidebar" description="Toggle the conversation sidebar.">
-        <Switch checked={showSidebar} onCheckedChange={setShowSidebar} />
-      </Row>
       <Row label="Language" description="Interface language.">
-        <Select value={language} onValueChange={setLanguage}>
-          <SelectTrigger className="h-8 w-[140px]">
+        <Select value={lang} onValueChange={(v) => setLang(v as never)}>
+          <SelectTrigger className="h-8 w-[160px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="en">English</SelectItem>
-            <SelectItem value="es">Español</SelectItem>
+            {LANGUAGES.map((l) => (
+              <SelectItem key={l.code} value={l.code}>
+                {l.label}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </Row>
@@ -273,33 +269,12 @@ function GeneralPane() {
 
 /* ----------------------------- Notifications ----------------------------- */
 
-type Notifications = {
-  applicants: boolean;
-  replies: boolean;
-  interviews: boolean;
-  digest: boolean;
-  mentions: boolean;
-};
-const DEFAULT_NOTIF: Notifications = {
-  applicants: true,
-  replies: true,
-  interviews: true,
-  digest: false,
-  mentions: true,
-};
-
 function NotificationsPane() {
-  const [n, setN] = usePersistedState<Notifications>(
-    "findable:notifications",
-    DEFAULT_NOTIF,
-  );
-  const set = (k: keyof Notifications) => (v: boolean) => setN({ ...n, [k]: v });
-
   // Server-backed prefs (drive real emails).
   const getPrefs = useServerFn(getNotificationPrefs);
   const updPrefs = useServerFn(updateNotificationPrefs);
   const qc = useQueryClient();
-  const { data: prefs } = useQuery({
+  const { data: prefs, isLoading } = useQuery({
     queryKey: ["notification-prefs"],
     queryFn: () => getPrefs({}),
   });
@@ -320,6 +295,7 @@ function NotificationsPane() {
   });
   const applicants = prefs?.notifyOnNewApplicant ?? true;
   const digest = prefs?.notifyDailyDigest ?? false;
+  const busy = isLoading || mut.isPending;
 
   return (
     <div>
@@ -329,7 +305,7 @@ function NotificationsPane() {
       >
         <Switch
           checked={applicants}
-          disabled={mut.isPending}
+          disabled={busy}
           onCheckedChange={(v) =>
             mut.mutate({ notifyOnNewApplicant: v, notifyDailyDigest: digest })
           }
@@ -341,20 +317,11 @@ function NotificationsPane() {
       >
         <Switch
           checked={digest}
-          disabled={mut.isPending}
+          disabled={busy}
           onCheckedChange={(v) =>
             mut.mutate({ notifyOnNewApplicant: applicants, notifyDailyDigest: v })
           }
         />
-      </Row>
-      <Row label="Replies" description="When a candidate replies to outreach.">
-        <Switch checked={n.replies} onCheckedChange={set("replies")} />
-      </Row>
-      <Row label="Interview reminders" description="15 minutes before an interview.">
-        <Switch checked={n.interviews} onCheckedChange={set("interviews")} />
-      </Row>
-      <Row label="Mentions" description="When a teammate @mentions you.">
-        <Switch checked={n.mentions} onCheckedChange={set("mentions")} />
       </Row>
     </div>
   );
