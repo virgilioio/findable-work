@@ -20,6 +20,7 @@ function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [magicSent, setMagicSent] = useState(false);
   const redirectedRef = useRef(false);
 
   function redirectToApp() {
@@ -98,6 +99,27 @@ function LoginPage() {
     }
   }
 
+  async function onMagicLink() {
+    setError(null);
+    if (!email) {
+      setError("Enter your email first, then tap the magic link button.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: { emailRedirectTo: `${window.location.origin}/app` },
+      });
+      if (error) throw error;
+      setMagicSent(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't send magic link");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <div className="relative flex min-h-screen flex-col items-center justify-center bg-[var(--bg)] px-6 py-10">
       {/* Top-left brand */}
@@ -108,14 +130,25 @@ function LoginPage() {
       {/* Card */}
       <div className="w-full max-w-[380px] rounded-[14px] border border-[var(--border)] bg-[var(--bg-elev)] px-8 py-9">
         <h1 className="text-[22px] font-semibold tracking-[-0.015em] text-[var(--text)]">
-          {mode === "signin" ? "Welcome back" : "Create your account"}
+          {magicSent ? "Check your inbox" : mode === "signin" ? "Welcome back" : "Create your account"}
         </h1>
         <p className="mt-1.5 text-[13.5px] text-[var(--text-mute)]">
-          {mode === "signin"
+          {magicSent
+            ? `We sent a sign-in link to ${email}. It expires in 1 hour.`
+            : mode === "signin"
             ? "Sign in to your recruiting workspace"
             : "Start hiring with your AI recruiter"}
         </p>
 
+        {magicSent ? (
+          <button
+            type="button"
+            onClick={() => setMagicSent(false)}
+            className="mt-6 h-10 w-full rounded-[10px] border border-[var(--border-strong)] bg-[var(--bg-elev)] text-[14px] font-medium text-[var(--text)] hover:bg-[var(--bg-hover)]"
+          >
+            Use a different email
+          </button>
+        ) : (
         <form onSubmit={onSubmit} className="mt-6 flex flex-col gap-2.5">
           <button
             type="button"
@@ -161,12 +194,12 @@ function LoginPage() {
 
           {mode === "signin" && (
             <div className="-mt-1 mb-1 text-right">
-              <a
-                href="#"
+              <Link
+                to="/forgot-password"
                 className="text-[12.5px] text-[var(--text-mute)] hover:text-[var(--text)]"
               >
                 Forgot password?
-              </a>
+              </Link>
             </div>
           )}
 
@@ -183,7 +216,19 @@ function LoginPage() {
           >
             {loading ? "Signing in…" : mode === "signin" ? "Sign in" : "Create account"}
           </button>
+
+          {mode === "signin" && (
+            <button
+              type="button"
+              onClick={onMagicLink}
+              disabled={loading}
+              className="h-10 rounded-[10px] border border-[var(--border-strong)] bg-[var(--bg-elev)] text-[13.5px] font-medium text-[var(--text)] transition hover:bg-[var(--bg-hover)] disabled:opacity-60"
+            >
+              Email me a magic link
+            </button>
+          )}
         </form>
+        )}
 
         <div className="mt-[22px] border-t border-[var(--border)] pt-[18px] text-center text-[13px] text-[var(--text-mute)]">
           {mode === "signin" ? "New to findable?" : "Already have an account?"}{" "}
