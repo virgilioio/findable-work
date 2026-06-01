@@ -329,74 +329,149 @@ function NotificationsPane() {
 
 /* ---------------------------- Personalization ---------------------------- */
 
-type Personalization = {
-  assistantName: string;
-  tone: "friendly" | "professional" | "direct";
-  autoPersonalize: boolean;
-  regions: string[];
-  signature: string;
-};
-const DEFAULT_PERSONAL: Personalization = {
-  assistantName: "Findable",
-  tone: "professional",
-  autoPersonalize: true,
-  regions: ["LATAM"],
-  signature: "",
-};
 const REGIONS = ["LATAM", "US", "EU", "APAC"];
 
 function PersonalizationPane() {
-  const [p, setP] = usePersistedState<Personalization>(
-    "findable:personalization",
-    DEFAULT_PERSONAL,
-  );
+  const qc = useQueryClient();
+  const getProfileFn = useServerFn(getProfile);
+  const updateFn = useServerFn(updatePersonalization);
+  const { data: profile, isLoading } = useQuery({
+    queryKey: ["profile"],
+    queryFn: () => getProfileFn(),
+  });
+
+  const [draft, setDraft] = useState({
+    companyName: "",
+    companyWebsite: "",
+    companyOneLiner: "",
+    companyDescription: "",
+    hiringContext: "",
+    userRole: "",
+    sourcingRegions: [] as string[],
+  });
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    if (!profile || hydrated) return;
+    setDraft({
+      companyName: profile.companyName ?? "",
+      companyWebsite: profile.companyWebsite ?? "",
+      companyOneLiner: profile.companyOneLiner ?? "",
+      companyDescription: profile.companyDescription ?? "",
+      hiringContext: profile.hiringContext ?? "",
+      userRole: profile.userRole ?? "",
+      sourcingRegions: profile.sourcingRegions ?? [],
+    });
+    setHydrated(true);
+  }, [profile, hydrated]);
+
+  const mut = useMutation({
+    mutationFn: (patch: Partial<typeof draft>) => updateFn({ data: patch }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["profile"] });
+    },
+    onError: (e) => toast.error((e as Error).message || "Couldn't save"),
+  });
+
+  const commit = (patch: Partial<typeof draft>) => mut.mutate(patch);
+
   const toggleRegion = (r: string) => {
-    const next = p.regions.includes(r)
-      ? p.regions.filter((x) => x !== r)
-      : [...p.regions, r];
-    setP({ ...p, regions: next });
+    const next = draft.sourcingRegions.includes(r)
+      ? draft.sourcingRegions.filter((x) => x !== r)
+      : [...draft.sourcingRegions, r];
+    setDraft({ ...draft, sourcingRegions: next });
+    commit({ sourcingRegions: next });
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex h-32 items-center justify-center text-text-mute">
+        <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading…
+      </div>
+    );
+  }
+
   return (
-    <div>
-      <Row label="Assistant name" description="How the assistant refers to itself.">
+    <div className="space-y-1">
+      <p className="mb-3 text-[12.5px] text-text-mute">
+        Tell Findable about you and your company. The AI uses this to draft
+        outreach, job posts, and replies that actually sound like you.
+      </p>
+      <Row label="Your role" description="e.g. Head of Talent, Founder.">
         <Input
-          value={p.assistantName}
-          onChange={(e) => setP({ ...p, assistantName: e.target.value })}
-          className="h-8 w-[200px]"
+          value={draft.userRole}
+          onChange={(e) => setDraft({ ...draft, userRole: e.target.value })}
+          onBlur={() => commit({ userRole: draft.userRole })}
+          className="h-8 w-[260px]"
+          placeholder="Head of Talent"
         />
       </Row>
-      <Row label="Outreach tone" description="Default writing style for emails.">
-        <Select
-          value={p.tone}
-          onValueChange={(v) => setP({ ...p, tone: v as Personalization["tone"] })}
-        >
-          <SelectTrigger className="h-8 w-[160px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="friendly">Friendly</SelectItem>
-            <SelectItem value="professional">Professional</SelectItem>
-            <SelectItem value="direct">Direct</SelectItem>
-          </SelectContent>
-        </Select>
+      <Row label="Company name" description="The company you're hiring for.">
+        <Input
+          value={draft.companyName}
+          onChange={(e) => setDraft({ ...draft, companyName: e.target.value })}
+          onBlur={() => commit({ companyName: draft.companyName })}
+          className="h-8 w-[260px]"
+          placeholder="Acme Inc."
+        />
       </Row>
-      <Row
-        label="Auto-personalize"
-        description="Insert candidate-specific details into outreach drafts."
-      >
-        <Switch
-          checked={p.autoPersonalize}
-          onCheckedChange={(v) => setP({ ...p, autoPersonalize: v })}
+      <Row label="Company website" description="Public URL.">
+        <Input
+          value={draft.companyWebsite}
+          onChange={(e) => setDraft({ ...draft, companyWebsite: e.target.value })}
+          onBlur={() => commit({ companyWebsite: draft.companyWebsite })}
+          className="h-8 w-[260px]"
+          placeholder="https://acme.com"
         />
       </Row>
       <div className="border-b border-border py-3">
+        <div className="text-[13px] font-medium text-text">One-liner</div>
+        <div className="mt-0.5 text-[12px] text-text-mute">
+          A single sentence that captures what the company does.
+        </div>
+        <Input
+          value={draft.companyOneLiner}
+          onChange={(e) => setDraft({ ...draft, companyOneLiner: e.target.value })}
+          onBlur={() => commit({ companyOneLiner: draft.companyOneLiner })}
+          className="mt-2 h-8 w-full"
+          placeholder="We help SMBs run payroll in one click."
+        />
+      </div>
+      <div className="border-b border-border py-3">
+        <div className="text-[13px] font-medium text-text">About the company</div>
+        <div className="mt-0.5 text-[12px] text-text-mute">
+          Mission, product, team, culture — anything the AI should weave into
+          outreach and job posts.
+        </div>
+        <Textarea
+          value={draft.companyDescription}
+          onChange={(e) => setDraft({ ...draft, companyDescription: e.target.value })}
+          onBlur={() => commit({ companyDescription: draft.companyDescription })}
+          className="mt-2 min-h-[110px]"
+          placeholder="We're a 40-person remote team building payroll software for small businesses in LATAM…"
+        />
+      </div>
+      <div className="border-b border-border py-3">
+        <div className="text-[13px] font-medium text-text">Hiring context</div>
+        <div className="mt-0.5 text-[12px] text-text-mute">
+          What you typically hire for: roles, seniority, locations, must-haves.
+        </div>
+        <Textarea
+          value={draft.hiringContext}
+          onChange={(e) => setDraft({ ...draft, hiringContext: e.target.value })}
+          onBlur={() => commit({ hiringContext: draft.hiringContext })}
+          className="mt-2 min-h-[90px]"
+          placeholder="Mostly senior backend engineers (Go/Rust), LATAM-remote, fluent English."
+        />
+      </div>
+      <div className="py-3">
         <div className="text-[13px] font-medium text-text">Sourcing regions</div>
         <div className="mt-0.5 text-[12px] text-text-mute">
           Default regions when sourcing candidates.
         </div>
         <div className="mt-2 flex flex-wrap gap-1.5">
           {REGIONS.map((r) => {
-            const on = p.regions.includes(r);
+            const on = draft.sourcingRegions.includes(r);
             return (
               <button
                 key={r}
@@ -414,18 +489,6 @@ function PersonalizationPane() {
             );
           })}
         </div>
-      </div>
-      <div className="py-3">
-        <div className="text-[13px] font-medium text-text">Email signature</div>
-        <div className="mt-0.5 text-[12px] text-text-mute">
-          Appended to outreach emails.
-        </div>
-        <Textarea
-          value={p.signature}
-          onChange={(e) => setP({ ...p, signature: e.target.value })}
-          className="mt-2 min-h-[90px]"
-          placeholder={"Best,\nYour name"}
-        />
       </div>
     </div>
   );
