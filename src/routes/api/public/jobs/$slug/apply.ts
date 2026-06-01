@@ -1,6 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { sendBrandedEmail } from "@/lib/email/send.server";
+import {
+  applicationConfirmationHtml,
+  newApplicantInstantHtml,
+} from "@/lib/email/templates.server";
 
 type Screening = Array<{
   id: string;
@@ -76,7 +81,7 @@ export const Route = createFileRoute("/api/public/jobs/$slug/apply")({
         // Load job (admin — public flow).
         const { data: job, error: jobErr } = await supabaseAdmin
           .from("jobs")
-          .select("id, user_id, slug, title, published, screening")
+          .select("id, user_id, slug, title, company, published, screening, conversation_id")
           .eq("slug", slug)
           .maybeSingle();
         if (jobErr) return new Response("Error", { status: 500 });
@@ -255,6 +260,55 @@ export const Route = createFileRoute("/api/public/jobs/$slug/apply")({
             .from("applications")
             .update({ candidate_id: candRow.id })
             .eq("id", appRow.id);
+        }
+
+        // ---- Emails: best-effort, never fail the apply request. ----
+        try {
+          const confirm = applicationConfirmationHtml({
+            candidateName: input.name,
+            jobTitle: job.title || "the role",
+            company: (job as any).company || "",
+          });
+          await sendBrandedEmail({
+            to: input.email,
+            subject: confirm.subject,
+            html: confirm.html,
+            text: confirm.text,
+          });
+        } catch (e: any) {
+          console.error("[apply] applicant confirmation send failed", e?.message);
+        }
+
+        try {
+          const { data: prefs } = await (supabaseAdmin as any)
+            .from("profiles")
+            .select("notify_on_new_applicant")
+            .eq("id", job.user_id)
+            .maybeSingle();
+          if (prefs?.notify_on_new_applicant ?? true) {
+            const { data: userRes } = await supabaseAdmin.auth.admin.getUserById(
+              job.user_id,
+            );
+            const recruiterEmail = userRes?.user?.email;
+            if (recruiterEmail) {
+              const appUrl = `https://findable.work/app/c/${jobFull?.conversation_id ?? ""}`;
+              const notif = newApplicantInstantHtml({
+                recruiterFirstName: "",
+                applicantName: input.name,
+                jobTitle: job.title || "your role",
+                appUrl,
+              });
+              await sendBrandedEmail({
+                to: recruiterEmail,
+                subject: notif.subject,
+                html: notif.html,
+                text: notif.text,
+                replyTo: input.email,
+              });
+            }
+          }
+        } catch (e: any) {
+          console.error("[apply] recruiter notification send failed", e?.message);
         }
 
         return Response.json({ ok: true });
