@@ -131,12 +131,12 @@ export function SettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl h-[600px] p-0 gap-0 overflow-hidden">
+      <DialogContent className="max-w-4xl h-[600px] p-0 gap-0 overflow-hidden flex flex-col">
         <DialogTitle className="sr-only">Settings</DialogTitle>
         <DialogDescription className="sr-only">
           Manage your preferences, integrations and account.
         </DialogDescription>
-        <div className="flex h-full min-h-0">
+        <div className="flex flex-1 min-h-0">
           {/* Rail */}
           <aside className="w-56 shrink-0 border-r border-border bg-bg-side py-4">
             <div className="px-4 pb-3 text-[13px] font-semibold text-text">
