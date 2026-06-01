@@ -68,6 +68,7 @@ import {
 } from "@/lib/notifications.functions";
 import { getCreditsSummary } from "@/lib/billing/credits.functions";
 import { createCheckoutSession } from "@/lib/billing/checkout.functions";
+import { openBillingPortal } from "@/lib/billing/portal.functions";
 
 export type SettingsSection =
   | "general"
