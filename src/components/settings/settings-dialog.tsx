@@ -1121,6 +1121,7 @@ const HELP_ARTICLES = [
 ];
 
 function HelpPane() {
+  const { t } = useLanguage();
   const [q, setQ] = useState("");
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -1137,7 +1138,7 @@ function HelpPane() {
         <Input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search help articles"
+          placeholder={t("settings.help.search.ph", "Search help articles")}
           className="h-9 pl-8"
         />
         {q && (
@@ -1152,7 +1153,7 @@ function HelpPane() {
       <div className="mt-4 space-y-1.5">
         {filtered.length === 0 ? (
           <p className="py-4 text-center text-[12.5px] text-text-mute">
-            No articles found.
+            {t("settings.help.empty", "No articles found.")}
           </p>
         ) : (
           filtered.map((a) => (
@@ -1168,13 +1169,13 @@ function HelpPane() {
       </div>
       <div className="mt-5 flex items-center justify-between rounded-lg border border-border bg-bg-side p-3">
         <div className="text-[12.5px] text-text-mute">
-          Need a hand? Our team usually replies within a few hours.
+          {t("settings.help.support", "Need a hand? Our team usually replies within a few hours.")}
         </div>
         <a
           href="mailto:support@findable.work"
           className="rounded-lg bg-text px-3 py-1.5 text-[12.5px] font-medium text-text-invert transition hover:opacity-90"
         >
-          Contact support
+          {t("common.contact_support", "Contact support")}
         </a>
       </div>
     </div>
