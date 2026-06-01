@@ -4,6 +4,8 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { enrichApolloProfiles } from "./apollo.server";
 import { linkedinSlug } from "./budget";
+import { spendCreditsAdmin } from "@/lib/billing/credits.functions";
+import { CANDIDATE_ADD_COST } from "@/lib/billing/bundles";
 
 const Input = z.object({
   conversationId: z.string().uuid(),
@@ -97,6 +99,27 @@ export const sourceMore = createServerFn({ method: "POST" })
 
     let added = 0;
     let skipped = 0;
+    let creditsExhausted = false;
+    let creditsSpent = 0;
+
+    // Pre-check balance so we don't burn external API quota on a zero-balance run.
+    const { data: balRow } = await supabaseAdmin
+      .from("profiles")
+      .select("credits_remaining")
+      .eq("id", userId)
+      .single();
+    const startingBalance = balRow?.credits_remaining ?? 0;
+    if (apolloFresh.length + pdlFresh.length > 0 && startingBalance < CANDIDATE_ADD_COST) {
+      return {
+        added: 0,
+        skipped: 0,
+        remaining: remaining.length,
+        exhausted: false,
+        insufficient_credits: true,
+        credits_required: CANDIDATE_ADD_COST,
+        credits_balance: startingBalance,
+      };
+    }
 
     // --- Internal reuse: clone existing candidate row into this conversation. ---
     async function cloneInternal(src: any) {
