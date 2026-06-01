@@ -1587,3 +1587,24 @@ function WhatsAppIcon({ size = 14 }: { size?: number }) {
     </svg>
   );
 }
+
+function XLogoIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 4 L16 16 M16 4 L4 16" />
+    </svg>
+  );
+}
+
+function RedditIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="10" cy="11" r="6" />
+      <circle cx="16.5" cy="5" r="1.25" />
+      <path d="M10 5 L13.5 5" />
+      <circle cx="7.75" cy="11" r="0.6" fill="currentColor" />
+      <circle cx="12.25" cy="11" r="0.6" fill="currentColor" />
+      <path d="M7.5 13.2c.7.6 1.6.9 2.5.9s1.8-.3 2.5-.9" />
+    </svg>
+  );
+}
