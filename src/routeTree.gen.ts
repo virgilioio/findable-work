@@ -24,6 +24,7 @@ import { Route as ApiPublicGuestChatRouteImport } from './routes/api/public/gues
 import { Route as AuthenticatedAdminUsageRouteImport } from './routes/_authenticated/admin.usage'
 import { Route as AuthenticatedAdminPromptsRouteImport } from './routes/_authenticated/admin.prompts'
 import { Route as ApiPublicJobsSlugRouteImport } from './routes/api/public/jobs/$slug'
+import { Route as ApiPublicHooksSendApplicationDigestsRouteImport } from './routes/api/public/hooks/send-application-digests'
 import { Route as ApiPublicApolloPhoneRouteImport } from './routes/api/public/apollo/phone'
 import { Route as AuthenticatedOauthGoogleReturnRouteImport } from './routes/_authenticated/oauth.google.return'
 import { Route as AuthenticatedAppCIdRouteImport } from './routes/_authenticated/app.c.$id'
@@ -105,6 +106,12 @@ const ApiPublicJobsSlugRoute = ApiPublicJobsSlugRouteImport.update({
   path: '/api/public/jobs/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicHooksSendApplicationDigestsRoute =
+  ApiPublicHooksSendApplicationDigestsRouteImport.update({
+    id: '/api/public/hooks/send-application-digests',
+    path: '/api/public/hooks/send-application-digests',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicApolloPhoneRoute = ApiPublicApolloPhoneRouteImport.update({
   id: '/api/public/apollo/phone',
   path: '/api/public/apollo/phone',
@@ -149,6 +156,7 @@ export interface FileRoutesByFullPath {
   '/app/c/$id': typeof AuthenticatedAppCIdRoute
   '/oauth/google/return': typeof AuthenticatedOauthGoogleReturnRoute
   '/api/public/apollo/phone': typeof ApiPublicApolloPhoneRoute
+  '/api/public/hooks/send-application-digests': typeof ApiPublicHooksSendApplicationDigestsRoute
   '/api/public/jobs/$slug': typeof ApiPublicJobsSlugRouteWithChildren
   '/api/public/jobs/$slug/apply': typeof ApiPublicJobsSlugApplyRoute
   '/api/public/jobs/$slug/chat': typeof ApiPublicJobsSlugChatRoute
@@ -169,6 +177,7 @@ export interface FileRoutesByTo {
   '/app/c/$id': typeof AuthenticatedAppCIdRoute
   '/oauth/google/return': typeof AuthenticatedOauthGoogleReturnRoute
   '/api/public/apollo/phone': typeof ApiPublicApolloPhoneRoute
+  '/api/public/hooks/send-application-digests': typeof ApiPublicHooksSendApplicationDigestsRoute
   '/api/public/jobs/$slug': typeof ApiPublicJobsSlugRouteWithChildren
   '/api/public/jobs/$slug/apply': typeof ApiPublicJobsSlugApplyRoute
   '/api/public/jobs/$slug/chat': typeof ApiPublicJobsSlugChatRoute
@@ -192,6 +201,7 @@ export interface FileRoutesById {
   '/_authenticated/app/c/$id': typeof AuthenticatedAppCIdRoute
   '/_authenticated/oauth/google/return': typeof AuthenticatedOauthGoogleReturnRoute
   '/api/public/apollo/phone': typeof ApiPublicApolloPhoneRoute
+  '/api/public/hooks/send-application-digests': typeof ApiPublicHooksSendApplicationDigestsRoute
   '/api/public/jobs/$slug': typeof ApiPublicJobsSlugRouteWithChildren
   '/api/public/jobs/$slug/apply': typeof ApiPublicJobsSlugApplyRoute
   '/api/public/jobs/$slug/chat': typeof ApiPublicJobsSlugChatRoute
@@ -215,6 +225,7 @@ export interface FileRouteTypes {
     | '/app/c/$id'
     | '/oauth/google/return'
     | '/api/public/apollo/phone'
+    | '/api/public/hooks/send-application-digests'
     | '/api/public/jobs/$slug'
     | '/api/public/jobs/$slug/apply'
     | '/api/public/jobs/$slug/chat'
@@ -235,6 +246,7 @@ export interface FileRouteTypes {
     | '/app/c/$id'
     | '/oauth/google/return'
     | '/api/public/apollo/phone'
+    | '/api/public/hooks/send-application-digests'
     | '/api/public/jobs/$slug'
     | '/api/public/jobs/$slug/apply'
     | '/api/public/jobs/$slug/chat'
@@ -257,6 +269,7 @@ export interface FileRouteTypes {
     | '/_authenticated/app/c/$id'
     | '/_authenticated/oauth/google/return'
     | '/api/public/apollo/phone'
+    | '/api/public/hooks/send-application-digests'
     | '/api/public/jobs/$slug'
     | '/api/public/jobs/$slug/apply'
     | '/api/public/jobs/$slug/chat'
@@ -274,6 +287,7 @@ export interface RootRouteChildren {
   JobsSlugRoute: typeof JobsSlugRoute
   ApiPublicGuestChatRoute: typeof ApiPublicGuestChatRoute
   ApiPublicApolloPhoneRoute: typeof ApiPublicApolloPhoneRoute
+  ApiPublicHooksSendApplicationDigestsRoute: typeof ApiPublicHooksSendApplicationDigestsRoute
   ApiPublicJobsSlugRoute: typeof ApiPublicJobsSlugRouteWithChildren
 }
 
@@ -384,6 +398,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicJobsSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/hooks/send-application-digests': {
+      id: '/api/public/hooks/send-application-digests'
+      path: '/api/public/hooks/send-application-digests'
+      fullPath: '/api/public/hooks/send-application-digests'
+      preLoaderRoute: typeof ApiPublicHooksSendApplicationDigestsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/apollo/phone': {
       id: '/api/public/apollo/phone'
       path: '/api/public/apollo/phone'
@@ -478,6 +499,8 @@ const rootRouteChildren: RootRouteChildren = {
   JobsSlugRoute: JobsSlugRoute,
   ApiPublicGuestChatRoute: ApiPublicGuestChatRoute,
   ApiPublicApolloPhoneRoute: ApiPublicApolloPhoneRoute,
+  ApiPublicHooksSendApplicationDigestsRoute:
+    ApiPublicHooksSendApplicationDigestsRoute,
   ApiPublicJobsSlugRoute: ApiPublicJobsSlugRouteWithChildren,
 }
 export const routeTree = rootRouteImport
