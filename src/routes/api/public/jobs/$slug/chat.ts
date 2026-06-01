@@ -1,0 +1,282 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { z } from "zod";
+import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { getPrompt } from "@/lib/prompts/registry.server";
+import {
+  OPENAI_CHAT_COMPLETIONS_URL,
+  getOpenAIKey,
+  getOpenAIModel,
+} from "@/lib/ai/openai-model.server";
+
+/**
+ * Public, unauthenticated candidate-facing chat for a published job.
+ * Grounded strictly in the public job fields + whatever the candidate
+ * has typed into the application form so far. Never persists transcripts.
+ */
+
+const messageSchema = z.object({
+  role: z.enum(["user", "assistant"]),
+  content: z.string().min(1).max(2000),
+});
+
+const answerVal = z.union([z.string().max(1000), z.array(z.string().max(200)).max(20)]);
+
+const formContextSchema = z
+  .object({
+    name: z.string().max(120).optional(),
+    email: z.string().max(200).optional(),
+    linkedin: z.string().max(300).optional(),
+    location: z.string().max(200).optional(),
+    resume_filename: z.string().max(200).optional(),
+    answers: z.record(z.string().max(64), answerVal).optional(),
+  })
+  .partial();
+
+const bodySchema = z.object({
+  messages: z.array(messageSchema).min(1).max(20),
+  formContext: formContextSchema.optional(),
+});
+
+// ----- rate limit -----
+type Bucket = { hits: number; resetAt: number };
+const BUCKETS = new Map<string, Bucket>();
+const RATE_WINDOW_MS = 10 * 60 * 1000;
+const RATE_LIMIT = 20;
+
+function rateLimited(key: string): boolean {
+  const now = Date.now();
+  const b = BUCKETS.get(key);
+  if (!b || now > b.resetAt) {
+    BUCKETS.set(key, { hits: 1, resetAt: now + RATE_WINDOW_MS });
+    return false;
+  }
+  b.hits += 1;
+  return b.hits > RATE_LIMIT;
+}
+
+function clientIp(request: Request): string {
+  return (
+    request.headers.get("cf-connecting-ip") ||
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    "unknown"
+  );
+}
+
+type Screening = Array<{
+  id: string;
+  type: "select" | "multi" | "textarea";
+  question: string;
+  options?: string[];
+  required: boolean;
+}>;
+
+type PublicJob = {
+  title: string;
+  company: string | null;
+  location: string | null;
+  employment_type: string | null;
+  salary_min: number | null;
+  salary_max: number | null;
+  currency: string | null;
+  summary: string | null;
+  description: string | null;
+  requirements: string[] | null;
+  responsibilities: string[] | null;
+  must_have: string[] | null;
+  nice_to_have: string[] | null;
+  screening: Screening | null;
+};
+
+function buildGrounding(job: PublicJob, fc: z.infer<typeof formContextSchema> | undefined): string {
+  const lines: string[] = [];
+  lines.push(`ROLE: ${job.title}${job.company ? ` at ${job.company}` : ""}`);
+  const meta = [
+    job.location,
+    job.employment_type ? job.employment_type.replace(/_/g, "-") : null,
+    job.salary_min && job.salary_max
+      ? `${job.currency || "USD"} ${job.salary_min.toLocaleString()}–${job.salary_max.toLocaleString()}`
+      : job.salary_min
+        ? `${job.currency || "USD"} ${job.salary_min.toLocaleString()}+`
+        : null,
+  ].filter(Boolean);
+  if (meta.length) lines.push(meta.join(" · "));
+  if (job.summary) lines.push(`\nSummary:\n${job.summary}`);
+  else if (job.description) lines.push(`\nDescription:\n${job.description.slice(0, 2000)}`);
+
+  if (job.responsibilities?.length) {
+    lines.push(`\nWhat you'll do:\n${job.responsibilities.map((x) => "• " + x).join("\n")}`);
+  }
+  const must = job.must_have?.length ? job.must_have : job.requirements ?? [];
+  if (must.length) {
+    lines.push(`\nMust-have:\n${must.map((x) => "• " + x).join("\n")}`);
+  }
+  if (job.nice_to_have?.length) {
+    lines.push(`\nNice-to-have:\n${job.nice_to_have.map((x) => "• " + x).join("\n")}`);
+  }
+  if (job.screening?.length) {
+    lines.push(
+      `\nApplication questions on this form:\n${job.screening.map((q) => "• " + q.question).join("\n")}`,
+    );
+  }
+
+  // Candidate-provided form data (only what they've typed; never PII the
+  // server would have to fetch).
+  const candidateBits: string[] = [];
+  if (fc?.name) candidateBits.push(`Name: ${fc.name}`);
+  if (fc?.location) candidateBits.push(`Location: ${fc.location}`);
+  if (fc?.linkedin) candidateBits.push(`LinkedIn: ${fc.linkedin}`);
+  if (fc?.resume_filename) candidateBits.push(`Resume uploaded: ${fc.resume_filename}`);
+  if (fc?.answers && Object.keys(fc.answers).length) {
+    const ansLines = Object.entries(fc.answers)
+      .map(([k, v]) => {
+        const q = job.screening?.find((x) => x.id === k);
+        const label = q ? q.question : k;
+        const val = Array.isArray(v) ? v.join(", ") : v;
+        return `  - ${label}: ${val}`;
+      })
+      .join("\n");
+    candidateBits.push(`Application answers so far:\n${ansLines}`);
+  }
+  lines.push(
+    `\nTHE CANDIDATE (use only for profile-feedback questions):\n${
+      candidateBits.length ? candidateBits.join("\n") : "The candidate has not filled in the application form yet."
+    }`,
+  );
+
+  return lines.join("\n");
+}
+
+function scriptedFallback(job: PublicJob, lastUser: string): string {
+  const q = lastUser.toLowerCase();
+  const isSpanish = /[áéíóúñ¿¡]|proceso|entrevista|remoto|sueldo|salario|cuánto|cuanto/.test(q);
+
+  const isProcess = /process|interview|step|stages|proceso|entrevista|etapa/.test(q);
+  const isTimeline = /how long|timeline|duration|weeks|days|cuánto tarda|cuanto tarda|duración|duracion/.test(q);
+  const isRemote = /remote|in.?person|onsite|on.?site|hybrid|remoto|presencial|híbrido|hibrido/.test(q);
+  const isFeedback = /feedback|profile|fit|match|chances|opinión|opinion|perfil/.test(q);
+
+  if (isProcess) {
+    return isSpanish
+      ? "Por lo general el proceso incluye: llamada inicial, entrevista con el hiring manager, y un ejercicio práctico o entrevista técnica. El equipo te dará los detalles exactos en el primer contacto."
+      : "Typically the process is: an intro call, a hiring manager interview, and a practical exercise or technical conversation. The team will share exact details on the first call.";
+  }
+  if (isTimeline) {
+    return isSpanish
+      ? "Normalmente toma entre 1 y 3 semanas de inicio a fin, dependiendo de la disponibilidad de los entrevistadores."
+      : "Usually 1–3 weeks end to end, depending on interviewer availability.";
+  }
+  if (isRemote) {
+    const loc = [job.location, job.employment_type?.replace(/_/g, "-")].filter(Boolean).join(" · ");
+    return isSpanish
+      ? `Según lo publicado: ${loc || "consulta la descripción de la vacante"}.`
+      : `Per the posting: ${loc || "see the role details above"}.`;
+  }
+  if (isFeedback) {
+    return isSpanish
+      ? "No puedo conectarme al asistente en este momento. Comparte tu experiencia en el formulario y el equipo lo revisará."
+      : "I can't reach the assistant right now — share your background in the application and the team will review it.";
+  }
+  return isSpanish
+    ? "No puedo conectarme al asistente en este momento. Intenta de nuevo en un momento."
+    : "I can't reach the assistant right now. Please try again in a moment.";
+}
+
+function logFallback(reason: string, extra: Record<string, unknown> = {}) {
+  console.error("[jobs-chat] FALLBACK", { reason, ...extra });
+}
+
+export const Route = createFileRoute("/api/public/jobs/$slug/chat")({
+  server: {
+    handlers: {
+      POST: async ({ request, params }) => {
+        const slug = params.slug;
+        if (!slug || slug.length > 80) {
+          return Response.json({ error: "Invalid slug" }, { status: 400 });
+        }
+
+        const ip = clientIp(request);
+        if (rateLimited(`jc:ip:${ip}`) || rateLimited(`jc:slug:${slug}`)) {
+          return Response.json({ error: "Too many requests" }, { status: 429 });
+        }
+
+        const json = await request.json().catch(() => null);
+        const parsed = bodySchema.safeParse(json);
+        if (!parsed.success) {
+          return Response.json({ error: "Invalid body" }, { status: 400 });
+        }
+        const { messages, formContext } = parsed.data;
+
+        const { data: job, error: jobErr } = await supabaseAdmin
+          .from("jobs")
+          .select(
+            "title, company, location, employment_type, salary_min, salary_max, currency, summary, description, requirements, responsibilities, must_have, nice_to_have, screening",
+          )
+          .eq("slug", slug)
+          .eq("published", true)
+          .maybeSingle();
+        if (jobErr) {
+          console.error("[jobs-chat] job load error", jobErr.message);
+          return Response.json({ error: "Couldn't load job" }, { status: 500 });
+        }
+        if (!job) {
+          return Response.json({ error: "Job not found" }, { status: 404 });
+        }
+
+        const lastUser = [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
+
+        const grounding = buildGrounding(job as PublicJob, formContext);
+
+        let system: string;
+        try {
+          system = await getPrompt("jobs.candidate_assistant", { grounding });
+        } catch (e: any) {
+          logFallback("prompt_load_failed", { message: e?.message });
+          return Response.json({ assistant: scriptedFallback(job as PublicJob, lastUser) });
+        }
+
+        let apiKey: string;
+        let model: string;
+        try {
+          apiKey = getOpenAIKey();
+          model = getOpenAIModel();
+        } catch (e: any) {
+          logFallback("missing_env", { message: e?.message });
+          return Response.json({ assistant: scriptedFallback(job as PublicJob, lastUser) });
+        }
+
+        try {
+          const res = await fetch(OPENAI_CHAT_COMPLETIONS_URL, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model,
+              messages: [
+                { role: "system", content: system },
+                ...messages.map((m) => ({ role: m.role, content: m.content })),
+              ],
+              temperature: 0.3,
+            }),
+          });
+          if (!res.ok) {
+            const body = await res.text().catch(() => "");
+            logFallback("openai_error", { status: res.status, body: body.slice(0, 300) });
+            return Response.json({ assistant: scriptedFallback(job as PublicJob, lastUser) });
+          }
+          const data: any = await res.json();
+          const txt = data?.choices?.[0]?.message?.content?.trim();
+          if (!txt) {
+            logFallback("empty_completion");
+            return Response.json({ assistant: scriptedFallback(job as PublicJob, lastUser) });
+          }
+          return Response.json({ assistant: txt });
+        } catch (e: any) {
+          logFallback("exception", { message: e?.message });
+          return Response.json({ assistant: scriptedFallback(job as PublicJob, lastUser) });
+        }
+      },
+    },
+  },
+});
