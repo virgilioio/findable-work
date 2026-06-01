@@ -16,12 +16,12 @@ export const getCreditsSummary = createServerFn({ method: "POST" })
     const { supabase, userId } = context;
 
     const [profileRes, ledgerRes] = await Promise.all([
-      supabase
+      (supabase as any)
         .from("profiles")
         .select("credits_remaining, credits_seeded_at")
         .eq("id", userId)
         .single(),
-      supabase
+      (supabase as any)
         .from("credit_ledger")
         .select("id, created_at, delta, reason, type, balance_after, metadata")
         .eq("user_id", userId)
@@ -31,7 +31,15 @@ export const getCreditsSummary = createServerFn({ method: "POST" })
 
     if (profileRes.error) throw new Error(profileRes.error.message);
 
-    const ledger = ledgerRes.data ?? [];
+    const ledger = (ledgerRes.data ?? []) as Array<{
+      id: string;
+      created_at: string;
+      delta: number;
+      reason: string;
+      type: string;
+      balance_after: number | null;
+      metadata: Record<string, unknown>;
+    }>;
     const balance = profileRes.data?.credits_remaining ?? 0;
 
     const cutoff = Date.now() - THIRTY_DAYS_MS;
