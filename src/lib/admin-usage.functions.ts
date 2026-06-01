@@ -1,7 +1,11 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/prompts/require-admin.server";
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { supabaseAdmin as _supabaseAdmin } from "@/integrations/supabase/client.server";
+
+// Types.ts is auto-generated; cast to any here so newly-added
+// table (assistant_chat_events) and RPC (admin_user_directory) compile.
+const supabaseAdmin = _supabaseAdmin as any;
 
 // ---------- helpers ----------
 
