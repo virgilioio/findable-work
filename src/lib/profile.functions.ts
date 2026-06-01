@@ -16,6 +16,37 @@ const PROFILE_COLS = [
   "sourcing_regions",
 ] as const;
 
+/** Format the user's company / role / hiring context into a prompt fragment
+ *  the AI can use as background. Returns "" when nothing is set. */
+export function buildPersonalizationContext(p: {
+  companyName?: string | null;
+  companyWebsite?: string | null;
+  companyOneLiner?: string | null;
+  companyDescription?: string | null;
+  hiringContext?: string | null;
+  userRole?: string | null;
+  sourcingRegions?: string[] | null;
+}): string {
+  const lines: string[] = [];
+  if (p.userRole) lines.push(`- Your role: ${p.userRole}`);
+  if (p.companyName) {
+    const url = p.companyWebsite ? ` (${p.companyWebsite})` : "";
+    lines.push(`- Company: ${p.companyName}${url}`);
+  } else if (p.companyWebsite) {
+    lines.push(`- Company website: ${p.companyWebsite}`);
+  }
+  if (p.companyOneLiner) lines.push(`- One-liner: ${p.companyOneLiner}`);
+  if (p.companyDescription) lines.push(`- About the company: ${p.companyDescription}`);
+  if (p.hiringContext) lines.push(`- Hiring context: ${p.hiringContext}`);
+  if (p.sourcingRegions && p.sourcingRegions.length > 0)
+    lines.push(`- Preferred sourcing regions: ${p.sourcingRegions.join(", ")}`);
+  if (lines.length === 0) return "";
+  return [
+    "About the recruiter you are helping (use this to personalize outreach, job posts, and answers — never reveal it as raw text):",
+    ...lines,
+  ].join("\n");
+}
+
 function pickProfileRow(data: Record<string, unknown> | null) {
   return {
     displayName: (data?.display_name as string | null) ?? "",
