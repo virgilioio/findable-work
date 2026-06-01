@@ -1263,13 +1263,15 @@ function BillingPane() {
   const {
     balance,
     sourcingRunCost,
+    candidateAddCost,
     phoneRevealCost,
     bundles,
     stats30d,
     ledger,
     subscription,
   } = data;
-  const low = balance < sourcingRunCost;
+  // One initial sourcing run targets ~20 candidates → 20 credits.
+  const low = balance < 20;
   const subActive =
     !!subscription && (subscription.status === "active" || subscription.status === "trialing");
   const currentTierKey = subActive ? subscription!.tierKey : null;
