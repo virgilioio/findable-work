@@ -1,9 +1,14 @@
-// Credit bundles. Source of truth for both server (Checkout) and client (UI).
-// Server validates the bundle key against this list — never trust amounts
-// coming from the browser.
+// Credit plans. Source of truth for both server (Checkout) and client (UI).
+// Each tier maps to TWO Stripe Prices on the same Product:
+//   - a recurring monthly Price (subscription)
+//   - a one-time Price (top-up)
+// Price IDs are read from env at call time on the server (never trust the
+// client). The client only sees keys, display info, and prices.
+
+export type TierKey = "starter" | "growth" | "pro" | "scale";
 
 export type CreditBundle = {
-  key: "starter" | "growth" | "pro" | "scale";
+  key: TierKey;
   name: string;
   credits: number;
   amountCents: number;
@@ -54,3 +59,23 @@ export function getBundle(key: string): CreditBundle | undefined {
 
 export const SOURCING_RUN_COST = 10;
 export const PHONE_REVEAL_COST = 1;
+
+/**
+ * Server-only: resolve the Stripe Price ID for a tier + kind from env.
+ * Throws if the secret isn't configured (so checkout fails loud, not silent).
+ */
+export function getStripePriceId(
+  tier: TierKey,
+  kind: "monthly" | "topup",
+): string {
+  const upper = tier.toUpperCase();
+  const suffix = kind === "monthly" ? "MONTHLY" : "TOPUP";
+  const name = `STRIPE_PRICE_${upper}_${suffix}`;
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(
+      `${name} is not configured. Create the Stripe Price and add the secret.`,
+    );
+  }
+  return value;
+}
