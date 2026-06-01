@@ -975,6 +975,7 @@ function SecurityPane({ onClose }: { onClose: () => void }) {
 /* -------------------------------- Account -------------------------------- */
 
 function AccountPane() {
+  const { t } = useLanguage();
   const [email, setEmail] = useState<string>("");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [nameDraft, setNameDraft] = useState<string>("");
@@ -1045,12 +1046,12 @@ function AccountPane() {
         </div>
         <div className="min-w-0">
           <div className="truncate text-[14px] font-medium text-text">
-            {nameDraft || email || "Account"}
+            {nameDraft || email || t("settings.acct.account", "Account")}
           </div>
           <div className="truncate text-[12px] text-text-mute">{email}</div>
         </div>
       </div>
-      <Row label="Display name" description="Shown to your teammates.">
+      <Row label={t("settings.acct.display_name", "Display name")} description={t("settings.acct.display_name.desc", "Shown to your teammates.")}>
         <Input
           value={nameDraft}
           onChange={(e) => setNameDraft(e.target.value)}
@@ -1060,46 +1061,45 @@ function AccountPane() {
           }}
           disabled={profileLoading || updateNameMut.isPending}
           className="h-8 w-[220px]"
-          placeholder="Your name"
+          placeholder={t("settings.acct.display_name.ph", "Your name")}
         />
       </Row>
-      <Row label="Email" description="Used for sign-in and notifications.">
+      <Row label={t("settings.acct.email", "Email")} description={t("settings.acct.email.desc", "Used for sign-in and notifications.")}>
         <span className="text-[12.5px] text-text-mute">{email || "—"}</span>
       </Row>
-      <Row label="Role" description="Your access level in this workspace.">
-        <span className="text-[12.5px] text-text-mute">Owner</span>
+      <Row label={t("settings.acct.role", "Role")} description={t("settings.acct.role.desc", "Your access level in this workspace.")}>
+        <span className="text-[12.5px] text-text-mute">{t("settings.acct.role.owner", "Owner")}</span>
       </Row>
-      <Row label="Seats" description="Members in this workspace.">
+      <Row label={t("settings.acct.seats", "Seats")} description={t("settings.acct.seats.desc", "Members in this workspace.")}>
         <span className="text-[12.5px] text-text-mute">1 of 1</span>
       </Row>
       <Row
-        label="Delete account"
-        description="Permanently delete your account and all data."
+        label={t("settings.acct.delete", "Delete account")}
+        description={t("settings.acct.delete.desc", "Permanently delete your account and all data.")}
       >
         <button
           onClick={() => setConfirmOpen(true)}
           className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-1.5 text-[12.5px] font-medium text-destructive transition hover:bg-destructive/15"
         >
-          Delete account
+          {t("settings.acct.delete", "Delete account")}
         </button>
       </Row>
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete your account?</AlertDialogTitle>
+            <AlertDialogTitle>{t("settings.acct.delete.dlg.title", "Delete your account?")}</AlertDialogTitle>
             <AlertDialogDescription>
-              This permanently deletes your account, all your candidates,
-              conversations, jobs, and outreach. This cannot be undone.
+              {t("settings.acct.delete.dlg.desc", "This permanently deletes your account, all your candidates, conversations, jobs, and outreach. This cannot be undone.")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={deleting}>{t("common.cancel", "Cancel")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
               disabled={deleting}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {deleting ? "Deleting…" : "Delete forever"}
+              {deleting ? t("settings.acct.delete.dlg.confirming", "Deleting…") : t("settings.acct.delete.dlg.confirm", "Delete forever")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
