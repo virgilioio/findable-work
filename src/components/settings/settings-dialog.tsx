@@ -14,6 +14,10 @@ import {
   X,
   Search as SearchIcon,
   Eye,
+  CreditCard,
+  Loader2,
+  TrendingDown,
+  TrendingUp,
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -62,12 +66,15 @@ import {
   getNotificationPrefs,
   updateNotificationPrefs,
 } from "@/lib/notifications.functions";
+import { getCreditsSummary } from "@/lib/billing/credits.functions";
+import { createCheckoutSession } from "@/lib/billing/checkout.functions";
 
 export type SettingsSection =
   | "general"
   | "notifications"
   | "personalization"
   | "connections"
+  | "billing"
   | "data"
   | "security"
   | "account"
@@ -78,6 +85,7 @@ const SECTIONS: { id: SettingsSection; label: string; icon: React.ComponentType<
   { id: "notifications", label: "Notifications", icon: Bell },
   { id: "personalization", label: "Personalization", icon: Sparkles },
   { id: "connections", label: "Connections", icon: Plug },
+  { id: "billing", label: "Usage & billing", icon: CreditCard },
   { id: "data", label: "Data controls", icon: Database },
   { id: "security", label: "Security", icon: Shield },
   { id: "account", label: "Account", icon: UserIcon },
