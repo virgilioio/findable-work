@@ -921,6 +921,26 @@ export const Route = createFileRoute("/api/chat")({
                       });
                       continue;
                     }
+                    if (result.insufficient_credits) {
+                      toolResults.push({
+                        role: "tool",
+                        tool_call_id: call.id ?? "",
+                        name: "source_candidates",
+                        content: JSON.stringify({
+                          ok: false,
+                          insufficient_credits: true,
+                          credits_required: result.credits_required,
+                          credits_balance: result.credits_balance,
+                          summary:
+                            `Sourcing run blocked: not enough credits. ` +
+                            `Each sourcing run costs ${result.credits_required} credits ` +
+                            `but only ${result.credits_balance} are available. ` +
+                            `Tell the user briefly and suggest topping up via Settings → Plan & credits. ` +
+                            `Do not retry source_candidates until they top up.`,
+                        }),
+                      });
+                      continue;
+                    }
                     toolResults.push({
                       role: "tool",
                       tool_call_id: call.id ?? "",
