@@ -330,6 +330,10 @@ function AppLayout() {
                 <SettingsIcon className="h-3.5 w-3.5" />
                 <span>Configuration</span>
               </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setSettingsSection("billing")}>
+                <CreditCard className="h-3.5 w-3.5" />
+                <span>Usage & billing</span>
+              </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setSettingsSection("help")}>
                 <LifeBuoy className="h-3.5 w-3.5" />
                 <span>Help</span>
