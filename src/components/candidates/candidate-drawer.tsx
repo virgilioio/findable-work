@@ -285,6 +285,10 @@ function Overview({ c }: { c: Candidate }) {
       qc.invalidateQueries({ queryKey: ["candidates", c.conversation_id] });
       const r = res as any;
       if (r.alreadyRevealed) toast("Phone already on file");
+      else if (r.status === "insufficient_credits")
+        toast.error(
+          `Out of credits — need ${r.required}, have ${r.balance}. Top up in Settings → Usage & billing.`,
+        );
       else if (r.status === "pending" && r.alreadyPending)
         toast("Phone reveal already in progress — Apollo usually returns results within a few minutes");
       else if (r.status === "pending")
