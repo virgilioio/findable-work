@@ -34,6 +34,7 @@ import {
   Settings as SettingsIcon,
   LifeBuoy,
   LogOut as LogOutIcon,
+  CreditCard,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -57,9 +58,14 @@ import {
   AlertDialogCancel,
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/app")({
   component: AppLayout,
+  validateSearch: (search: Record<string, unknown>) => ({
+    checkout: typeof search.checkout === "string" ? (search.checkout as "success" | "cancelled") : undefined,
+    session_id: typeof search.session_id === "string" ? search.session_id : undefined,
+  }),
 });
 
 type Conv = {
@@ -73,6 +79,7 @@ type Conv = {
 function AppLayout() {
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const search = Route.useSearch();
   const list = useServerFn(listConversations);
   const create = useServerFn(createConversation);
   const del = useServerFn(deleteConversation);
@@ -118,6 +125,26 @@ function AppLayout() {
   const [settingsSection, setSettingsSection] = useState<SettingsSection | null>(
     null,
   );
+
+  // Handle Stripe Checkout return.
+  useEffect(() => {
+    if (!search.checkout) return;
+    if (search.checkout === "success") {
+      toast.success("Payment received — credits will appear in a moment.");
+      setSettingsSection("billing");
+      // Refresh balance shortly after — webhook may need a beat.
+      const t = setTimeout(() => {
+        qc.invalidateQueries({ queryKey: ["credits-summary"] });
+      }, 1500);
+      navigate({ to: "/app", search: {}, replace: true });
+      return () => clearTimeout(t);
+    }
+    if (search.checkout === "cancelled") {
+      toast.info("Checkout cancelled — no charge was made.");
+      navigate({ to: "/app", search: {}, replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search.checkout]);
 
   useEffect(() => {
     const {
