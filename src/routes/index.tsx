@@ -319,20 +319,24 @@ function HomePage() {
         clarifies: [...next.clarifies, ...newClarifies],
         draftJob: payload.draftJob ?? next.draftJob,
         exchangeCount: exchange,
-        signupRequired: requireSignup || next.signupRequired,
+        // Not sticky: only reflect the current server response so a stray
+        // earlier signal doesn't permanently lock the composer.
+        signupRequired: requireSignup,
         signupReason: requireSignup
           ? (payload.signupReason as AuthReason | undefined) || "sourcing"
-          : next.signupReason,
+          : undefined,
       };
       setState(updated);
 
-      // Nudge cadence: open dialog after every 3rd–4th exchange unless
-      // we already opened it recently.
+      // Gentle nudge: only after the user has a real draft to look at,
+      // never blocking. The dialog is always dismissible — write actions
+      // are gated server-side, so the user can keep brainstorming.
+      const hasDraft = Boolean(
+        updated.draftJob && (updated.draftJob.title || updated.draftJob.description),
+      );
       if (requireSignup) {
-        openDialog("sourcing", false);
-      } else if (exchange >= 3 && exchange - updated.lastNudgeAt >= 4) {
-        openDialog("nudge", true);
-      } else if (exchange === 3 && updated.lastNudgeAt < 0) {
+        openDialog((payload.signupReason as AuthReason | undefined) || "sourcing", true);
+      } else if (hasDraft && exchange >= 6 && updated.lastNudgeAt < 0) {
         openDialog("nudge", true);
       }
     } catch (err) {

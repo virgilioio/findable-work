@@ -6,12 +6,24 @@ export const getProfile = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
-    const { data, error } = await (supabase as any)
+    // Try the full select first; if display_name doesn't exist yet
+    // (migration not applied in this environment), retry without it
+    // so the sidebar query doesn't crash.
+    let data: Record<string, unknown> | null = null;
+    let res = await (supabase as any)
       .from("profiles")
       .select("display_name, plan, credits_remaining, sourcing_projects_used")
       .eq("id", userId)
-      .single();
-    if (error) throw new Error(error.message);
+      .maybeSingle();
+    if (res.error && /display_name/.test(res.error.message ?? "")) {
+      res = await (supabase as any)
+        .from("profiles")
+        .select("plan, credits_remaining, sourcing_projects_used")
+        .eq("id", userId)
+        .maybeSingle();
+    }
+    if (res.error) throw new Error(res.error.message);
+    data = res.data ?? null;
     return {
       displayName: (data?.display_name as string | null) ?? "",
       plan: (data?.plan as string) ?? "free",
