@@ -21,19 +21,13 @@
               </td>
             </tr>
             <tr>
-              <td style="padding:0 0 32px 0;">
-                <p style="margin:0;font-size:15px;line-height:1.6;color:#525252;">Use the code below to confirm this action on your findable account. The code will expire shortly.<br><br><strong style="font-size:24px;letter-spacing:0.1em;color:#0a0a0a;">{{ .Token }}</strong></p>
+              <td style="padding:0 0 24px 0;">
+                <p style="margin:0;font-size:15px;line-height:1.6;color:#525252;">Enter the code below in findable to confirm this action. The code will expire shortly.</p>
               </td>
             </tr>
             <tr>
               <td style="padding:0 0 32px 0;">
-                <a href="{{ .ConfirmationURL }}" style="display:inline-block;background:#0a0a0a;color:#ffffff;text-decoration:none;padding:14px 24px;border-radius:8px;font-size:15px;font-weight:500;">Open findable</a>
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:0 0 32px 0;">
-                <p style="margin:0 0 8px 0;font-size:13px;line-height:1.6;color:#737373;">Or copy and paste this link into your browser:</p>
-                <p style="margin:0;font-size:13px;line-height:1.6;color:#737373;word-break:break-all;"><a href="{{ .ConfirmationURL }}" style="color:#525252;text-decoration:underline;">{{ .ConfirmationURL }}</a></p>
+                <div style="display:inline-block;background:#f5f5f5;border-radius:8px;padding:16px 24px;font-size:28px;font-weight:600;letter-spacing:0.2em;color:#0a0a0a;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;">{{ .Token }}</div>
               </td>
             </tr>
             <tr>
