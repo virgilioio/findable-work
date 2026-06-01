@@ -1135,7 +1135,7 @@ function BillingPane() {
           </div>
           <div className="text-right text-[11.5px] text-text-mute">
             <div>{sourcingRunCost} credits / sourcing run</div>
-            <div>{phoneRevealCost} credit / phone reveal</div>
+            <div>{phoneRevealCost} credits / phone reveal</div>
           </div>
         </div>
         {low && (
