@@ -1,5 +1,5 @@
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import {
@@ -41,6 +41,8 @@ const METRIC_LABEL: Record<Metric, string> = {
   outreach: "Outreach sent",
   assistant_chats: "Assistant chats",
 };
+
+const ADMIN_PLAN_OPTIONS = ["all", "free", "starter", "growth", "pro", "scale"];
 
 function pct(now: number, prev: number) {
   if (!prev) return now ? "+∞" : "0%";
@@ -89,11 +91,7 @@ function AdminUsagePage() {
   });
 
   const s = summaryQ.data;
-  const plans = useMemo(() => {
-    const set = new Set<string>();
-    (tableQ.data ?? []).forEach((u) => set.add(u.plan));
-    return ["all", ...Array.from(set)];
-  }, [tableQ.data]);
+  const plans = ADMIN_PLAN_OPTIONS;
 
   return (
     <div className="min-h-screen bg-bg text-text">
