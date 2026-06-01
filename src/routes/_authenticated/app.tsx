@@ -239,7 +239,7 @@ function AppLayout() {
             className="flex w-full items-center gap-2 rounded-[10px] border border-border bg-bg px-3 py-2 text-[13px] font-medium text-text shadow-[var(--shadow-sm)] transition hover:bg-bg-hover disabled:opacity-60"
           >
             <Plus size={16} />
-            New project
+            {t("nav.new_project", "New project")}
           </button>
         </div>
 
@@ -260,7 +260,7 @@ function AppLayout() {
         <div className="flex-1 overflow-y-auto px-2 pb-2">
           {filtered.length === 0 && (
             <p className="px-3 py-6 text-center text-xs text-text-faint">
-              {query ? "No matches." : "No projects yet. Click + to start one."}
+              {query ? t("nav.no_matches", "No matches.") : t("nav.no_projects", "No projects yet. Click + to start one.")}
             </p>
           )}
           {groups.map((g) => (
@@ -377,13 +377,13 @@ function AppLayout() {
       <AlertDialog open={Boolean(deletingId)} onOpenChange={(open) => { if (!open) setDeletingId(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete conversation?</AlertDialogTitle>
+            <AlertDialogTitle>{t("dlg.delete_conv.title", "Delete conversation?")}</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently eliminate <strong>"{deletingConv?.title || "Untitled"}"</strong>. This action cannot be undone.
+              {t("dlg.delete_conv.desc_before", "This will permanently eliminate")} <strong>"{deletingConv?.title || t("dlg.untitled", "Untitled")}"</strong>. {t("dlg.delete_conv.desc_after", "This action cannot be undone.")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setDeletingId(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel onClick={() => setDeletingId(null)}>{t("common.cancel", "Cancel")}</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => {
@@ -408,7 +408,7 @@ function AppLayout() {
                 setDeletingId(null);
               }}
             >
-              Delete
+              {t("common.delete", "Delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
