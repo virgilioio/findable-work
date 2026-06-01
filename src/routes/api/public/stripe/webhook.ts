@@ -12,9 +12,12 @@ export const Route = createFileRoute("/api/public/stripe/webhook")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const secret = process.env.STRIPE_WEBHOOK_SECRET;
-        if (!secret) {
-          console.error("[stripe webhook] STRIPE_WEBHOOK_SECRET not configured");
+        const secrets = [
+          process.env.STRIPE_WEBHOOK_SECRET,
+          process.env.STRIPE_WEBHOOK_SECRET_PREVIEW,
+        ].filter((s): s is string => Boolean(s));
+        if (secrets.length === 0) {
+          console.error("[stripe webhook] no STRIPE_WEBHOOK_SECRET* configured");
           return new Response("Webhook secret not configured", { status: 500 });
         }
 
@@ -24,13 +27,19 @@ export const Route = createFileRoute("/api/public/stripe/webhook")({
         const body = await request.text();
         const stripe = getStripe();
 
-        let event: Stripe.Event;
-        try {
-          event = await stripe.webhooks.constructEventAsync(body, signature, secret);
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          console.error("[stripe webhook] signature verification failed:", msg);
-          return new Response(`Invalid signature: ${msg}`, { status: 400 });
+        let event: Stripe.Event | null = null;
+        let lastErr = "";
+        for (const secret of secrets) {
+          try {
+            event = await stripe.webhooks.constructEventAsync(body, signature, secret);
+            break;
+          } catch (err) {
+            lastErr = err instanceof Error ? err.message : String(err);
+          }
+        }
+        if (!event) {
+          console.error("[stripe webhook] signature verification failed:", lastErr);
+          return new Response(`Invalid signature: ${lastErr}`, { status: 400 });
         }
 
         try {
