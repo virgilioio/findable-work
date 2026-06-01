@@ -4,6 +4,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import {
   CREDIT_BUNDLES,
+  CANDIDATE_ADD_COST,
   PHONE_REVEAL_COST,
   SOURCING_RUN_COST,
 } from "./bundles";
@@ -57,6 +58,7 @@ export const getCreditsSummary = createServerFn({ method: "POST" })
     let added30d = 0;
     let sourcingRuns30d = 0;
     let phoneReveals30d = 0;
+    let candidatesAdded30d = 0;
     for (const row of ledger) {
       const t = new Date(row.created_at as string).getTime();
       if (t < cutoff) continue;
@@ -64,11 +66,13 @@ export const getCreditsSummary = createServerFn({ method: "POST" })
       else added30d += row.delta;
       if (row.type === "sourcing_run") sourcingRuns30d += 1;
       if (row.type === "phone_reveal") phoneReveals30d += 1;
+      if (row.type === "candidate_add") candidatesAdded30d += 1;
     }
 
     return {
       balance,
       sourcingRunCost: SOURCING_RUN_COST,
+      candidateAddCost: CANDIDATE_ADD_COST,
       phoneRevealCost: PHONE_REVEAL_COST,
       bundles: CREDIT_BUNDLES,
       stats30d: {
@@ -76,6 +80,7 @@ export const getCreditsSummary = createServerFn({ method: "POST" })
         added: added30d,
         sourcingRuns: sourcingRuns30d,
         phoneReveals: phoneReveals30d,
+        candidatesAdded: candidatesAdded30d,
       },
       ledger,
       subscription: subRes?.data
