@@ -69,7 +69,10 @@ import {
 import { getCreditsSummary } from "@/lib/billing/credits.functions";
 import { createCheckoutSession } from "@/lib/billing/checkout.functions";
 import { openBillingPortal } from "@/lib/billing/portal.functions";
-import { getProfile, updateDisplayName } from "@/lib/profile.functions";
+import { getProfile, updateDisplayName, updatePersonalization } from "@/lib/profile.functions";
+import { exportCandidatesCsv } from "@/lib/data-export.functions";
+import { deleteOwnAccount } from "@/lib/account.functions";
+import { LANGUAGES, useLanguage } from "@/lib/i18n";
 
 export type SettingsSection =
   | "general"
@@ -226,14 +229,7 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 
 function GeneralPane() {
   const { theme, toggle } = useTheme();
-  const [showSidebar, setShowSidebar] = usePersistedState<boolean>(
-    "findable:show-sidebar",
-    true,
-  );
-  const [language, setLanguage] = usePersistedState<string>(
-    "findable:language",
-    "en",
-  );
+  const { lang, setLang } = useLanguage();
 
   return (
     <div>
@@ -253,17 +249,17 @@ function GeneralPane() {
           Monochrome
         </span>
       </Row>
-      <Row label="Show sidebar" description="Toggle the conversation sidebar.">
-        <Switch checked={showSidebar} onCheckedChange={setShowSidebar} />
-      </Row>
       <Row label="Language" description="Interface language.">
-        <Select value={language} onValueChange={setLanguage}>
-          <SelectTrigger className="h-8 w-[140px]">
+        <Select value={lang} onValueChange={(v) => setLang(v as never)}>
+          <SelectTrigger className="h-8 w-[160px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="en">English</SelectItem>
-            <SelectItem value="es">Español</SelectItem>
+            {LANGUAGES.map((l) => (
+              <SelectItem key={l.code} value={l.code}>
+                {l.label}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </Row>
@@ -273,33 +269,12 @@ function GeneralPane() {
 
 /* ----------------------------- Notifications ----------------------------- */
 
-type Notifications = {
-  applicants: boolean;
-  replies: boolean;
-  interviews: boolean;
-  digest: boolean;
-  mentions: boolean;
-};
-const DEFAULT_NOTIF: Notifications = {
-  applicants: true,
-  replies: true,
-  interviews: true,
-  digest: false,
-  mentions: true,
-};
-
 function NotificationsPane() {
-  const [n, setN] = usePersistedState<Notifications>(
-    "findable:notifications",
-    DEFAULT_NOTIF,
-  );
-  const set = (k: keyof Notifications) => (v: boolean) => setN({ ...n, [k]: v });
-
   // Server-backed prefs (drive real emails).
   const getPrefs = useServerFn(getNotificationPrefs);
   const updPrefs = useServerFn(updateNotificationPrefs);
   const qc = useQueryClient();
-  const { data: prefs } = useQuery({
+  const { data: prefs, isLoading } = useQuery({
     queryKey: ["notification-prefs"],
     queryFn: () => getPrefs({}),
   });
@@ -320,6 +295,7 @@ function NotificationsPane() {
   });
   const applicants = prefs?.notifyOnNewApplicant ?? true;
   const digest = prefs?.notifyDailyDigest ?? false;
+  const busy = isLoading || mut.isPending;
 
   return (
     <div>
@@ -329,7 +305,7 @@ function NotificationsPane() {
       >
         <Switch
           checked={applicants}
-          disabled={mut.isPending}
+          disabled={busy}
           onCheckedChange={(v) =>
             mut.mutate({ notifyOnNewApplicant: v, notifyDailyDigest: digest })
           }
@@ -341,20 +317,11 @@ function NotificationsPane() {
       >
         <Switch
           checked={digest}
-          disabled={mut.isPending}
+          disabled={busy}
           onCheckedChange={(v) =>
             mut.mutate({ notifyOnNewApplicant: applicants, notifyDailyDigest: v })
           }
         />
-      </Row>
-      <Row label="Replies" description="When a candidate replies to outreach.">
-        <Switch checked={n.replies} onCheckedChange={set("replies")} />
-      </Row>
-      <Row label="Interview reminders" description="15 minutes before an interview.">
-        <Switch checked={n.interviews} onCheckedChange={set("interviews")} />
-      </Row>
-      <Row label="Mentions" description="When a teammate @mentions you.">
-        <Switch checked={n.mentions} onCheckedChange={set("mentions")} />
       </Row>
     </div>
   );
@@ -362,74 +329,149 @@ function NotificationsPane() {
 
 /* ---------------------------- Personalization ---------------------------- */
 
-type Personalization = {
-  assistantName: string;
-  tone: "friendly" | "professional" | "direct";
-  autoPersonalize: boolean;
-  regions: string[];
-  signature: string;
-};
-const DEFAULT_PERSONAL: Personalization = {
-  assistantName: "Findable",
-  tone: "professional",
-  autoPersonalize: true,
-  regions: ["LATAM"],
-  signature: "",
-};
 const REGIONS = ["LATAM", "US", "EU", "APAC"];
 
 function PersonalizationPane() {
-  const [p, setP] = usePersistedState<Personalization>(
-    "findable:personalization",
-    DEFAULT_PERSONAL,
-  );
+  const qc = useQueryClient();
+  const getProfileFn = useServerFn(getProfile);
+  const updateFn = useServerFn(updatePersonalization);
+  const { data: profile, isLoading } = useQuery({
+    queryKey: ["profile"],
+    queryFn: () => getProfileFn(),
+  });
+
+  const [draft, setDraft] = useState({
+    companyName: "",
+    companyWebsite: "",
+    companyOneLiner: "",
+    companyDescription: "",
+    hiringContext: "",
+    userRole: "",
+    sourcingRegions: [] as string[],
+  });
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    if (!profile || hydrated) return;
+    setDraft({
+      companyName: profile.companyName ?? "",
+      companyWebsite: profile.companyWebsite ?? "",
+      companyOneLiner: profile.companyOneLiner ?? "",
+      companyDescription: profile.companyDescription ?? "",
+      hiringContext: profile.hiringContext ?? "",
+      userRole: profile.userRole ?? "",
+      sourcingRegions: profile.sourcingRegions ?? [],
+    });
+    setHydrated(true);
+  }, [profile, hydrated]);
+
+  const mut = useMutation({
+    mutationFn: (patch: Partial<typeof draft>) => updateFn({ data: patch }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["profile"] });
+    },
+    onError: (e) => toast.error((e as Error).message || "Couldn't save"),
+  });
+
+  const commit = (patch: Partial<typeof draft>) => mut.mutate(patch);
+
   const toggleRegion = (r: string) => {
-    const next = p.regions.includes(r)
-      ? p.regions.filter((x) => x !== r)
-      : [...p.regions, r];
-    setP({ ...p, regions: next });
+    const next = draft.sourcingRegions.includes(r)
+      ? draft.sourcingRegions.filter((x) => x !== r)
+      : [...draft.sourcingRegions, r];
+    setDraft({ ...draft, sourcingRegions: next });
+    commit({ sourcingRegions: next });
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex h-32 items-center justify-center text-text-mute">
+        <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading…
+      </div>
+    );
+  }
+
   return (
-    <div>
-      <Row label="Assistant name" description="How the assistant refers to itself.">
+    <div className="space-y-1">
+      <p className="mb-3 text-[12.5px] text-text-mute">
+        Tell Findable about you and your company. The AI uses this to draft
+        outreach, job posts, and replies that actually sound like you.
+      </p>
+      <Row label="Your role" description="e.g. Head of Talent, Founder.">
         <Input
-          value={p.assistantName}
-          onChange={(e) => setP({ ...p, assistantName: e.target.value })}
-          className="h-8 w-[200px]"
+          value={draft.userRole}
+          onChange={(e) => setDraft({ ...draft, userRole: e.target.value })}
+          onBlur={() => commit({ userRole: draft.userRole })}
+          className="h-8 w-[260px]"
+          placeholder="Head of Talent"
         />
       </Row>
-      <Row label="Outreach tone" description="Default writing style for emails.">
-        <Select
-          value={p.tone}
-          onValueChange={(v) => setP({ ...p, tone: v as Personalization["tone"] })}
-        >
-          <SelectTrigger className="h-8 w-[160px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="friendly">Friendly</SelectItem>
-            <SelectItem value="professional">Professional</SelectItem>
-            <SelectItem value="direct">Direct</SelectItem>
-          </SelectContent>
-        </Select>
+      <Row label="Company name" description="The company you're hiring for.">
+        <Input
+          value={draft.companyName}
+          onChange={(e) => setDraft({ ...draft, companyName: e.target.value })}
+          onBlur={() => commit({ companyName: draft.companyName })}
+          className="h-8 w-[260px]"
+          placeholder="Acme Inc."
+        />
       </Row>
-      <Row
-        label="Auto-personalize"
-        description="Insert candidate-specific details into outreach drafts."
-      >
-        <Switch
-          checked={p.autoPersonalize}
-          onCheckedChange={(v) => setP({ ...p, autoPersonalize: v })}
+      <Row label="Company website" description="Public URL.">
+        <Input
+          value={draft.companyWebsite}
+          onChange={(e) => setDraft({ ...draft, companyWebsite: e.target.value })}
+          onBlur={() => commit({ companyWebsite: draft.companyWebsite })}
+          className="h-8 w-[260px]"
+          placeholder="https://acme.com"
         />
       </Row>
       <div className="border-b border-border py-3">
+        <div className="text-[13px] font-medium text-text">One-liner</div>
+        <div className="mt-0.5 text-[12px] text-text-mute">
+          A single sentence that captures what the company does.
+        </div>
+        <Input
+          value={draft.companyOneLiner}
+          onChange={(e) => setDraft({ ...draft, companyOneLiner: e.target.value })}
+          onBlur={() => commit({ companyOneLiner: draft.companyOneLiner })}
+          className="mt-2 h-8 w-full"
+          placeholder="We help SMBs run payroll in one click."
+        />
+      </div>
+      <div className="border-b border-border py-3">
+        <div className="text-[13px] font-medium text-text">About the company</div>
+        <div className="mt-0.5 text-[12px] text-text-mute">
+          Mission, product, team, culture — anything the AI should weave into
+          outreach and job posts.
+        </div>
+        <Textarea
+          value={draft.companyDescription}
+          onChange={(e) => setDraft({ ...draft, companyDescription: e.target.value })}
+          onBlur={() => commit({ companyDescription: draft.companyDescription })}
+          className="mt-2 min-h-[110px]"
+          placeholder="We're a 40-person remote team building payroll software for small businesses in LATAM…"
+        />
+      </div>
+      <div className="border-b border-border py-3">
+        <div className="text-[13px] font-medium text-text">Hiring context</div>
+        <div className="mt-0.5 text-[12px] text-text-mute">
+          What you typically hire for: roles, seniority, locations, must-haves.
+        </div>
+        <Textarea
+          value={draft.hiringContext}
+          onChange={(e) => setDraft({ ...draft, hiringContext: e.target.value })}
+          onBlur={() => commit({ hiringContext: draft.hiringContext })}
+          className="mt-2 min-h-[90px]"
+          placeholder="Mostly senior backend engineers (Go/Rust), LATAM-remote, fluent English."
+        />
+      </div>
+      <div className="py-3">
         <div className="text-[13px] font-medium text-text">Sourcing regions</div>
         <div className="mt-0.5 text-[12px] text-text-mute">
           Default regions when sourcing candidates.
         </div>
         <div className="mt-2 flex flex-wrap gap-1.5">
           {REGIONS.map((r) => {
-            const on = p.regions.includes(r);
+            const on = draft.sourcingRegions.includes(r);
             return (
               <button
                 key={r}
@@ -447,18 +489,6 @@ function PersonalizationPane() {
             );
           })}
         </div>
-      </div>
-      <div className="py-3">
-        <div className="text-[13px] font-medium text-text">Email signature</div>
-        <div className="mt-0.5 text-[12px] text-text-mute">
-          Appended to outreach emails.
-        </div>
-        <Textarea
-          value={p.signature}
-          onChange={(e) => setP({ ...p, signature: e.target.value })}
-          className="mt-2 min-h-[90px]"
-          placeholder={"Best,\nYour name"}
-        />
       </div>
     </div>
   );
@@ -764,14 +794,41 @@ function PermissionsPreviewDialog({
 
 function DataPane() {
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const exportFn = useServerFn(exportCandidatesCsv);
+  const exportMut = useMutation({
+    mutationFn: () => exportFn({}),
+    onSuccess: ({ csv, count }) => {
+      if (count === 0) {
+        toast.message("No unlocked candidates to export yet.");
+        return;
+      }
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const date = new Date().toISOString().slice(0, 10);
+      a.href = url;
+      a.download = `findable-candidates-${date}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success(`Exported ${count} candidate${count === 1 ? "" : "s"}`);
+    },
+    onError: (e) => toast.error((e as Error).message || "Export failed"),
+  });
   return (
     <div>
-      <Row label="Export data" description="Download your conversations and candidates.">
+      <Row
+        label="Export data"
+        description="Download a CSV of the candidates you've unlocked in this account."
+      >
         <button
-          disabled
-          className="rounded-lg border border-border bg-bg px-3 py-1.5 text-[12.5px] text-text-mute opacity-60"
+          onClick={() => exportMut.mutate()}
+          disabled={exportMut.isPending}
+          className="flex items-center gap-2 rounded-lg border border-border bg-bg px-3 py-1.5 text-[12.5px] text-text transition hover:bg-bg-hover disabled:opacity-60"
         >
-          Export
+          {exportMut.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+          {exportMut.isPending ? "Exporting…" : "Export CSV"}
         </button>
       </Row>
       <Row
@@ -813,59 +870,88 @@ function DataPane() {
 /* -------------------------------- Security -------------------------------- */
 
 function SecurityPane({ onClose }: { onClose: () => void }) {
-  const [twofa, setTwofa] = usePersistedState<boolean>("findable:2fa", false);
+  const [signOutOpen, setSignOutOpen] = useState(false);
+  const [pwSending, setPwSending] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+
   const signOutAll = async () => {
-    await supabase.auth.signOut({ scope: "global" });
-    onClose();
+    setSigningOut(true);
+    try {
+      await supabase.auth.signOut({ scope: "global" });
+      toast.success("Signed out everywhere");
+      onClose();
+      window.location.href = "/login";
+    } catch (e) {
+      toast.error((e as Error).message || "Sign out failed");
+      setSigningOut(false);
+    }
   };
   const changePassword = async () => {
-    const { data } = await supabase.auth.getUser();
-    if (!data.user?.email) {
-      toast.error("No email on account");
-      return;
+    setPwSending(true);
+    try {
+      const { data } = await supabase.auth.getUser();
+      if (!data.user?.email) {
+        toast.error("No email on account");
+        return;
+      }
+      const { error } = await supabase.auth.resetPasswordForEmail(data.user.email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      if (error) toast.error(error.message);
+      else toast.success("Password reset email sent — check your inbox.");
+    } finally {
+      setPwSending(false);
     }
-    const { error } = await supabase.auth.resetPasswordForEmail(data.user.email, {
-      redirectTo: `${window.location.origin}/login`,
-    });
-    if (error) toast.error(error.message);
-    else toast.success("Password reset email sent");
   };
   return (
     <div>
-      <Row
-        label="Two-factor authentication"
-        description="Require a second factor at sign-in."
-      >
-        <Switch checked={twofa} onCheckedChange={setTwofa} />
-      </Row>
       <Row
         label="Change password"
         description="Send a password reset email to your account."
       >
         <button
           onClick={changePassword}
-          className="rounded-lg border border-border bg-bg px-3 py-1.5 text-[12.5px] text-text transition hover:bg-bg-hover"
+          disabled={pwSending}
+          className="flex items-center gap-2 rounded-lg border border-border bg-bg px-3 py-1.5 text-[12.5px] text-text transition hover:bg-bg-hover disabled:opacity-60"
         >
-          Send email
+          {pwSending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+          {pwSending ? "Sending…" : "Send email"}
         </button>
       </Row>
       <Row
         label="Active sessions"
-        description="Devices currently signed in to this account."
+        description="This device is currently signed in. Use “Log out all devices” to end any other active sessions."
       >
-        <span className="text-[12px] text-text-mute">1 active</span>
+        <span className="text-[12px] text-text-mute">This device</span>
       </Row>
       <Row
         label="Log out all devices"
         description="End every signed-in session, including this one."
       >
         <button
-          onClick={signOutAll}
+          onClick={() => setSignOutOpen(true)}
           className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-1.5 text-[12.5px] font-medium text-destructive transition hover:bg-destructive/15"
         >
           Log out all
         </button>
       </Row>
+      <AlertDialog open={signOutOpen} onOpenChange={setSignOutOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Sign out of every device?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You'll be signed out here and on every other device where you're
+              currently logged in. You can sign back in any time.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={signingOut}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={signOutAll} disabled={signingOut}>
+              {signingOut ? "Signing out…" : "Sign out everywhere"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -875,9 +961,13 @@ function SecurityPane({ onClose }: { onClose: () => void }) {
 function AccountPane() {
   const [email, setEmail] = useState<string>("");
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [nameDraft, setNameDraft] = useState<string>("");
+  const [nameHydrated, setNameHydrated] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const qc = useQueryClient();
   const getProfileFn = useServerFn(getProfile);
   const updateNameFn = useServerFn(updateDisplayName);
+  const deleteAccountFn = useServerFn(deleteOwnAccount);
 
   const { data: profile, isLoading: profileLoading } = useQuery({
     queryKey: ["profile"],
@@ -899,8 +989,38 @@ function AccountPane() {
     supabase.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? ""));
   }, []);
 
-  const name = profile?.displayName ?? "";
-  const initial = (name || email || "?")[0]?.toUpperCase() ?? "?";
+  useEffect(() => {
+    if (!nameHydrated && profile) {
+      setNameDraft(profile.displayName ?? "");
+      setNameHydrated(true);
+    }
+  }, [profile, nameHydrated]);
+
+  // Debounce save: only after 600ms of no edits.
+  useEffect(() => {
+    if (!nameHydrated) return;
+    const current = profile?.displayName ?? "";
+    if (nameDraft === current) return;
+    const t = setTimeout(() => {
+      updateNameMut.mutate(nameDraft);
+    }, 600);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nameDraft, nameHydrated]);
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await deleteAccountFn({});
+      await supabase.auth.signOut().catch(() => {});
+      window.location.href = "/";
+    } catch (e) {
+      toast.error("Couldn't delete account: " + (e as Error).message);
+      setDeleting(false);
+    }
+  };
+
+  const initial = (nameDraft || email || "?")[0]?.toUpperCase() ?? "?";
   return (
     <div>
       <div className="mb-4 flex items-center gap-3">
@@ -909,15 +1029,19 @@ function AccountPane() {
         </div>
         <div className="min-w-0">
           <div className="truncate text-[14px] font-medium text-text">
-            {name || email || "Account"}
+            {nameDraft || email || "Account"}
           </div>
           <div className="truncate text-[12px] text-text-mute">{email}</div>
         </div>
       </div>
       <Row label="Display name" description="Shown to your teammates.">
         <Input
-          value={name}
-          onChange={(e) => updateNameMut.mutate(e.target.value)}
+          value={nameDraft}
+          onChange={(e) => setNameDraft(e.target.value)}
+          onBlur={() => {
+            const current = profile?.displayName ?? "";
+            if (nameDraft !== current) updateNameMut.mutate(nameDraft);
+          }}
           disabled={profileLoading || updateNameMut.isPending}
           className="h-8 w-[220px]"
           placeholder="Your name"
@@ -948,18 +1072,18 @@ function AccountPane() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete your account?</AlertDialogTitle>
             <AlertDialogDescription>
-              Account deletion is handled by our team. Email support@findable.work and
-              we'll process the request within one business day.
+              This permanently deletes your account, all your candidates,
+              conversations, jobs, and outreach. This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => {
-                window.location.href = "mailto:support@findable.work?subject=Delete%20my%20account";
-              }}
+              onClick={handleDelete}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Contact support
+              {deleting ? "Deleting…" : "Delete forever"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
