@@ -38,7 +38,7 @@ function ResetPasswordPage() {
       }
     });
     // If after a beat there's still no session, the link is bad/expired.
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       if (!cancelled && !ready) {
         supabase.auth.getSession().then(({ data }) => {
           if (!data.session) {
@@ -51,7 +51,7 @@ function ResetPasswordPage() {
     }, 1500);
     return () => {
       cancelled = true;
-      clearTimeout(t);
+      clearTimeout(timer);
       sub.subscription.unsubscribe();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
