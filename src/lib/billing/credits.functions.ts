@@ -15,7 +15,7 @@ export const getCreditsSummary = createServerFn({ method: "POST" })
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
 
-    const [profileRes, ledgerRes] = await Promise.all([
+    const [profileRes, ledgerRes, subRes] = await Promise.all([
       (supabase as any)
         .from("profiles")
         .select("credits_remaining, credits_seeded_at")
@@ -27,6 +27,15 @@ export const getCreditsSummary = createServerFn({ method: "POST" })
         .eq("user_id", userId)
         .order("created_at", { ascending: false })
         .limit(25),
+      (supabase as any)
+        .from("subscriptions")
+        .select(
+          "tier_key, monthly_credits, status, current_period_end, cancel_at_period_end",
+        )
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
     ]);
 
     if (profileRes.error) throw new Error(profileRes.error.message);
@@ -69,6 +78,15 @@ export const getCreditsSummary = createServerFn({ method: "POST" })
         phoneReveals: phoneReveals30d,
       },
       ledger,
+      subscription: subRes?.data
+        ? {
+            tierKey: subRes.data.tier_key as string,
+            monthlyCredits: subRes.data.monthly_credits as number,
+            status: subRes.data.status as string,
+            currentPeriodEnd: subRes.data.current_period_end as string | null,
+            cancelAtPeriodEnd: subRes.data.cancel_at_period_end as boolean,
+          }
+        : null,
     };
   });
 

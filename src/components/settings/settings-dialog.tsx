@@ -68,6 +68,7 @@ import {
 } from "@/lib/notifications.functions";
 import { getCreditsSummary } from "@/lib/billing/credits.functions";
 import { createCheckoutSession } from "@/lib/billing/checkout.functions";
+import { openBillingPortal } from "@/lib/billing/portal.functions";
 
 export type SettingsSection =
   | "general"
@@ -1021,6 +1022,7 @@ function HelpPane() {
 function BillingPane() {
   const summaryFn = useServerFn(getCreditsSummary);
   const checkoutFn = useServerFn(createCheckoutSession);
+  const portalFn = useServerFn(openBillingPortal);
   const qc = useQueryClient();
 
   const { data, isLoading, error } = useQuery({
@@ -1028,19 +1030,46 @@ function BillingPane() {
     queryFn: () => summaryFn({}),
   });
 
+  // Break out of the Lovable preview iframe — Stripe Checkout sends
+  // X-Frame-Options: DENY so we'd otherwise navigate to a blank pane.
+  const redirectToStripe = (url: string) => {
+    if (typeof window === "undefined" || !url) return;
+    try {
+      if (window.top && window.top !== window.self) {
+        window.top.location.href = url;
+        return;
+      }
+    } catch {
+      /* cross-origin parent — fall through */
+    }
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
+
+  const returnUrl =
+    typeof window === "undefined"
+      ? "https://findable.work/app"
+      : `${window.location.origin}/app`;
+
   const checkoutMut = useMutation({
-    mutationFn: (bundleKey: string) =>
+    mutationFn: (vars: { tierKey: string; kind: "topup" | "subscription" }) =>
       checkoutFn({
         data: {
-          bundleKey: bundleKey as never,
-          returnUrl: typeof window === "undefined" ? "https://findable.work/app" : `${window.location.origin}/app`,
-        },
+          tierKey: vars.tierKey as never,
+          kind: vars.kind,
+          returnUrl,
+        } as never,
       }),
-    onSuccess: ({ url }) => {
-      if (url && typeof window !== "undefined") window.location.href = url;
-    },
+    onSuccess: ({ url }) => redirectToStripe(url),
     onError: (e) => {
       toast.error(e instanceof Error ? e.message : "Could not start checkout");
+    },
+  });
+
+  const portalMut = useMutation({
+    mutationFn: () => portalFn({ data: { returnUrl } }),
+    onSuccess: ({ url }) => redirectToStripe(url),
+    onError: (e) => {
+      toast.error(e instanceof Error ? e.message : "Could not open billing portal");
     },
   });
 
@@ -1067,8 +1096,26 @@ function BillingPane() {
     );
   }
 
-  const { balance, sourcingRunCost, phoneRevealCost, bundles, stats30d, ledger } = data;
+  const {
+    balance,
+    sourcingRunCost,
+    phoneRevealCost,
+    bundles,
+    stats30d,
+    ledger,
+    subscription,
+  } = data;
   const low = balance < sourcingRunCost;
+  const subActive =
+    !!subscription && (subscription.status === "active" || subscription.status === "trialing");
+  const currentTierKey = subActive ? subscription!.tierKey : null;
+  const renewLabel = subscription?.currentPeriodEnd
+    ? new Date(subscription.currentPeriodEnd).toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      })
+    : null;
 
   return (
     <div className="space-y-6">
@@ -1098,6 +1145,48 @@ function BillingPane() {
         )}
       </div>
 
+      {/* Current plan */}
+      <div className="rounded-xl border border-border bg-bg-elev p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="text-[11px] font-medium uppercase tracking-wide text-text-faint">
+              Current plan
+            </div>
+            {subActive ? (
+              <>
+                <div className="mt-1 text-[15px] font-semibold text-text">
+                  {bundles.find((b) => b.key === currentTierKey)?.name ?? subscription!.tierKey}
+                  <span className="ml-2 text-[11.5px] font-normal text-text-mute">
+                    {subscription!.monthlyCredits.toLocaleString()} credits / month
+                  </span>
+                </div>
+                <div className="mt-1 text-[12px] text-text-mute">
+                  {subscription!.cancelAtPeriodEnd
+                    ? `Cancels on ${renewLabel}`
+                    : renewLabel
+                      ? `Renews on ${renewLabel}`
+                      : "Active"}
+                </div>
+              </>
+            ) : (
+              <div className="mt-1 text-[13px] text-text-mute">
+                No active plan. Subscribe below or top up one-time credits.
+              </div>
+            )}
+          </div>
+          {subActive && (
+            <button
+              onClick={() => portalMut.mutate()}
+              disabled={portalMut.isPending}
+              className="flex items-center gap-2 rounded-lg border border-border bg-bg px-3 py-1.5 text-[12.5px] font-medium text-text transition hover:bg-bg-hover disabled:opacity-60"
+            >
+              {portalMut.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              Manage subscription
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* 30d stats */}
       <div className="grid grid-cols-2 gap-3">
         <StatCard
@@ -1114,25 +1203,96 @@ function BillingPane() {
         />
       </div>
 
-      {/* Bundles */}
+      {/* Monthly plans */}
       <div>
-        <SectionTitle>Top up</SectionTitle>
+        <SectionTitle>Monthly plans</SectionTitle>
+        <p className="mt-1 text-[11.5px] text-text-faint">
+          Credits refill on every renewal. Switch or cancel anytime.
+        </p>
         <div className="mt-2 grid grid-cols-2 gap-3">
           {bundles.map((b) => {
-            const isPending = checkoutMut.isPending && checkoutMut.variables === b.key;
+            const isCurrent = currentTierKey === b.key;
+            const isPending =
+              checkoutMut.isPending &&
+              checkoutMut.variables?.tierKey === b.key &&
+              checkoutMut.variables?.kind === "subscription";
             return (
               <div
-                key={b.key}
+                key={`sub-${b.key}`}
                 className={cn(
                   "relative flex flex-col rounded-xl border bg-bg-elev p-4",
-                  b.highlight ? "border-text" : "border-border",
+                  isCurrent ? "border-text" : b.highlight ? "border-text/60" : "border-border",
                 )}
               >
-                {b.highlight && (
+                {isCurrent ? (
+                  <span className="absolute -top-2 left-3 rounded-full bg-text px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-text-invert">
+                    Current plan
+                  </span>
+                ) : b.highlight ? (
                   <span className="absolute -top-2 left-3 rounded-full bg-text px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-text-invert">
                     Most popular
                   </span>
-                )}
+                ) : null}
+                <div className="text-[13px] font-semibold text-text">{b.name}</div>
+                <div className="mt-1 text-[12px] text-text-mute">{b.tagline}</div>
+                <div className="mt-3 flex items-baseline gap-1">
+                  <span className="text-[22px] font-semibold text-text tabular-nums">
+                    ${(b.amountCents / 100).toFixed(0)}
+                  </span>
+                  <span className="text-[11.5px] text-text-mute">/ month</span>
+                </div>
+                <div className="text-[11.5px] text-text-mute">
+                  {b.credits.toLocaleString()} credits / month
+                </div>
+                <button
+                  onClick={() =>
+                    isCurrent
+                      ? portalMut.mutate()
+                      : checkoutMut.mutate({ tierKey: b.key, kind: "subscription" })
+                  }
+                  disabled={checkoutMut.isPending || portalMut.isPending}
+                  className={cn(
+                    "mt-4 flex items-center justify-center gap-2 rounded-lg px-3 py-1.5 text-[12.5px] font-medium transition disabled:opacity-60",
+                    isCurrent || b.highlight
+                      ? "bg-text text-text-invert hover:opacity-90"
+                      : "border border-border bg-bg text-text hover:bg-bg-hover",
+                  )}
+                >
+                  {isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  {isCurrent
+                    ? "Manage"
+                    : subActive
+                      ? "Switch to this plan"
+                      : isPending
+                        ? "Redirecting…"
+                        : "Subscribe"}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+        <p className="mt-2 text-[11px] text-text-faint">
+          Secure checkout via Stripe. Unused credits reset at each renewal.
+        </p>
+      </div>
+
+      {/* One-time top-ups */}
+      <div>
+        <SectionTitle>One-time top-up</SectionTitle>
+        <p className="mt-1 text-[11.5px] text-text-faint">
+          Need more this month? One-time purchases stack on top of your balance.
+        </p>
+        <div className="mt-2 grid grid-cols-2 gap-3">
+          {bundles.map((b) => {
+            const isPending =
+              checkoutMut.isPending &&
+              checkoutMut.variables?.tierKey === b.key &&
+              checkoutMut.variables?.kind === "topup";
+            return (
+              <div
+                key={`topup-${b.key}`}
+                className="relative flex flex-col rounded-xl border border-border bg-bg-elev p-4"
+              >
                 <div className="text-[13px] font-semibold text-text">{b.name}</div>
                 <div className="mt-1 text-[12px] text-text-mute">{b.tagline}</div>
                 <div className="mt-3 flex items-baseline gap-1">
@@ -1145,25 +1305,17 @@ function BillingPane() {
                   {b.credits.toLocaleString()} credits
                 </div>
                 <button
-                  onClick={() => checkoutMut.mutate(b.key)}
-                  disabled={checkoutMut.isPending}
-                  className={cn(
-                    "mt-4 flex items-center justify-center gap-2 rounded-lg px-3 py-1.5 text-[12.5px] font-medium transition disabled:opacity-60",
-                    b.highlight
-                      ? "bg-text text-text-invert hover:opacity-90"
-                      : "border border-border bg-bg text-text hover:bg-bg-hover",
-                  )}
+                  onClick={() => checkoutMut.mutate({ tierKey: b.key, kind: "topup" })}
+                  disabled={checkoutMut.isPending || portalMut.isPending}
+                  className="mt-4 flex items-center justify-center gap-2 rounded-lg border border-border bg-bg px-3 py-1.5 text-[12.5px] font-medium text-text transition hover:bg-bg-hover disabled:opacity-60"
                 >
                   {isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                  {isPending ? "Redirecting…" : "Buy"}
+                  {isPending ? "Redirecting…" : "Buy once"}
                 </button>
               </div>
             );
           })}
         </div>
-        <p className="mt-2 text-[11px] text-text-faint">
-          Secure checkout via Stripe. Credits never expire.
-        </p>
       </div>
 
       {/* Ledger */}
