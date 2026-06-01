@@ -112,10 +112,19 @@ export function CandidatesPanel({
   const sourceMoreFn = useServerFn(sourceMore);
   const sourceMoreMut = useMutation({
     mutationFn: () => sourceMoreFn({ data: { conversationId, limit: 10 } }),
-    onSuccess: (res) => {
+    onSuccess: (res: any) => {
       qc.invalidateQueries({ queryKey: ["candidates", conversationId] });
+      if (res.insufficient_credits) {
+        toast.error(
+          `Not enough credits — at least 1 required, ${res.credits_balance ?? 0} available. Top up in Settings.`,
+        );
+        return;
+      }
       if (res.added > 0) {
-        toast.success(`${res.added} candidate${res.added === 1 ? "" : "s"} sourced`);
+        toast.success(
+          `${res.added} candidate${res.added === 1 ? "" : "s"} sourced` +
+            (res.credits_exhausted ? " — credits exhausted, top up to continue" : ""),
+        );
       } else if (res.exhausted) {
         toast("No more matches — refine the brief in chat.");
       } else {
