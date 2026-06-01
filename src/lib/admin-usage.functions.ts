@@ -22,6 +22,64 @@ function range(input: { from?: string; to?: string }) {
   return { from, to };
 }
 
+const PLAN_KEYS = ["free", "starter", "growth", "pro", "scale"] as const;
+const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "trialing", "past_due"]);
+
+type PlanKey = (typeof PLAN_KEYS)[number];
+type AdminAuthUser = {
+  id: string;
+  email?: string | null;
+  created_at?: string;
+  last_sign_in_at?: string | null;
+};
+
+function normalizePlan(plan: unknown): PlanKey {
+  const value = String(plan ?? "free").toLowerCase();
+  return (PLAN_KEYS as readonly string[]).includes(value) ? (value as PlanKey) : "free";
+}
+
+function chunk<T>(items: T[], size = 500): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
+async function listAuthUsers(): Promise<AdminAuthUser[]> {
+  const users: AdminAuthUser[] = [];
+  const perPage = 1000;
+  for (let page = 1; page <= 100; page += 1) {
+    const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage });
+    if (error) throw new Error(`auth users: ${error.message}`);
+    const batch = ((data?.users ?? []) as AdminAuthUser[]).filter((u) => u.id);
+    users.push(...batch);
+    if (batch.length < perPage) break;
+  }
+  return users;
+}
+
+async function selectByIds(table: string, select: string, col: string, ids: string[]) {
+  const rows: any[] = [];
+  for (const group of chunk(ids)) {
+    const { data, error } = await supabaseAdmin
+      .from(table)
+      .select(select)
+      .in(col, group)
+      .limit(50000);
+    if (error) throw new Error(`${table}: ${error.message}`);
+    rows.push(...(data ?? []));
+  }
+  return rows;
+}
+
+function signupCount(users: AdminAuthUser[], from: Date, to: Date) {
+  const fromMs = from.getTime();
+  const toMs = to.getTime();
+  return users.reduce((acc, u) => {
+    const t = u.created_at ? new Date(u.created_at).getTime() : Number.NaN;
+    return Number.isFinite(t) && t >= fromMs && t <= toMs ? acc + 1 : acc;
+  }, 0);
+}
+
 async function countRows(
   table: string,
   col: string,
@@ -50,10 +108,9 @@ export const getUsageSummary = createServerFn({ method: "GET" })
     const span = to.getTime() - from.getTime();
     const prevFrom = new Date(from.getTime() - span);
     const prevTo = from;
+    const authUsers = await listAuthUsers();
 
     const [
-      signups,
-      prevSignups,
       jobsCreated,
       jobsPublished,
       applications,
@@ -62,8 +119,6 @@ export const getUsageSummary = createServerFn({ method: "GET" })
       assistantChats,
       assistantFallbacks,
     ] = await Promise.all([
-      countRows("profiles", "created_at", from, to),
-      countRows("profiles", "created_at", prevFrom, prevTo),
       countRows("jobs", "created_at", from, to),
       countRows("jobs", "published_at", from, to, (q) => q.eq("published", true)),
       countRows("applications", "created_at", from, to),
@@ -75,10 +130,8 @@ export const getUsageSummary = createServerFn({ method: "GET" })
       ),
     ]);
 
-    // Total users + active users
-    const { count: totalUsers } = await supabaseAdmin
-      .from("profiles")
-      .select("id", { count: "exact", head: true });
+    const signups = signupCount(authUsers, from, to);
+    const prevSignups = signupCount(authUsers, prevFrom, prevTo);
 
     // Active = had any job/application/candidate/outreach/message activity in range
     const activeIds = new Set<string>();
@@ -91,6 +144,13 @@ export const getUsageSummary = createServerFn({ method: "GET" })
         .limit(5000);
       (rows ?? []).forEach((r: any) => r.user_id && activeIds.add(r.user_id));
     }
+    const { data: appActiveRows } = await supabaseAdmin
+      .from("applications")
+      .select("recruiter_user_id")
+      .gte("created_at", from.toISOString())
+      .lte("created_at", to.toISOString())
+      .limit(5000);
+    (appActiveRows ?? []).forEach((r: any) => r.recruiter_user_id && activeIds.add(r.recruiter_user_id));
 
     // Sourcing credits used in current month (sum)
     const period = new Date().toISOString().slice(0, 7);
@@ -105,7 +165,7 @@ export const getUsageSummary = createServerFn({ method: "GET" })
 
     return {
       range: { from: from.toISOString(), to: to.toISOString() },
-      totalUsers: totalUsers ?? 0,
+      totalUsers: authUsers.length,
       activeUsers: activeIds.size,
       signups,
       prevSignups,
