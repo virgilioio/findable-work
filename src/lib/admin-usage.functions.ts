@@ -6,7 +6,7 @@ import { supabaseAdmin as _supabaseAdmin } from "@/integrations/supabase/client.
 type LooseRow = Record<string, unknown>;
 type QueryError = { message: string } | null;
 type QueryResult<T = LooseRow> = {
-  data?: T[] | T | null;
+  data?: T[] | null;
   error?: QueryError;
   count?: number | null;
 };
@@ -59,12 +59,6 @@ const PLAN_KEYS = ["free", "starter", "growth", "pro", "scale"] as const;
 const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "trialing", "past_due"]);
 
 type PlanKey = (typeof PLAN_KEYS)[number];
-type AdminAuthUser = {
-  id: string;
-  email?: string | null;
-  created_at?: string;
-  last_sign_in_at?: string | null;
-};
 
 function normalizePlan(plan: unknown): PlanKey {
   const value = String(plan ?? "free").toLowerCase();
@@ -91,7 +85,7 @@ async function listAuthUsers(): Promise<AdminAuthUser[]> {
 }
 
 async function selectByIds(table: string, select: string, col: string, ids: string[]) {
-  const rows: any[] = [];
+  const rows: LooseRow[] = [];
   for (const group of chunk(ids)) {
     const { data, error } = await supabaseAdmin
       .from(table)
@@ -102,6 +96,16 @@ async function selectByIds(table: string, select: string, col: string, ids: stri
     rows.push(...(data ?? []));
   }
   return rows;
+}
+
+function text(row: LooseRow | undefined, key: string): string | null {
+  const value = row?.[key];
+  return typeof value === "string" ? value : null;
+}
+
+function numberValue(row: LooseRow | undefined, key: string): number {
+  const value = row?.[key];
+  return typeof value === "number" ? value : 0;
 }
 
 function signupCount(users: AdminAuthUser[], from: Date, to: Date) {
@@ -118,7 +122,7 @@ async function countRows(
   col: string,
   from: Date,
   to: Date,
-  extra?: (q: any) => any,
+  extra?: (q: DbQuery) => DbQuery,
 ) {
   let q = supabaseAdmin
     .from(table)
