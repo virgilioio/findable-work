@@ -1359,7 +1359,7 @@ function BillingPane() {
           icon={<TrendingDown className="h-3.5 w-3.5" />}
           label="Spent · last 30 days"
           value={stats30d.spent.toLocaleString()}
-          sub={`${stats30d.sourcingRuns} runs · ${stats30d.phoneReveals} reveals`}
+          sub={`${stats30d.candidatesAdded ?? 0} candidates · ${stats30d.phoneReveals} reveals`}
         />
         <StatCard
           icon={<TrendingUp className="h-3.5 w-3.5" />}
