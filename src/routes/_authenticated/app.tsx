@@ -82,6 +82,7 @@ function AppLayout() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const search = Route.useSearch();
+  const { t } = useLanguage();
   const list = useServerFn(listConversations);
   const create = useServerFn(createConversation);
   const del = useServerFn(deleteConversation);
