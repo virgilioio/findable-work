@@ -338,19 +338,19 @@ function AppLayout() {
             <DropdownMenuContent side="top" align="end" className="w-52">
               <DropdownMenuItem onSelect={() => setSettingsSection("personalization")}>
                 <Sparkle size={14} />
-                <span>Personalization</span>
+                <span>{t("nav.menu.personalization", "Personalization")}</span>
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setSettingsSection("general")}>
                 <SettingsIcon className="h-3.5 w-3.5" />
-                <span>Configuration</span>
+                <span>{t("nav.menu.configuration", "Configuration")}</span>
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setSettingsSection("billing")}>
                 <CreditCard className="h-3.5 w-3.5" />
-                <span>Usage & billing</span>
+                <span>{t("nav.menu.billing", "Usage & billing")}</span>
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setSettingsSection("help")}>
                 <LifeBuoy className="h-3.5 w-3.5" />
-                <span>Help</span>
+                <span>{t("nav.menu.help", "Help")}</span>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={onSignOut}>
