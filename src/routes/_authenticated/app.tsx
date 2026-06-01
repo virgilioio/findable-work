@@ -355,7 +355,7 @@ function AppLayout() {
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={onSignOut}>
                 <LogOutIcon className="h-3.5 w-3.5" />
-                <span>Sign out</span>
+                <span>{t("common.signout", "Sign out")}</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
