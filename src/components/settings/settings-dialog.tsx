@@ -961,9 +961,13 @@ function SecurityPane({ onClose }: { onClose: () => void }) {
 function AccountPane() {
   const [email, setEmail] = useState<string>("");
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [nameDraft, setNameDraft] = useState<string>("");
+  const [nameHydrated, setNameHydrated] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const qc = useQueryClient();
   const getProfileFn = useServerFn(getProfile);
   const updateNameFn = useServerFn(updateDisplayName);
+  const deleteAccountFn = useServerFn(deleteOwnAccount);
 
   const { data: profile, isLoading: profileLoading } = useQuery({
     queryKey: ["profile"],
@@ -985,8 +989,38 @@ function AccountPane() {
     supabase.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? ""));
   }, []);
 
-  const name = profile?.displayName ?? "";
-  const initial = (name || email || "?")[0]?.toUpperCase() ?? "?";
+  useEffect(() => {
+    if (!nameHydrated && profile) {
+      setNameDraft(profile.displayName ?? "");
+      setNameHydrated(true);
+    }
+  }, [profile, nameHydrated]);
+
+  // Debounce save: only after 600ms of no edits.
+  useEffect(() => {
+    if (!nameHydrated) return;
+    const current = profile?.displayName ?? "";
+    if (nameDraft === current) return;
+    const t = setTimeout(() => {
+      updateNameMut.mutate(nameDraft);
+    }, 600);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nameDraft, nameHydrated]);
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await deleteAccountFn({});
+      await supabase.auth.signOut().catch(() => {});
+      window.location.href = "/";
+    } catch (e) {
+      toast.error("Couldn't delete account: " + (e as Error).message);
+      setDeleting(false);
+    }
+  };
+
+  const initial = (nameDraft || email || "?")[0]?.toUpperCase() ?? "?";
   return (
     <div>
       <div className="mb-4 flex items-center gap-3">
@@ -995,15 +1029,19 @@ function AccountPane() {
         </div>
         <div className="min-w-0">
           <div className="truncate text-[14px] font-medium text-text">
-            {name || email || "Account"}
+            {nameDraft || email || "Account"}
           </div>
           <div className="truncate text-[12px] text-text-mute">{email}</div>
         </div>
       </div>
       <Row label="Display name" description="Shown to your teammates.">
         <Input
-          value={name}
-          onChange={(e) => updateNameMut.mutate(e.target.value)}
+          value={nameDraft}
+          onChange={(e) => setNameDraft(e.target.value)}
+          onBlur={() => {
+            const current = profile?.displayName ?? "";
+            if (nameDraft !== current) updateNameMut.mutate(nameDraft);
+          }}
           disabled={profileLoading || updateNameMut.isPending}
           className="h-8 w-[220px]"
           placeholder="Your name"
@@ -1034,18 +1072,18 @@ function AccountPane() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete your account?</AlertDialogTitle>
             <AlertDialogDescription>
-              Account deletion is handled by our team. Email support@findable.work and
-              we'll process the request within one business day.
+              This permanently deletes your account, all your candidates,
+              conversations, jobs, and outreach. This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => {
-                window.location.href = "mailto:support@findable.work?subject=Delete%20my%20account";
-              }}
+              onClick={handleDelete}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Contact support
+              {deleting ? "Deleting…" : "Delete forever"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
