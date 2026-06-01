@@ -1,67 +1,46 @@
-## Goal
+# Credits & Billing — BYOK Stripe
 
-Replace the mocked credit system with a real, persistent credits & billing layer wired to Lovable Payments (Stripe). Credits are stored server-side per user, deducted on real sourcing/phone-reveal actions, and topped up via real Stripe Checkout.
+Replace the mocked checkout with a real, persistent credits system backed by **your own Stripe account**.
 
-## What we'll build
+## 1. Stripe setup (you do this once)
 
-### 1. Database (one migration)
+1. Create/sign in at stripe.com → grab **Secret key** (test mode is fine to start).
+2. I'll request two secrets via the secrets tool: `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`.
+3. After the webhook route is deployed, you add the endpoint in Stripe Dashboard → Developers → Webhooks pointing at `https://project--5ab3d2d7-ec9c-41d4-81ad-06d14aa7d875.lovable.app/api/public/stripe/webhook`, subscribe to `checkout.session.completed` and `payment_intent.payment_failed`, then paste the signing secret.
 
-New tables + extend `profiles`:
+## 2. Database (one migration)
 
-- `profiles`: add `credits_remaining` is already there (default 0) — change default to **50** and backfill existing users to `GREATEST(credits_remaining, 50)` as the welcome bonus. Add `credits_seeded_at` timestamp so signups via the existing `handle_new_user()` trigger get 50 automatically.
-- `credit_ledger` exists — extend with `type text` (`purchase | sourcing | phone_reveal | bonus | refund`), `metadata jsonb`, `balance_after int`. Keep existing `delta`, `reason`, `stripe_session_id`.
-- `credit_purchases` (new): `id, user_id, bundle_id, credits, amount_cents, currency, stripe_session_id unique, stripe_payment_intent, status (pending|paid|failed), created_at, paid_at`. RLS: user reads own; service_role writes.
+- `profiles`: default `credits_remaining` → **50**, backfill existing users to `GREATEST(credits_remaining, 50)`, add `credits_seeded_at`.
+- `credit_ledger`: extend with `type` (purchase | sourcing | phone_reveal | bonus | refund), `metadata jsonb`, `balance_after int`.
+- New `credit_purchases`: `id, user_id, bundle_id, credits, amount_cents, currency, stripe_session_id unique, stripe_payment_intent, status (pending|paid|failed), created_at, paid_at`. RLS: user reads own; service_role writes. Grants per house rules.
+- Update `handle_new_user()` to seed 50 credits + insert a `bonus` ledger row.
+- Postgres RPCs:
+  - `spend_credits(user, amount, type, metadata)` — locks profile row, checks balance, decrements, inserts ledger with `balance_after`. Returns `{ ok, balance }` or `insufficient_funds`.
+  - `credit_purchase_complete(session_id)` — idempotent: marks purchase paid, increments balance, inserts `purchase` ledger row.
 
-Grants + RLS for all new/changed tables per project conventions. Update `handle_new_user()` to seed 50 credits + write a `bonus` ledger row.
+## 3. Server functions (`src/lib/billing/`)
 
-### 2. Server functions (`src/lib/billing/`)
+- `credits.functions.ts`: `getCreditsSummary` (balance + 30-day aggregates + recent ledger), `spendCredits({ type, amount, metadata })` wrapping the RPC.
+- `checkout.functions.ts`: `createCheckoutSession({ bundleId })` — server-side bundle price validation, Stripe Checkout Session (`mode: 'payment'`), insert `credit_purchases` row as `pending`, return hosted URL. Bundles: Starter $49 / Growth $129 (Most popular) / Pro $299 / Scale $699.
 
-- `credits.functions.ts`
-  - `getCreditsSummary` — balance, 30-day aggregates (runs, reveals, candidates, spent), recent ledger (last 50). Powers the Usage pane.
-  - `spendCredits({ type, amount, metadata })` — atomic deduction via Postgres RPC `spend_credits(user, amount, type, metadata)` that locks the profile row, checks balance, decrements, inserts ledger with `balance_after`. Returns `{ ok, balance }` or `insufficient_funds`.
-- `checkout.functions.ts`
-  - `createCheckoutSession({ bundleId })` — server-side: validate bundle from a server-side `BUNDLES` constant (Starter/Growth/Pro/Scale, prices from the user's spec), create Stripe Checkout Session in **payment** mode with `client_reference_id = user_id`, `metadata.bundle_id`, success/cancel URLs back to `/app` with `?checkout=success|cancelled`. Insert `credit_purchases` row with status `pending`. Returns hosted checkout URL.
+## 4. Stripe webhook
 
-### 3. Stripe webhook (`src/routes/api/public/stripe/webhook.ts`)
+`src/routes/api/public/stripe/webhook.ts` — verify signature with `STRIPE_WEBHOOK_SECRET`, on `checkout.session.completed` call `credit_purchase_complete`. Handle `payment_intent.payment_failed` → mark `failed`. Idempotent on `stripe_session_id`.
 
-- Verify signature with `STRIPE_WEBHOOK_SECRET`.
-- On `checkout.session.completed` (mode=payment, status=paid): look up `credit_purchases` by `stripe_session_id`; if not already `paid`, mark paid + insert ledger `purchase` row + increment `profiles.credits_remaining` in a single RPC `credit_purchase_complete(session_id)` (idempotent).
-- Also handle `payment_intent.payment_failed` → mark failed.
+## 5. Wire deductions into existing flows
 
-### 4. Wire credit deduction into existing flows
+- **Sourcing run** (10 credits): call `spendCredits` BEFORE the external API call; on `insufficient_funds` return structured error surfaced as a toast linking to Settings → Usage & billing. Keep `increment_sourcing_usage` for analytics.
+- **Phone reveal** (1 credit): require `spendCredits` before returning phone. Skip for Applicants (have `application_id`).
 
-- **Sourcing run**: in the sourcing collect path (Apollo/PDL collection — `src/lib/sourcing/source-more.functions.ts` + the initial collect inside `search.functions.ts`), call `spendCredits({ type: 'sourcing', amount: 10, metadata: { project_id, candidates_returned } })` BEFORE the external API call. On `insufficient_funds`, return a structured error the UI surfaces as "Out of credits — buy more". On success continue. (Replaces / supplements existing `increment_sourcing_usage` accounting — keep that table for analytics.)
-- **Phone reveal**: in `src/routes/api/public/apollo/phone.ts` (or wherever phone enrich runs), require `spendCredits({ type: 'phone_reveal', amount: 1, metadata: { candidate_id } })` before returning the phone. Skip deduction if the candidate is an Applicant (has `application_id`) — applicant phones came free from the form.
+## 6. Settings → Usage & billing UI
 
-### 5. Settings → Usage & billing UI
+Live balance, "≈ N sourcing runs left", **Buy credits** (red <10), cost legend, 30-day stats, recent activity ledger, 4 bundle cards → real Stripe Checkout (no mock card form). `/app` handles `?checkout=success|cancelled` to refresh balance + toast.
 
-Rebuild the existing Usage section in `src/components/settings/settings-dialog.tsx`:
+## Out of scope
 
-- **Balance card**: live `credits_remaining`, "≈ N sourcing runs left" (balance / 10), **Buy credits** button. Red tint when balance < 10.
-- **Cost legend**: 1 sourcing run = 10 credits (up to 20 profiles), phone reveal = 1 credit.
-- **Last 30 days**: 4 stat tiles (runs / candidates sourced / reveals / credits used) from the summary endpoint.
-- **Recent activity ledger**: table of last 50 entries — date, type icon, description, ± amount, balance after.
-- **Buy credits view**: 4 bundle cards (Starter $49 / Growth $129 "Most popular" / Pro $299 / Scale $699) with per-credit price + use case. Selecting → calls `createCheckoutSession` → `window.location = url` (real Stripe hosted checkout).
-- **Return handler**: in `/app` route, detect `?checkout=success` → toast "Credits added" + invalidate credits query; `?checkout=cancelled` → toast "Checkout cancelled". (Webhook is the source of truth; this is just UX.)
+Balance outside Settings, subscriptions, auto-recharge, invoices UI, team balance.
 
-No mock card form anymore — Stripe-hosted checkout handles the payment UI.
+## What I need from you to start
 
-### 6. Out of scope (this round)
-
-- Showing balance outside Settings (sidebar chip, run-confirm dialog, reveal-button price) — per your answer, keep it self-contained for now.
-- Subscriptions / auto-recharge / refunds UI / invoices download.
-- Team-level shared balance.
-
-## User actions required
-
-1. **Enable Lovable Payments (Stripe)** — I'll trigger the eligibility check + enable tool as the first step of build mode. This creates a test environment immediately; live needs account claim later.
-2. **Configure the webhook endpoint** — after enable, paste `https://findable.work/api/public/stripe/webhook` into Stripe; I'll request `STRIPE_WEBHOOK_SECRET` via `add_secret`.
-3. Run the migration (auto-prompted).
-
-## Technical notes
-
-- All Stripe calls go through TanStack `createServerFn` + the public webhook route — no Edge Functions.
-- `spend_credits` and `credit_purchase_complete` are Postgres functions (SECURITY DEFINER, search_path=public) so deductions and top-ups are atomic and immune to race conditions.
-- Ledger always records `balance_after` for auditability — no recomputation from deltas.
-- New-user seed: `handle_new_user()` writes `+50` ledger row with `type='bonus'` and sets `credits_remaining=50`. Existing users get the bonus once via the migration backfill.
-- Bundle prices live in **one** server-side const (`src/lib/billing/bundles.ts`); the client fetches the list via a server fn so prices can't be tampered with from the browser.
+1. Approve this plan.
+2. Be ready to paste your Stripe **Secret key** when the secrets prompt appears. Webhook secret can come after the route is live.
