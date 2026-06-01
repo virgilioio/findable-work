@@ -612,6 +612,7 @@ function friendlyOAuthError(err: unknown, provider: string): string {
 }
 
 function GmailRow({ onPreview }: { onPreview: () => void }) {
+  const { t } = useLanguage();
   const qc = useQueryClient();
   const getFn = useServerFn(getGmailConnection);
   const startFn = useServerFn(startGmailConnect);
@@ -642,8 +643,8 @@ function GmailRow({ onPreview }: { onPreview: () => void }) {
   return (
     <ConnectionCard
       icon={<Mail className="h-5 w-5" />}
-      title="Gmail"
-      description="Send outreach emails and read replies from your inbox."
+      title={t("settings.conn.gmail.title", "Gmail")}
+      description={t("settings.conn.gmail.desc", "Send outreach emails and read replies from your inbox.")}
       connectedEmail={data?.email ?? null}
       onConnect={() => startMut.mutate()}
       onDisconnect={() => disMut.mutate()}
@@ -654,6 +655,7 @@ function GmailRow({ onPreview }: { onPreview: () => void }) {
 }
 
 function CalendarRow({ onPreview }: { onPreview: () => void }) {
+  const { t } = useLanguage();
   const qc = useQueryClient();
   const getFn = useServerFn(getCalendarConnection);
   const startFn = useServerFn(startCalendarConnect);
@@ -684,8 +686,8 @@ function CalendarRow({ onPreview }: { onPreview: () => void }) {
   return (
     <ConnectionCard
       icon={<CalendarIcon className="h-5 w-5" />}
-      title="Google Calendar"
-      description="Show your availability and schedule interviews with candidates."
+      title={t("settings.conn.cal.title", "Google Calendar")}
+      description={t("settings.conn.cal.desc", "Show your availability and schedule interviews with candidates.")}
       connectedEmail={data?.email ?? null}
       onConnect={() => startMut.mutate()}
       onDisconnect={() => disMut.mutate()}
