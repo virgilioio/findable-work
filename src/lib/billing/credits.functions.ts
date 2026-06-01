@@ -31,15 +31,16 @@ export const getCreditsSummary = createServerFn({ method: "POST" })
 
     if (profileRes.error) throw new Error(profileRes.error.message);
 
-    const ledger = (ledgerRes.data ?? []) as Array<{
+    type LedgerRow = {
       id: string;
       created_at: string;
       delta: number;
       reason: string;
       type: string;
       balance_after: number | null;
-      metadata: Record<string, unknown>;
-    }>;
+      metadata: Record<string, string | number | boolean | null>;
+    };
+    const ledger = (ledgerRes.data ?? []) as LedgerRow[];
     const balance = profileRes.data?.credits_remaining ?? 0;
 
     const cutoff = Date.now() - THIRTY_DAYS_MS;
