@@ -17,6 +17,7 @@ import {
   setConversationPinned,
 } from "@/lib/conversations.functions";
 import { adminCheck } from "@/lib/prompts/prompts.functions";
+import { getProfile } from "@/lib/profile.functions";
 import {
   Logo,
   Wordmark,
@@ -170,6 +171,8 @@ function AppLayout() {
   const [query, setQuery] = useState("");
   const [email, setEmail] = useState<string>("");
   const adminCheckFn = useServerFn(adminCheck);
+  const getProfileFn = useServerFn(getProfile);
+
   const { data: isAdmin } = useQuery({
     queryKey: ["is-admin"],
     queryFn: async () => {
@@ -182,9 +185,18 @@ function AppLayout() {
     },
   });
 
+  const { data: profile } = useQuery({
+    queryKey: ["profile"],
+    queryFn: () => getProfileFn(),
+  });
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? ""));
   }, []);
+
+  const displayName = profile?.displayName;
+  const userLabel = displayName || email || "Signed in";
+  const userInitial = (displayName?.[0] || email[0] || "?").toUpperCase();
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -289,10 +301,10 @@ function AppLayout() {
         {/* Footer */}
         <div className="flex items-center gap-2 border-t border-border px-3 py-2.5">
           <div className="flex h-7 w-7 items-center justify-center rounded-full bg-text text-text-invert text-[11px] font-medium">
-            {(email[0] ?? "?").toUpperCase()}
+            {userInitial}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[12px] text-text">{email || "Signed in"}</p>
+            <p className="truncate text-[12px] text-text">{userLabel}</p>
           </div>
           {isAdmin && (
             <Link
