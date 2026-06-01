@@ -249,7 +249,13 @@ function GeneralPane() {
           Monochrome
         </span>
       </Row>
-      <Row label="Language" description="Interface language.">
+      <Row
+        label={useLanguage().t("settings.language", "Language")}
+        description={useLanguage().t(
+          "settings.language.desc",
+          "Interface language. AI-generated content auto-adapts to whatever language you write in.",
+        )}
+      >
         <Select value={lang} onValueChange={(v) => setLang(v as never)}>
           <SelectTrigger className="h-8 w-[160px]">
             <SelectValue />
