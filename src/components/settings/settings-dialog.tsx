@@ -136,7 +136,7 @@ export function SettingsDialog({
         <DialogDescription className="sr-only">
           Manage your preferences, integrations and account.
         </DialogDescription>
-        <div className="flex h-full">
+        <div className="flex h-full min-h-0">
           {/* Rail */}
           <aside className="w-56 shrink-0 border-r border-border bg-bg-side py-4">
             <div className="px-4 pb-3 text-[13px] font-semibold text-text">
@@ -165,13 +165,13 @@ export function SettingsDialog({
           </aside>
 
           {/* Content */}
-          <div className="flex flex-1 flex-col overflow-hidden">
+          <div className="flex flex-1 min-w-0 min-h-0 flex-col overflow-hidden">
             <header className="flex h-12 items-center justify-between border-b border-border px-5">
               <h2 className="text-[14px] font-semibold text-text">
                 {SECTIONS.find((s) => s.id === active)?.label}
               </h2>
             </header>
-            <div className="flex-1 overflow-y-auto px-6 py-5">
+            <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5">
               {active === "general" && <GeneralPane />}
               {active === "notifications" && <NotificationsPane />}
               {active === "personalization" && <PersonalizationPane />}
