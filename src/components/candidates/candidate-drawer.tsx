@@ -39,6 +39,7 @@ export type Candidate = {
   email: string | null;
   phone: string | null;
   has_direct_phone?: boolean;
+  apollo_id?: string | null;
   linkedin: string | null;
   location: string | null;
   summary: string | null;
@@ -357,7 +358,7 @@ function Overview({ c }: { c: Candidate }) {
           </KV>
         )}
         {c.phone && <KV label="Phone" value={c.phone} />}
-        {!c.phone && (c as any).apollo_id && (
+        {!c.phone && c.apollo_id && (
           <KV label="Phone">
             <button
               onClick={() => revealMut.mutate()}
@@ -370,7 +371,7 @@ function Overview({ c }: { c: Candidate }) {
             </button>
           </KV>
         )}
-        {!c.phone && !(c as any).apollo_id && (
+        {!c.phone && !c.apollo_id && (
           <KV label="Phone" value="No phone on file" />
         )}
         {c.location && <KV label="Location" value={c.location} />}
