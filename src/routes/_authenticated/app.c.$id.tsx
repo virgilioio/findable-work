@@ -50,6 +50,7 @@ import { CandidatesPanel } from "@/components/candidates/candidates-panel";
 import { TaskCard, type ChatTask, type ArtifactTab } from "@/components/chat/task-card";
 import { ThinkingTicker } from "@/components/chat/thinking-ticker";
 import { OutreachPanel } from "@/components/outreach/outreach-panel";
+import { useLanguage } from "@/lib/i18n";
 
 // Splits an assistant message into segments rendered before and after the
 // associated task cards. Must stay in sync with the constant in
@@ -125,6 +126,7 @@ function ConversationPage() {
   const qc = useQueryClient();
   const get = useServerFn(getConversation);
   const router = useRouter();
+  const { t } = useLanguage();
 
   const { data, isLoading } = useQuery({
     queryKey: ["conversation", id],
@@ -147,7 +149,7 @@ function ConversationPage() {
   const messages: Message[] = data?.messages ?? [];
   const job: Job | null = (data?.job as Job | null) ?? null;
   const outreach = (data as any)?.outreach ?? null;
-  const title: string = data?.conversation?.title ?? "Untitled project";
+  const title: string = data?.conversation?.title ?? t("chat.title.untitled", "Untitled project");
   const persistedTasks: ChatTask[] = (data?.tasks as ChatTask[] | undefined) ?? [];
 
   if (isLoading) {
@@ -300,14 +302,14 @@ function ConversationPage() {
             active={tab === "chat"}
             onClick={() => setTab("chat")}
             icon={<ChatIcon size={14} />}
-            label="Chat"
+            label={t("chat.tab.chat", "Chat")}
           />
           {job && (
             <TabButton
               active={tab === "job"}
               onClick={() => setTab("job")}
               icon={<Briefcase size={14} />}
-              label="Job"
+              label={t("chat.tab.job", "Job")}
               pulse={pulse && tab !== "job"}
             />
           )}
@@ -316,7 +318,7 @@ function ConversationPage() {
               active={tab === "candidates"}
               onClick={() => setTab("candidates")}
               icon={<Users size={14} />}
-              label="Candidates"
+              label={t("chat.tab.candidates", "Candidates")}
               pulse={candidatesPulse && tab !== "candidates"}
             />
           )}
@@ -325,7 +327,7 @@ function ConversationPage() {
               active={tab === "outreach"}
               onClick={() => setTab("outreach")}
               icon={<SendIcon size={14} />}
-              label="Outreach"
+              label={t("chat.tab.outreach", "Outreach")}
               pulse={outreachPulse && tab !== "outreach"}
             />
           )}
@@ -333,13 +335,13 @@ function ConversationPage() {
         <div className="flex items-center gap-3 pr-1">
           <span className="max-w-[280px] truncate text-[12.5px] font-medium text-text">{title}</span>
           <button
-            aria-label="Share"
+            aria-label={t("common.share", "Share")}
             className="rounded-md px-2 py-1 text-[12px] text-text-mute transition hover:bg-bg-hover hover:text-text"
           >
-            Share
+            {t("common.share", "Share")}
           </button>
           <button
-            aria-label="More"
+            aria-label={t("common.more", "More")}
             className="rounded-md p-1.5 text-text-mute transition hover:bg-bg-hover hover:text-text"
           >
             <Dots size={14} />
