@@ -809,6 +809,7 @@ function PermissionsPreviewDialog({
 /* ------------------------------ Data controls ----------------------------- */
 
 function DataPane() {
+  const { t } = useLanguage();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const exportFn = useServerFn(exportCandidatesCsv);
   const exportMut = useMutation({
@@ -835,8 +836,8 @@ function DataPane() {
   return (
     <div>
       <Row
-        label="Export data"
-        description="Download a CSV of the candidates you've unlocked in this account."
+        label={t("settings.data.export", "Export data")}
+        description={t("settings.data.export.desc", "Download a CSV of the candidates you've unlocked in this account.")}
       >
         <button
           onClick={() => exportMut.mutate()}
@@ -844,37 +845,36 @@ function DataPane() {
           className="flex items-center gap-2 rounded-lg border border-border bg-bg px-3 py-1.5 text-[12.5px] text-text transition hover:bg-bg-hover disabled:opacity-60"
         >
           {exportMut.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-          {exportMut.isPending ? "Exporting…" : "Export CSV"}
+          {exportMut.isPending ? t("settings.data.exporting", "Exporting…") : t("settings.data.export.btn", "Export CSV")}
         </button>
       </Row>
       <Row
-        label="Delete workspace data"
-        description="Permanently remove all workspace data. This cannot be undone."
+        label={t("settings.data.delete", "Delete workspace data")}
+        description={t("settings.data.delete.desc", "Permanently remove all workspace data. This cannot be undone.")}
       >
         <button
           onClick={() => setConfirmOpen(true)}
           className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-1.5 text-[12.5px] font-medium text-destructive transition hover:bg-destructive/15"
         >
-          Delete data
+          {t("settings.data.delete.btn", "Delete data")}
         </button>
       </Row>
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete workspace data?</AlertDialogTitle>
+            <AlertDialogTitle>{t("settings.data.delete.dlg.title", "Delete workspace data?")}</AlertDialogTitle>
             <AlertDialogDescription>
-              Deletion requests are handled by our team. Please contact support at
-              support@findable.work to proceed.
+              {t("settings.data.delete.dlg.desc", "Deletion requests are handled by our team. Please contact support at support@findable.work to proceed.")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("common.cancel", "Cancel")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
                 window.location.href = "mailto:support@findable.work?subject=Delete%20workspace%20data";
               }}
             >
-              Contact support
+              {t("common.contact_support", "Contact support")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
