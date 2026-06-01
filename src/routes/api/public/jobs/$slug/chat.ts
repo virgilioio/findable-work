@@ -1,7 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { getPrompt } from "@/lib/prompts/registry.server";
 import {
   OPENAI_CHAT_COMPLETIONS_URL,
   getOpenAIKey,
@@ -86,6 +85,23 @@ type PublicJob = {
   nice_to_have: string[] | null;
   screening: Screening | null;
 };
+
+function buildSystemPrompt(grounding: string): string {
+  return `You are the hiring assistant embedded in a public job post, talking directly to a candidate who is considering applying. Your job is to help them understand the role and the hiring process, and to give brief, encouraging, constructive feedback on their profile when asked.
+
+Rules:
+- Be warm, concise, and specific. 2–4 short sentences or a tight bullet list. Never write essays.
+- Answer ONLY from the CONTEXT block below (role, requirements, the candidate's form data). If something isn't in the context (exact salary bands beyond what is posted, visa specifics, names of interviewers, start date), say you don't have that detail and suggest they ask in the intro call. Never invent facts.
+- Do not discuss compensation specifics beyond what is already posted in the role.
+- Never make outcome promises ("you will get the job", "you're guaranteed an interview"). No yes/no verdict on whether the candidate will be hired.
+- For "feedback on my profile" questions: compare the candidate's typed answers / resume filename / LinkedIn against the must-haves and nice-to-haves. Be kind and constructive — call out strengths and one or two gaps to address, framed as suggestions. Never a yes/no verdict.
+- Steer off-topic questions (politics, unrelated companies, personal opinions) back to this role.
+- Reply in the same language as the candidate's last message (English or Spanish). Match their tone.
+- Use plain Markdown. Short bullet lists are fine. No headings.
+
+CONTEXT:
+${grounding}`;
+}
 
 function buildGrounding(job: PublicJob, fc: z.infer<typeof formContextSchema> | undefined): string {
   const lines: string[] = [];
@@ -173,12 +189,12 @@ function scriptedFallback(job: PublicJob, lastUser: string): string {
   }
   if (isFeedback) {
     return isSpanish
-      ? "No puedo conectarme al asistente en este momento. Comparte tu experiencia en el formulario y el equipo lo revisará."
-      : "I can't reach the assistant right now — share your background in the application and the team will review it.";
+      ? "Puedo ayudarte mejor si completas tu experiencia, LinkedIn y respuestas del formulario. Mientras tanto, revisa los must-haves publicados y usa tus respuestas para mostrar ejemplos concretos de experiencia relevante."
+      : "I can give better profile feedback once you add your experience, LinkedIn, and form answers. For now, compare your background against the posted must-haves and use the application answers to highlight concrete examples.";
   }
   return isSpanish
-    ? "No puedo conectarme al asistente en este momento. Intenta de nuevo en un momento."
-    : "I can't reach the assistant right now. Please try again in a moment.";
+    ? "Puedo ayudar con el proceso de entrevistas, el tiempo estimado, modalidad remota/presencial y cómo tu perfil se alinea con la vacante. Hazme una pregunta sobre esta posición."
+    : "I can help with the interview process, expected timeline, remote/in-person setup, and how your profile lines up with the role. Ask me a role-specific question.";
 }
 
 function logFallback(reason: string, extra: Record<string, unknown> = {}) {
@@ -226,13 +242,7 @@ export const Route = createFileRoute("/api/public/jobs/$slug/chat")({
 
         const grounding = buildGrounding(job as PublicJob, formContext);
 
-        let system: string;
-        try {
-          system = await getPrompt("jobs.candidate_assistant", { grounding });
-        } catch (e: any) {
-          logFallback("prompt_load_failed", { message: e?.message });
-          return Response.json({ assistant: scriptedFallback(job as PublicJob, lastUser) });
-        }
+        const system = buildSystemPrompt(grounding);
 
         let apiKey: string;
         let model: string;
