@@ -933,7 +933,7 @@ export const Route = createFileRoute("/api/chat")({
                           credits_balance: result.credits_balance,
                           summary:
                             `Sourcing run blocked: not enough credits. ` +
-                            `Each sourcing run costs ${result.credits_required} credits ` +
+                            `Each candidate sourced costs 1 credit (phone reveals cost 5), ` +
                             `but only ${result.credits_balance} are available. ` +
                             `Tell the user briefly and suggest topping up via Settings → Plan & credits. ` +
                             `Do not retry source_candidates until they top up.`,
