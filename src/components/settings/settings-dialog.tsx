@@ -283,6 +283,7 @@ function GeneralPane() {
 /* ----------------------------- Notifications ----------------------------- */
 
 function NotificationsPane() {
+  const { t } = useLanguage();
   // Server-backed prefs (drive real emails).
   const getPrefs = useServerFn(getNotificationPrefs);
   const updPrefs = useServerFn(updateNotificationPrefs);
@@ -302,9 +303,9 @@ function NotificationsPane() {
     },
     onError: (_e, _v, ctx) => {
       if (ctx?.prev) qc.setQueryData(["notification-prefs"], ctx.prev);
-      toast.error("Couldn't save notification preferences");
+      toast.error(t("settings.notif.error", "Couldn't save notification preferences"));
     },
-    onSuccess: () => toast.success("Notification preferences saved"),
+    onSuccess: () => toast.success(t("settings.notif.saved", "Notification preferences saved")),
   });
   const applicants = prefs?.notifyOnNewApplicant ?? true;
   const digest = prefs?.notifyDailyDigest ?? false;
@@ -313,8 +314,8 @@ function NotificationsPane() {
   return (
     <div>
       <Row
-        label="New applicants"
-        description="Email me as soon as someone applies to one of my job posts."
+        label={t("settings.notif.applicants", "New applicants")}
+        description={t("settings.notif.applicants.desc", "Email me as soon as someone applies to one of my job posts.")}
       >
         <Switch
           checked={applicants}
@@ -325,8 +326,8 @@ function NotificationsPane() {
         />
       </Row>
       <Row
-        label="Daily digest"
-        description="One morning recap of new applicants from the last 24 hours."
+        label={t("settings.notif.digest", "Daily digest")}
+        description={t("settings.notif.digest.desc", "One morning recap of new applicants from the last 24 hours.")}
       >
         <Switch
           checked={digest}
