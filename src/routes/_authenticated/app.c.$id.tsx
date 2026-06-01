@@ -73,20 +73,22 @@ export const Route = createFileRoute("/_authenticated/app/c/$id")({
 });
 
 function ConversationNotFound() {
+  const { t } = useLanguage();
   return (
     <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
-      <p className="text-text-faint text-sm">This conversation doesn't exist or was deleted.</p>
-      <a href="/app" className="text-sm underline">Go back</a>
+      <p className="text-text-faint text-sm">{t("chat.notfound", "This conversation doesn't exist or was deleted.")}</p>
+      <a href="/app" className="text-sm underline">{t("chat.go_back", "Go back")}</a>
     </div>
   );
 }
 
 function ConversationError({ error }: { error: Error }) {
   console.error(error);
+  const { t } = useLanguage();
   return (
     <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
-      <p className="text-text-faint text-sm">Something went wrong loading this conversation.</p>
-      <a href="/app" className="text-sm underline">Go back</a>
+      <p className="text-text-faint text-sm">{t("chat.error", "Something went wrong loading this conversation.")}</p>
+      <a href="/app" className="text-sm underline">{t("chat.go_back", "Go back")}</a>
     </div>
   );
 }
