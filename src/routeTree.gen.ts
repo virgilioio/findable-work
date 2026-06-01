@@ -22,6 +22,7 @@ import { Route as ApiPublicGuestChatRouteImport } from './routes/api/public/gues
 import { Route as AuthenticatedAdminPromptsRouteImport } from './routes/_authenticated/admin.prompts'
 import { Route as ApiPublicJobsSlugRouteImport } from './routes/api/public/jobs/$slug'
 import { Route as ApiPublicAuthEmailHookRouteImport } from './routes/api/public/auth/email-hook'
+import { Route as ApiPublicApolloPhoneRouteImport } from './routes/api/public/apollo/phone'
 import { Route as AuthenticatedOauthGoogleReturnRouteImport } from './routes/_authenticated/oauth.google.return'
 import { Route as AuthenticatedAppCIdRouteImport } from './routes/_authenticated/app.c.$id'
 import { Route as ApiPublicJobsSlugApplyRouteImport } from './routes/api/public/jobs/$slug/apply'
@@ -91,6 +92,11 @@ const ApiPublicAuthEmailHookRoute = ApiPublicAuthEmailHookRouteImport.update({
   path: '/api/public/auth/email-hook',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicApolloPhoneRoute = ApiPublicApolloPhoneRouteImport.update({
+  id: '/api/public/apollo/phone',
+  path: '/api/public/apollo/phone',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedOauthGoogleReturnRoute =
   AuthenticatedOauthGoogleReturnRouteImport.update({
     id: '/oauth/google/return',
@@ -121,6 +127,7 @@ export interface FileRoutesByFullPath {
   '/app/': typeof AuthenticatedAppIndexRoute
   '/app/c/$id': typeof AuthenticatedAppCIdRoute
   '/oauth/google/return': typeof AuthenticatedOauthGoogleReturnRoute
+  '/api/public/apollo/phone': typeof ApiPublicApolloPhoneRoute
   '/api/public/auth/email-hook': typeof ApiPublicAuthEmailHookRoute
   '/api/public/jobs/$slug': typeof ApiPublicJobsSlugRouteWithChildren
   '/api/public/jobs/$slug/apply': typeof ApiPublicJobsSlugApplyRoute
@@ -137,6 +144,7 @@ export interface FileRoutesByTo {
   '/app': typeof AuthenticatedAppIndexRoute
   '/app/c/$id': typeof AuthenticatedAppCIdRoute
   '/oauth/google/return': typeof AuthenticatedOauthGoogleReturnRoute
+  '/api/public/apollo/phone': typeof ApiPublicApolloPhoneRoute
   '/api/public/auth/email-hook': typeof ApiPublicAuthEmailHookRoute
   '/api/public/jobs/$slug': typeof ApiPublicJobsSlugRouteWithChildren
   '/api/public/jobs/$slug/apply': typeof ApiPublicJobsSlugApplyRoute
@@ -156,6 +164,7 @@ export interface FileRoutesById {
   '/_authenticated/app/': typeof AuthenticatedAppIndexRoute
   '/_authenticated/app/c/$id': typeof AuthenticatedAppCIdRoute
   '/_authenticated/oauth/google/return': typeof AuthenticatedOauthGoogleReturnRoute
+  '/api/public/apollo/phone': typeof ApiPublicApolloPhoneRoute
   '/api/public/auth/email-hook': typeof ApiPublicAuthEmailHookRoute
   '/api/public/jobs/$slug': typeof ApiPublicJobsSlugRouteWithChildren
   '/api/public/jobs/$slug/apply': typeof ApiPublicJobsSlugApplyRoute
@@ -175,6 +184,7 @@ export interface FileRouteTypes {
     | '/app/'
     | '/app/c/$id'
     | '/oauth/google/return'
+    | '/api/public/apollo/phone'
     | '/api/public/auth/email-hook'
     | '/api/public/jobs/$slug'
     | '/api/public/jobs/$slug/apply'
@@ -191,6 +201,7 @@ export interface FileRouteTypes {
     | '/app'
     | '/app/c/$id'
     | '/oauth/google/return'
+    | '/api/public/apollo/phone'
     | '/api/public/auth/email-hook'
     | '/api/public/jobs/$slug'
     | '/api/public/jobs/$slug/apply'
@@ -209,6 +220,7 @@ export interface FileRouteTypes {
     | '/_authenticated/app/'
     | '/_authenticated/app/c/$id'
     | '/_authenticated/oauth/google/return'
+    | '/api/public/apollo/phone'
     | '/api/public/auth/email-hook'
     | '/api/public/jobs/$slug'
     | '/api/public/jobs/$slug/apply'
@@ -223,6 +235,7 @@ export interface RootRouteChildren {
   ApiChatRoute: typeof ApiChatRoute
   JobsSlugRoute: typeof JobsSlugRoute
   ApiPublicGuestChatRoute: typeof ApiPublicGuestChatRoute
+  ApiPublicApolloPhoneRoute: typeof ApiPublicApolloPhoneRoute
   ApiPublicAuthEmailHookRoute: typeof ApiPublicAuthEmailHookRoute
   ApiPublicJobsSlugRoute: typeof ApiPublicJobsSlugRouteWithChildren
 }
@@ -320,6 +333,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicAuthEmailHookRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/apollo/phone': {
+      id: '/api/public/apollo/phone'
+      path: '/api/public/apollo/phone'
+      fullPath: '/api/public/apollo/phone'
+      preLoaderRoute: typeof ApiPublicApolloPhoneRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authenticated/oauth/google/return': {
       id: '/_authenticated/oauth/google/return'
       path: '/oauth/google/return'
@@ -393,19 +413,10 @@ const rootRouteChildren: RootRouteChildren = {
   ApiChatRoute: ApiChatRoute,
   JobsSlugRoute: JobsSlugRoute,
   ApiPublicGuestChatRoute: ApiPublicGuestChatRoute,
+  ApiPublicApolloPhoneRoute: ApiPublicApolloPhoneRoute,
   ApiPublicAuthEmailHookRoute: ApiPublicAuthEmailHookRoute,
   ApiPublicJobsSlugRoute: ApiPublicJobsSlugRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
