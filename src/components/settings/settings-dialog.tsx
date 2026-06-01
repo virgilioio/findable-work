@@ -250,8 +250,8 @@ function GeneralPane() {
         </span>
       </Row>
       <Row
-        label={useLanguage().t("settings.language", "Language")}
-        description={useLanguage().t(
+        label={t("settings.language", "Language")}
+        description={t(
           "settings.language.desc",
           "Interface language. AI-generated content auto-adapts to whatever language you write in.",
         )}
