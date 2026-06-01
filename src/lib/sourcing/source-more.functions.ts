@@ -174,8 +174,9 @@ export const sourceMore = createServerFn({ method: "POST" })
       try {
         const enriched = await enrichApolloProfiles(apolloFresh.map((p: any) => p.external_id));
         for (const e of enriched) {
+          if (creditsExhausted) break;
           const slug = linkedinSlug(e.linkedin_url);
-          const { error: insErr } = await supabaseAdmin.from("candidates").insert({
+          const { data: ins, error: insErr } = await supabaseAdmin.from("candidates").insert({
             user_id: userId,
             conversation_id: conversationId,
             name: e.full_name || `${e.first_name} ${e.last_name}`.trim() || "Unknown",
@@ -205,13 +206,22 @@ export const sourceMore = createServerFn({ method: "POST" })
             apollo_id: e.id,
             linkedin_slug: slug,
             has_direct_phone: apolloPhoneFlag.get(e.id) ?? false,
-          });
+          }).select("id").single();
           if (insErr) {
             console.error("source-more apollo insert failed:", insErr.message);
             skipped++;
           } else {
             added++;
             creditedAdds++;
+            const spend = await spendCreditsAdmin({
+              userId,
+              amount: CANDIDATE_ADD_COST,
+              type: "candidate_add",
+              reason: "Candidate sourced (source more)",
+              metadata: { project_id: project.id, source: "apollo", apollo_id: e.id, candidate_id: ins?.id },
+            });
+            if (spend.ok) creditsSpent += CANDIDATE_ADD_COST;
+            else creditsExhausted = true;
           }
         }
       } catch (e: any) {
@@ -221,6 +231,7 @@ export const sourceMore = createServerFn({ method: "POST" })
 
     // PDL fresh: insert from preview payload.
     for (const p of pdlFresh) {
+      if (creditsExhausted) break;
       const raw: any = (p as any).preview?.raw ?? {};
       const prev: any = (p as any).preview ?? {};
       const fn = raw.first_name ?? "";
@@ -236,7 +247,7 @@ export const sourceMore = createServerFn({ method: "POST" })
             desc: h.summary ?? "",
           }))
         : [];
-      const { error: insErr } = await supabaseAdmin.from("candidates").insert({
+      const { data: ins, error: insErr } = await supabaseAdmin.from("candidates").insert({
         user_id: userId,
         conversation_id: conversationId,
         name: fullName,
@@ -262,13 +273,22 @@ export const sourceMore = createServerFn({ method: "POST" })
         pdl_id: (p as any).external_id,
         linkedin_slug: slug,
         has_direct_phone: Boolean(raw.mobile_phone || raw.phone_numbers?.length),
-      });
+      }).select("id").single();
       if (insErr) {
         console.error("source-more pdl insert failed:", insErr.message);
         skipped++;
       } else {
         added++;
         creditedAdds++;
+        const spend = await spendCreditsAdmin({
+          userId,
+          amount: CANDIDATE_ADD_COST,
+          type: "candidate_add",
+          reason: "Candidate sourced (source more)",
+          metadata: { project_id: project.id, source: "pdl", pdl_id: (p as any).external_id, candidate_id: ins?.id },
+        });
+        if (spend.ok) creditsSpent += CANDIDATE_ADD_COST;
+        else creditsExhausted = true;
       }
     }
 
