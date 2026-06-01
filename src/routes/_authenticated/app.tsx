@@ -276,6 +276,15 @@ function AppLayout() {
               Admin
             </Link>
           )}
+          {isAdmin && (
+            <Link
+              to="/admin/usage"
+              aria-label="Usage"
+              className="rounded-md px-1.5 py-1 text-[11px] font-medium text-text-mute transition hover:bg-bg-hover hover:text-text"
+            >
+              Usage
+            </Link>
+          )}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
