@@ -3,42 +3,9 @@ import { z } from "zod";
 import { requireAdmin } from "@/lib/prompts/require-admin.server";
 import { supabaseAdmin as _supabaseAdmin } from "@/integrations/supabase/client.server";
 
-type LooseRow = Record<string, unknown>;
-type QueryError = { message: string } | null;
-type QueryResult<T = LooseRow> = {
-  data?: T[] | null;
-  error?: QueryError;
-  count?: number | null;
-};
-type DbQuery<T = LooseRow> = PromiseLike<QueryResult<T>> & {
-  select: (columns: string, options?: Record<string, unknown>) => DbQuery<T>;
-  gte: (column: string, value: string) => DbQuery<T>;
-  lte: (column: string, value: string) => DbQuery<T>;
-  eq: (column: string, value: unknown) => DbQuery<T>;
-  in: (column: string, values: string[]) => DbQuery<T>;
-  order: (column: string, options?: Record<string, unknown>) => DbQuery<T>;
-  limit: (count: number) => DbQuery<T>;
-};
-type AdminAuthUser = {
-  id: string;
-  email?: string | null;
-  created_at?: string;
-  last_sign_in_at?: string | null;
-};
-type LooseSupabaseAdmin = {
-  from: (table: string) => DbQuery;
-  auth: {
-    admin: {
-      listUsers: (args: {
-        page: number;
-        perPage: number;
-      }) => Promise<{ data?: { users?: AdminAuthUser[] }; error?: QueryError }>;
-    };
-  };
-};
-
-// Types.ts is auto-generated; use a narrow local interface for newly-added admin tables.
-const supabaseAdmin = _supabaseAdmin as unknown as LooseSupabaseAdmin;
+// Types.ts is auto-generated; cast to any here so newly-added admin tables/RPCs compile.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const supabaseAdmin = _supabaseAdmin as any;
 
 // ---------- helpers ----------
 
@@ -59,6 +26,12 @@ const PLAN_KEYS = ["free", "starter", "growth", "pro", "scale"] as const;
 const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "trialing", "past_due"]);
 
 type PlanKey = (typeof PLAN_KEYS)[number];
+type AdminAuthUser = {
+  id: string;
+  email?: string | null;
+  created_at?: string;
+  last_sign_in_at?: string | null;
+};
 
 function normalizePlan(plan: unknown): PlanKey {
   const value = String(plan ?? "free").toLowerCase();
@@ -85,7 +58,8 @@ async function listAuthUsers(): Promise<AdminAuthUser[]> {
 }
 
 async function selectByIds(table: string, select: string, col: string, ids: string[]) {
-  const rows: LooseRow[] = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rows: any[] = [];
   for (const group of chunk(ids)) {
     const { data, error } = await supabaseAdmin
       .from(table)
@@ -96,16 +70,6 @@ async function selectByIds(table: string, select: string, col: string, ids: stri
     rows.push(...(data ?? []));
   }
   return rows;
-}
-
-function text(row: LooseRow | undefined, key: string): string | null {
-  const value = row?.[key];
-  return typeof value === "string" ? value : null;
-}
-
-function numberValue(row: LooseRow | undefined, key: string): number {
-  const value = row?.[key];
-  return typeof value === "number" ? value : 0;
 }
 
 function signupCount(users: AdminAuthUser[], from: Date, to: Date) {
@@ -122,7 +86,8 @@ async function countRows(
   col: string,
   from: Date,
   to: Date,
-  extra?: (q: DbQuery) => DbQuery,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  extra?: (q: any) => any,
 ) {
   let q = supabaseAdmin
     .from(table)
