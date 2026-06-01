@@ -23,6 +23,7 @@ import { Route as AuthenticatedAppIndexRouteImport } from './routes/_authenticat
 import { Route as ApiPublicGuestChatRouteImport } from './routes/api/public/guest-chat'
 import { Route as AuthenticatedAdminUsageRouteImport } from './routes/_authenticated/admin.usage'
 import { Route as AuthenticatedAdminPromptsRouteImport } from './routes/_authenticated/admin.prompts'
+import { Route as ApiPublicStripeWebhookRouteImport } from './routes/api/public/stripe/webhook'
 import { Route as ApiPublicJobsSlugRouteImport } from './routes/api/public/jobs/$slug'
 import { Route as ApiPublicHooksSendApplicationDigestsRouteImport } from './routes/api/public/hooks/send-application-digests'
 import { Route as ApiPublicApolloPhoneRouteImport } from './routes/api/public/apollo/phone'
@@ -101,6 +102,11 @@ const AuthenticatedAdminPromptsRoute =
     path: '/admin/prompts',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const ApiPublicStripeWebhookRoute = ApiPublicStripeWebhookRouteImport.update({
+  id: '/api/public/stripe/webhook',
+  path: '/api/public/stripe/webhook',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicJobsSlugRoute = ApiPublicJobsSlugRouteImport.update({
   id: '/api/public/jobs/$slug',
   path: '/api/public/jobs/$slug',
@@ -158,6 +164,7 @@ export interface FileRoutesByFullPath {
   '/api/public/apollo/phone': typeof ApiPublicApolloPhoneRoute
   '/api/public/hooks/send-application-digests': typeof ApiPublicHooksSendApplicationDigestsRoute
   '/api/public/jobs/$slug': typeof ApiPublicJobsSlugRouteWithChildren
+  '/api/public/stripe/webhook': typeof ApiPublicStripeWebhookRoute
   '/api/public/jobs/$slug/apply': typeof ApiPublicJobsSlugApplyRoute
   '/api/public/jobs/$slug/chat': typeof ApiPublicJobsSlugChatRoute
 }
@@ -179,6 +186,7 @@ export interface FileRoutesByTo {
   '/api/public/apollo/phone': typeof ApiPublicApolloPhoneRoute
   '/api/public/hooks/send-application-digests': typeof ApiPublicHooksSendApplicationDigestsRoute
   '/api/public/jobs/$slug': typeof ApiPublicJobsSlugRouteWithChildren
+  '/api/public/stripe/webhook': typeof ApiPublicStripeWebhookRoute
   '/api/public/jobs/$slug/apply': typeof ApiPublicJobsSlugApplyRoute
   '/api/public/jobs/$slug/chat': typeof ApiPublicJobsSlugChatRoute
 }
@@ -203,6 +211,7 @@ export interface FileRoutesById {
   '/api/public/apollo/phone': typeof ApiPublicApolloPhoneRoute
   '/api/public/hooks/send-application-digests': typeof ApiPublicHooksSendApplicationDigestsRoute
   '/api/public/jobs/$slug': typeof ApiPublicJobsSlugRouteWithChildren
+  '/api/public/stripe/webhook': typeof ApiPublicStripeWebhookRoute
   '/api/public/jobs/$slug/apply': typeof ApiPublicJobsSlugApplyRoute
   '/api/public/jobs/$slug/chat': typeof ApiPublicJobsSlugChatRoute
 }
@@ -227,6 +236,7 @@ export interface FileRouteTypes {
     | '/api/public/apollo/phone'
     | '/api/public/hooks/send-application-digests'
     | '/api/public/jobs/$slug'
+    | '/api/public/stripe/webhook'
     | '/api/public/jobs/$slug/apply'
     | '/api/public/jobs/$slug/chat'
   fileRoutesByTo: FileRoutesByTo
@@ -248,6 +258,7 @@ export interface FileRouteTypes {
     | '/api/public/apollo/phone'
     | '/api/public/hooks/send-application-digests'
     | '/api/public/jobs/$slug'
+    | '/api/public/stripe/webhook'
     | '/api/public/jobs/$slug/apply'
     | '/api/public/jobs/$slug/chat'
   id:
@@ -271,6 +282,7 @@ export interface FileRouteTypes {
     | '/api/public/apollo/phone'
     | '/api/public/hooks/send-application-digests'
     | '/api/public/jobs/$slug'
+    | '/api/public/stripe/webhook'
     | '/api/public/jobs/$slug/apply'
     | '/api/public/jobs/$slug/chat'
   fileRoutesById: FileRoutesById
@@ -289,6 +301,7 @@ export interface RootRouteChildren {
   ApiPublicApolloPhoneRoute: typeof ApiPublicApolloPhoneRoute
   ApiPublicHooksSendApplicationDigestsRoute: typeof ApiPublicHooksSendApplicationDigestsRoute
   ApiPublicJobsSlugRoute: typeof ApiPublicJobsSlugRouteWithChildren
+  ApiPublicStripeWebhookRoute: typeof ApiPublicStripeWebhookRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -390,6 +403,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin/prompts'
       preLoaderRoute: typeof AuthenticatedAdminPromptsRouteImport
       parentRoute: typeof AuthenticatedRoute
+    }
+    '/api/public/stripe/webhook': {
+      id: '/api/public/stripe/webhook'
+      path: '/api/public/stripe/webhook'
+      fullPath: '/api/public/stripe/webhook'
+      preLoaderRoute: typeof ApiPublicStripeWebhookRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/public/jobs/$slug': {
       id: '/api/public/jobs/$slug'
@@ -502,7 +522,18 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicHooksSendApplicationDigestsRoute:
     ApiPublicHooksSendApplicationDigestsRoute,
   ApiPublicJobsSlugRoute: ApiPublicJobsSlugRouteWithChildren,
+  ApiPublicStripeWebhookRoute: ApiPublicStripeWebhookRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
