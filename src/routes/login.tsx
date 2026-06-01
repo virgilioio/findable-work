@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Wordmark } from "@/components/findable-icons";
 import googleLogo from "@/assets/google-logo.png";
+import { useLanguage } from "@/lib/i18n";
 
 export const Route = createFileRoute("/login")({
   head: () => ({ meta: [{ title: "Sign in — findable" }] }),
@@ -13,6 +14,7 @@ export const Route = createFileRoute("/login")({
 });
 
 function LoginPage() {
+  const { t, tf } = useLanguage();
   const navigate = useNavigate();
   const search = Route.useSearch();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
@@ -93,7 +95,7 @@ function LoginPage() {
       }
     } catch (err) {
       console.error("[auth] login failed", err);
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      setError(err instanceof Error ? err.message : t("auth.something_wrong", "Something went wrong"));
     } finally {
       setLoading(false);
     }
@@ -130,14 +132,18 @@ function LoginPage() {
       {/* Card */}
       <div className="w-full max-w-[380px] rounded-[14px] border border-[var(--border)] bg-[var(--bg-elev)] px-8 py-9">
         <h1 className="text-[22px] font-semibold tracking-[-0.015em] text-[var(--text)]">
-          {magicSent ? "Check your inbox" : mode === "signin" ? "Sign in to findable" : "Start hiring with findable"}
+          {magicSent
+            ? t("auth.magic_sent.title", "Check your inbox")
+            : mode === "signin"
+              ? t("auth.signin.title", "Sign in to findable")
+              : t("auth.signup.title", "Start hiring with findable")}
         </h1>
         <p className="mt-1.5 text-[13.5px] text-[var(--text-mute)]">
           {magicSent
-            ? `We sent a sign-in link to ${email}. It expires in 1 hour.`
+            ? tf("auth.magic_sent.subtitle", "We sent a sign-in link to {email}. It expires in 1 hour.", { email })
             : mode === "signin"
-            ? "Sign in to your recruiting workspace"
-            : "Start hiring with your AI recruiter"}
+              ? t("auth.signin.subtitle", "Sign in to your recruiting workspace")
+              : t("auth.signup.subtitle", "Start hiring with your AI recruiter")}
         </p>
 
         {magicSent ? (
@@ -146,7 +152,7 @@ function LoginPage() {
             onClick={() => setMagicSent(false)}
             className="mt-6 h-10 w-full rounded-[10px] border border-[var(--border-strong)] bg-[var(--bg-elev)] text-[14px] font-medium text-[var(--text)] hover:bg-[var(--bg-hover)]"
           >
-            Use a different email
+            {t("auth.different_email", "Use a different email")}
           </button>
         ) : (
         <form onSubmit={onSubmit} className="mt-6 flex flex-col gap-2.5">
@@ -157,30 +163,30 @@ function LoginPage() {
             className="flex h-10 items-center justify-center gap-2.5 rounded-[10px] border border-[var(--border-strong)] bg-[var(--bg-elev)] text-[13.5px] font-medium text-[var(--text)] transition hover:bg-[var(--bg-hover)] disabled:opacity-60"
           >
             <img src={googleLogo} alt="" aria-hidden="true" className="h-4 w-4" />
-            Continue with Google
+            {t("auth.continue_google", "Continue with Google")}
           </button>
 
           <div className="my-1 flex items-center gap-2.5">
             <span className="h-px flex-1 bg-[var(--border)]" />
             <span className="text-[11.5px] uppercase tracking-[0.08em] text-[var(--text-faint)]">
-              or
+              {t("auth.or", "or")}
             </span>
             <span className="h-px flex-1 bg-[var(--border)]" />
           </div>
 
           <label className="flex flex-col gap-1.5 text-[12.5px] font-medium text-[var(--text-mute)]">
-            Email
+            {t("auth.email", "Email")}
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@company.com"
+              placeholder={t("auth.email_placeholder", "you@company.com")}
               required
               className="h-[38px] rounded-[10px] border border-[var(--border-strong)] bg-[var(--bg)] px-3 text-[14px] text-[var(--text)] outline-none focus:border-[var(--text)]"
             />
           </label>
           <label className="flex flex-col gap-1.5 text-[12.5px] font-medium text-[var(--text-mute)]">
-            Password
+            {t("auth.password", "Password")}
             <input
               type="password"
               value={password}
@@ -198,7 +204,7 @@ function LoginPage() {
                 to="/forgot-password"
                 className="text-[12.5px] text-[var(--text-mute)] hover:text-[var(--text)]"
               >
-                Forgot password?
+                {t("auth.forgot", "Forgot password?")}
               </Link>
             </div>
           )}
@@ -214,7 +220,11 @@ function LoginPage() {
             disabled={loading}
             className="mt-1.5 h-10 rounded-[10px] bg-[var(--text)] text-[14px] font-medium text-[var(--text-invert)] disabled:opacity-70"
           >
-            {loading ? "Signing in…" : mode === "signin" ? "Sign in" : "Create account"}
+            {loading
+              ? t("auth.signing_in", "Signing in…")
+              : mode === "signin"
+                ? t("auth.signin", "Sign in")
+                : t("auth.signup", "Create account")}
           </button>
 
           {mode === "signin" && (
@@ -224,14 +234,16 @@ function LoginPage() {
               disabled={loading}
               className="h-10 rounded-[10px] border border-[var(--border-strong)] bg-[var(--bg-elev)] text-[13.5px] font-medium text-[var(--text)] transition hover:bg-[var(--bg-hover)] disabled:opacity-60"
             >
-              Email me a magic link
+              {t("auth.magic_link", "Email me a magic link")}
             </button>
           )}
         </form>
         )}
 
         <div className="mt-[22px] border-t border-[var(--border)] pt-[18px] text-center text-[13px] text-[var(--text-mute)]">
-          {mode === "signin" ? "New to findable?" : "Already have an account?"}{" "}
+          {mode === "signin"
+            ? t("auth.new_here", "New to findable?")
+            : t("auth.already", "Already have an account?")}{" "}
           <button
             type="button"
             onClick={() => {
@@ -240,7 +252,7 @@ function LoginPage() {
             }}
             className="font-medium text-[var(--text)] hover:underline"
           >
-            {mode === "signin" ? "Create an account" : "Sign in"}
+            {mode === "signin" ? t("auth.create_account", "Create an account") : t("auth.signin", "Sign in")}
           </button>
         </div>
       </div>

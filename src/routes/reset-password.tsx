@@ -2,6 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Wordmark } from "@/components/findable-icons";
+import { useLanguage } from "@/lib/i18n";
 
 export const Route = createFileRoute("/reset-password")({
   head: () => ({ meta: [{ title: "Set a new password — findable" }] }),
@@ -9,6 +10,7 @@ export const Route = createFileRoute("/reset-password")({
 });
 
 function ResetPasswordPage() {
+  const { t } = useLanguage();
   const navigate = useNavigate();
   const [ready, setReady] = useState(false);
   const [linkError, setLinkError] = useState<string | null>(null);
@@ -36,12 +38,12 @@ function ResetPasswordPage() {
       }
     });
     // If after a beat there's still no session, the link is bad/expired.
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       if (!cancelled && !ready) {
         supabase.auth.getSession().then(({ data }) => {
           if (!data.session) {
             setLinkError(
-              "This reset link is invalid or has expired. Request a new one to continue.",
+              t("auth.reset.invalid", "This reset link is invalid or has expired. Request a new one to continue."),
             );
           }
         });
@@ -49,7 +51,7 @@ function ResetPasswordPage() {
     }, 1500);
     return () => {
       cancelled = true;
-      clearTimeout(t);
+      clearTimeout(timer);
       sub.subscription.unsubscribe();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -59,11 +61,11 @@ function ResetPasswordPage() {
     e.preventDefault();
     setError(null);
     if (password.length < 8) {
-      setError("Use at least 8 characters.");
+      setError(t("auth.reset.too_short", "Use at least 8 characters."));
       return;
     }
     if (password !== confirm) {
-      setError("Passwords don't match.");
+      setError(t("auth.reset.mismatch", "Passwords don't match."));
       return;
     }
     setLoading(true);
@@ -73,7 +75,7 @@ function ResetPasswordPage() {
       setDone(true);
       setTimeout(() => navigate({ to: "/app" }), 1200);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      setError(err instanceof Error ? err.message : t("auth.something_wrong", "Something went wrong"));
     } finally {
       setLoading(false);
     }
@@ -87,12 +89,12 @@ function ResetPasswordPage() {
 
       <div className="w-full max-w-[380px] rounded-[14px] border border-[var(--border)] bg-[var(--bg-elev)] px-8 py-9">
         <h1 className="text-[22px] font-semibold tracking-[-0.015em] text-[var(--text)]">
-          {done ? "Password updated" : "Set a new password"}
+          {done ? t("auth.reset.done.title", "Password updated") : t("auth.reset.title", "Set a new password")}
         </h1>
         <p className="mt-1.5 text-[13.5px] text-[var(--text-mute)]">
           {done
-            ? "You're signed in. Taking you to your workspace…"
-            : "Choose a new password for your findable account."}
+            ? t("auth.reset.done.subtitle", "You're signed in. Taking you to your workspace…")
+            : t("auth.reset.subtitle", "Choose a new password for your findable account.")}
         </p>
 
         {linkError ? (
@@ -104,13 +106,13 @@ function ResetPasswordPage() {
               to="/forgot-password"
               className="mt-3 flex h-10 items-center justify-center rounded-[10px] bg-[var(--text)] text-[14px] font-medium text-[var(--text-invert)]"
             >
-              Request a new link
+              {t("auth.reset.request_new", "Request a new link")}
             </Link>
           </div>
         ) : !done ? (
           <form onSubmit={onSubmit} className="mt-6 flex flex-col gap-2.5">
             <label className="flex flex-col gap-1.5 text-[12.5px] font-medium text-[var(--text-mute)]">
-              New password
+              {t("auth.reset.new_password", "New password")}
               <input
                 type="password"
                 value={password}
@@ -123,7 +125,7 @@ function ResetPasswordPage() {
               />
             </label>
             <label className="flex flex-col gap-1.5 text-[12.5px] font-medium text-[var(--text-mute)]">
-              Confirm password
+              {t("auth.reset.confirm", "Confirm password")}
               <input
                 type="password"
                 value={confirm}
@@ -147,14 +149,18 @@ function ResetPasswordPage() {
               disabled={loading || !ready}
               className="mt-1.5 h-10 rounded-[10px] bg-[var(--text)] text-[14px] font-medium text-[var(--text-invert)] disabled:opacity-70"
             >
-              {!ready ? "Verifying link…" : loading ? "Updating…" : "Update password"}
+              {!ready
+                ? t("auth.reset.verifying", "Verifying link…")
+                : loading
+                  ? t("auth.reset.updating", "Updating…")
+                  : t("auth.reset.submit", "Update password")}
             </button>
           </form>
         ) : null}
 
         <div className="mt-[22px] border-t border-[var(--border)] pt-[18px] text-center text-[13px] text-[var(--text-mute)]">
           <Link to="/login" className="font-medium text-[var(--text)] hover:underline">
-            Back to sign in
+            {t("auth.back_to_signin", "Back to sign in")}
           </Link>
         </div>
       </div>

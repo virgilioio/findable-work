@@ -85,16 +85,21 @@ export type SettingsSection =
   | "account"
   | "help";
 
-const SECTIONS: { id: SettingsSection; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
-  { id: "general", label: "General", icon: SettingsIcon },
-  { id: "notifications", label: "Notifications", icon: Bell },
-  { id: "personalization", label: "Personalization", icon: Sparkles },
-  { id: "connections", label: "Connections", icon: Plug },
-  { id: "billing", label: "Usage & billing", icon: CreditCard },
-  { id: "data", label: "Data controls", icon: Database },
-  { id: "security", label: "Security", icon: Shield },
-  { id: "account", label: "Account", icon: UserIcon },
-  { id: "help", label: "Help", icon: LifeBuoy },
+const SECTION_DEFS: {
+  id: SettingsSection;
+  labelKey: string;
+  labelFallback: string;
+  icon: React.ComponentType<{ className?: string }>;
+}[] = [
+  { id: "general", labelKey: "settings.general", labelFallback: "General", icon: SettingsIcon },
+  { id: "notifications", labelKey: "settings.notifications", labelFallback: "Notifications", icon: Bell },
+  { id: "personalization", labelKey: "settings.personalization", labelFallback: "Personalization", icon: Sparkles },
+  { id: "connections", labelKey: "settings.connections", labelFallback: "Connections", icon: Plug },
+  { id: "billing", labelKey: "settings.billing", labelFallback: "Usage & billing", icon: CreditCard },
+  { id: "data", labelKey: "settings.data", labelFallback: "Data controls", icon: Database },
+  { id: "security", labelKey: "settings.security", labelFallback: "Security", icon: Shield },
+  { id: "account", labelKey: "settings.account", labelFallback: "Account", icon: UserIcon },
+  { id: "help", labelKey: "settings.help", labelFallback: "Help", icon: LifeBuoy },
 ];
 
 function usePersistedState<T>(key: string, initial: T): [T, (v: T) => void] {
@@ -128,6 +133,8 @@ export function SettingsDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const [active, setActive] = useState<SettingsSection>(section ?? "general");
+  const { t } = useLanguage();
+  const sections = SECTION_DEFS.map((s) => ({ ...s, label: t(s.labelKey, s.labelFallback) }));
 
   useEffect(() => {
     if (open && section) setActive(section);
@@ -136,7 +143,7 @@ export function SettingsDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl h-[600px] p-0 gap-0 overflow-hidden flex flex-col">
-        <DialogTitle className="sr-only">Settings</DialogTitle>
+        <DialogTitle className="sr-only">{t("settings.title", "Settings")}</DialogTitle>
         <DialogDescription className="sr-only">
           Manage your preferences, integrations and account.
         </DialogDescription>
@@ -144,10 +151,10 @@ export function SettingsDialog({
           {/* Rail */}
           <aside className="w-56 shrink-0 border-r border-border bg-bg-side py-4">
             <div className="px-4 pb-3 text-[13px] font-semibold text-text">
-              Settings
+              {t("settings.title", "Settings")}
             </div>
             <nav className="space-y-0.5 px-2">
-              {SECTIONS.map((s) => {
+              {sections.map((s) => {
                 const Icon = s.icon;
                 const on = active === s.id;
                 return (
@@ -172,7 +179,7 @@ export function SettingsDialog({
           <div className="flex flex-1 min-w-0 min-h-0 flex-col overflow-hidden">
             <header className="flex h-12 items-center justify-between border-b border-border px-5">
               <h2 className="text-[14px] font-semibold text-text">
-                {SECTIONS.find((s) => s.id === active)?.label}
+                {sections.find((s) => s.id === active)?.label}
               </h2>
             </header>
             <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5">
@@ -233,20 +240,20 @@ function GeneralPane() {
 
   return (
     <div>
-      <Row label="Appearance" description="Light or dark theme.">
+      <Row label={t("settings.appearance", "Appearance")} description={t("settings.appearance.desc", "Light or dark theme.")}>
         <Select value={theme} onValueChange={() => toggle()}>
           <SelectTrigger className="h-8 w-[140px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="light">Light</SelectItem>
-            <SelectItem value="dark">Dark</SelectItem>
+            <SelectItem value="light">{t("settings.appearance.light", "Light")}</SelectItem>
+            <SelectItem value="dark">{t("settings.appearance.dark", "Dark")}</SelectItem>
           </SelectContent>
         </Select>
       </Row>
-      <Row label="Accent" description="Color used for primary actions.">
+      <Row label={t("settings.accent", "Accent")} description={t("settings.accent.desc", "Color used for primary actions.")}>
         <span className="rounded-full border border-border bg-bg-input px-2.5 py-0.5 text-[11.5px] text-text-mute">
-          Monochrome
+          {t("settings.accent.value", "Monochrome")}
         </span>
       </Row>
       <Row
@@ -276,6 +283,7 @@ function GeneralPane() {
 /* ----------------------------- Notifications ----------------------------- */
 
 function NotificationsPane() {
+  const { t } = useLanguage();
   // Server-backed prefs (drive real emails).
   const getPrefs = useServerFn(getNotificationPrefs);
   const updPrefs = useServerFn(updateNotificationPrefs);
@@ -295,9 +303,9 @@ function NotificationsPane() {
     },
     onError: (_e, _v, ctx) => {
       if (ctx?.prev) qc.setQueryData(["notification-prefs"], ctx.prev);
-      toast.error("Couldn't save notification preferences");
+      toast.error(t("settings.notif.error", "Couldn't save notification preferences"));
     },
-    onSuccess: () => toast.success("Notification preferences saved"),
+    onSuccess: () => toast.success(t("settings.notif.saved", "Notification preferences saved")),
   });
   const applicants = prefs?.notifyOnNewApplicant ?? true;
   const digest = prefs?.notifyDailyDigest ?? false;
@@ -306,8 +314,8 @@ function NotificationsPane() {
   return (
     <div>
       <Row
-        label="New applicants"
-        description="Email me as soon as someone applies to one of my job posts."
+        label={t("settings.notif.applicants", "New applicants")}
+        description={t("settings.notif.applicants.desc", "Email me as soon as someone applies to one of my job posts.")}
       >
         <Switch
           checked={applicants}
@@ -318,8 +326,8 @@ function NotificationsPane() {
         />
       </Row>
       <Row
-        label="Daily digest"
-        description="One morning recap of new applicants from the last 24 hours."
+        label={t("settings.notif.digest", "Daily digest")}
+        description={t("settings.notif.digest.desc", "One morning recap of new applicants from the last 24 hours.")}
       >
         <Switch
           checked={digest}
@@ -338,6 +346,7 @@ function NotificationsPane() {
 const REGIONS = ["LATAM", "US", "EU", "APAC"];
 
 function PersonalizationPane() {
+  const { t } = useLanguage();
   const qc = useQueryClient();
   const getProfileFn = useServerFn(getProfile);
   const updateFn = useServerFn(updatePersonalization);
@@ -376,7 +385,7 @@ function PersonalizationPane() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["profile"] });
     },
-    onError: (e) => toast.error((e as Error).message || "Couldn't save"),
+    onError: (e) => toast.error((e as Error).message || t("settings.pers.save_error", "Couldn't save")),
   });
 
   const commit = (patch: Partial<typeof draft>) => mut.mutate(patch);
@@ -392,7 +401,7 @@ function PersonalizationPane() {
   if (isLoading) {
     return (
       <div className="flex h-32 items-center justify-center text-text-mute">
-        <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading…
+        <Loader2 className="mr-2 h-4 w-4 animate-spin" /> {t("common.loading", "Loading…")}
       </div>
     );
   }
@@ -400,10 +409,9 @@ function PersonalizationPane() {
   return (
     <div className="space-y-1">
       <p className="mb-3 text-[12.5px] text-text-mute">
-        Tell Findable about you and your company. The AI uses this to draft
-        outreach, job posts, and replies that actually sound like you.
+        {t("settings.pers.intro", "Tell Findable about you and your company. The AI uses this to draft outreach, job posts, and replies that actually sound like you.")}
       </p>
-      <Row label="Your role" description="e.g. Head of Talent, Founder.">
+      <Row label={t("settings.pers.role", "Your role")} description={t("settings.pers.role.desc", "e.g. Head of Talent, Founder.")}>
         <Input
           value={draft.userRole}
           onChange={(e) => setDraft({ ...draft, userRole: e.target.value })}
@@ -412,7 +420,7 @@ function PersonalizationPane() {
           placeholder="Head of Talent"
         />
       </Row>
-      <Row label="Company name" description="The company you're hiring for.">
+      <Row label={t("settings.pers.company", "Company name")} description={t("settings.pers.company.desc", "The company you're hiring for.")}>
         <Input
           value={draft.companyName}
           onChange={(e) => setDraft({ ...draft, companyName: e.target.value })}
@@ -421,7 +429,7 @@ function PersonalizationPane() {
           placeholder="Acme Inc."
         />
       </Row>
-      <Row label="Company website" description="Public URL.">
+      <Row label={t("settings.pers.website", "Company website")} description={t("settings.pers.website.desc", "Public URL.")}>
         <Input
           value={draft.companyWebsite}
           onChange={(e) => setDraft({ ...draft, companyWebsite: e.target.value })}
@@ -431,9 +439,9 @@ function PersonalizationPane() {
         />
       </Row>
       <div className="border-b border-border py-3">
-        <div className="text-[13px] font-medium text-text">One-liner</div>
+        <div className="text-[13px] font-medium text-text">{t("settings.pers.oneliner", "One-liner")}</div>
         <div className="mt-0.5 text-[12px] text-text-mute">
-          A single sentence that captures what the company does.
+          {t("settings.pers.oneliner.desc", "A single sentence that captures what the company does.")}
         </div>
         <Input
           value={draft.companyOneLiner}
@@ -444,10 +452,9 @@ function PersonalizationPane() {
         />
       </div>
       <div className="border-b border-border py-3">
-        <div className="text-[13px] font-medium text-text">About the company</div>
+        <div className="text-[13px] font-medium text-text">{t("settings.pers.about", "About the company")}</div>
         <div className="mt-0.5 text-[12px] text-text-mute">
-          Mission, product, team, culture — anything the AI should weave into
-          outreach and job posts.
+          {t("settings.pers.about.desc", "Mission, product, team, culture — anything the AI should weave into outreach and job posts.")}
         </div>
         <Textarea
           value={draft.companyDescription}
@@ -458,9 +465,9 @@ function PersonalizationPane() {
         />
       </div>
       <div className="border-b border-border py-3">
-        <div className="text-[13px] font-medium text-text">Hiring context</div>
+        <div className="text-[13px] font-medium text-text">{t("settings.pers.hiring", "Hiring context")}</div>
         <div className="mt-0.5 text-[12px] text-text-mute">
-          What you typically hire for: roles, seniority, locations, must-haves.
+          {t("settings.pers.hiring.desc", "What you typically hire for: roles, seniority, locations, must-haves.")}
         </div>
         <Textarea
           value={draft.hiringContext}
@@ -471,9 +478,9 @@ function PersonalizationPane() {
         />
       </div>
       <div className="py-3">
-        <div className="text-[13px] font-medium text-text">Sourcing regions</div>
+        <div className="text-[13px] font-medium text-text">{t("settings.pers.regions", "Sourcing regions")}</div>
         <div className="mt-0.5 text-[12px] text-text-mute">
-          Default regions when sourcing candidates.
+          {t("settings.pers.regions.desc", "Default regions when sourcing candidates.")}
         </div>
         <div className="mt-2 flex flex-wrap gap-1.5">
           {REGIONS.map((r) => {
@@ -503,12 +510,12 @@ function PersonalizationPane() {
 /* ----------------------------- Connections ------------------------------ */
 
 function ConnectionsPane() {
+  const { t } = useLanguage();
   const [previewKind, setPreviewKind] = useState<"gmail" | "calendar" | null>(null);
   return (
     <div className="space-y-3">
       <p className="text-[12.5px] text-text-mute">
-        Connect your own Google account so Findable can send emails and read your
-        calendar on your behalf.
+        {t("settings.conn.intro", "Connect your own Google account so Findable can send emails and read your calendar on your behalf.")}
       </p>
       <GmailRow onPreview={() => setPreviewKind("gmail")} />
       <CalendarRow onPreview={() => setPreviewKind("calendar")} />
@@ -539,6 +546,7 @@ function ConnectionCard({
   busy?: boolean;
   onPreview?: () => void;
 }) {
+  const { t } = useLanguage();
   const connected = Boolean(connectedEmail);
   return (
     <div className="flex items-start gap-3 rounded-xl border border-border bg-bg-elev p-4">
@@ -551,7 +559,7 @@ function ConnectionCard({
           {connected && (
             <span className="flex items-center gap-1 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-600 dark:text-emerald-400">
               <CheckCircle2 className="h-3 w-3" />
-              Connected
+              {t("settings.conn.connected", "Connected")}
             </span>
           )}
         </div>
@@ -569,7 +577,7 @@ function ConnectionCard({
               title="See exactly which permissions Findable will request"
             >
               <Eye className="h-3.5 w-3.5" />
-              Preview permissions
+              {t("settings.conn.preview", "Preview permissions")}
             </button>
           )}
           {connected ? (
@@ -578,7 +586,7 @@ function ConnectionCard({
             disabled={busy}
             className="rounded-lg border border-border bg-bg px-3 py-1.5 text-[12.5px] text-text transition hover:bg-bg-hover disabled:opacity-60"
           >
-            Disconnect
+            {t("common.disconnect", "Disconnect")}
           </button>
         ) : (
           <button
@@ -586,7 +594,7 @@ function ConnectionCard({
             disabled={busy}
             className="rounded-lg bg-text px-3 py-1.5 text-[12.5px] font-medium text-text-invert transition hover:opacity-90 disabled:opacity-60"
           >
-            {busy ? "Opening Google…" : "Connect"}
+            {busy ? t("settings.conn.opening", "Opening Google…") : t("common.connect", "Connect")}
           </button>
         )}
         </div>
@@ -604,6 +612,7 @@ function friendlyOAuthError(err: unknown, provider: string): string {
 }
 
 function GmailRow({ onPreview }: { onPreview: () => void }) {
+  const { t } = useLanguage();
   const qc = useQueryClient();
   const getFn = useServerFn(getGmailConnection);
   const startFn = useServerFn(startGmailConnect);
@@ -634,8 +643,8 @@ function GmailRow({ onPreview }: { onPreview: () => void }) {
   return (
     <ConnectionCard
       icon={<Mail className="h-5 w-5" />}
-      title="Gmail"
-      description="Send outreach emails and read replies from your inbox."
+      title={t("settings.conn.gmail.title", "Gmail")}
+      description={t("settings.conn.gmail.desc", "Send outreach emails and read replies from your inbox.")}
       connectedEmail={data?.email ?? null}
       onConnect={() => startMut.mutate()}
       onDisconnect={() => disMut.mutate()}
@@ -646,6 +655,7 @@ function GmailRow({ onPreview }: { onPreview: () => void }) {
 }
 
 function CalendarRow({ onPreview }: { onPreview: () => void }) {
+  const { t } = useLanguage();
   const qc = useQueryClient();
   const getFn = useServerFn(getCalendarConnection);
   const startFn = useServerFn(startCalendarConnect);
@@ -676,8 +686,8 @@ function CalendarRow({ onPreview }: { onPreview: () => void }) {
   return (
     <ConnectionCard
       icon={<CalendarIcon className="h-5 w-5" />}
-      title="Google Calendar"
-      description="Show your availability and schedule interviews with candidates."
+      title={t("settings.conn.cal.title", "Google Calendar")}
+      description={t("settings.conn.cal.desc", "Show your availability and schedule interviews with candidates.")}
       connectedEmail={data?.email ?? null}
       onConnect={() => startMut.mutate()}
       onDisconnect={() => disMut.mutate()}
@@ -799,6 +809,7 @@ function PermissionsPreviewDialog({
 /* ------------------------------ Data controls ----------------------------- */
 
 function DataPane() {
+  const { t } = useLanguage();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const exportFn = useServerFn(exportCandidatesCsv);
   const exportMut = useMutation({
@@ -825,8 +836,8 @@ function DataPane() {
   return (
     <div>
       <Row
-        label="Export data"
-        description="Download a CSV of the candidates you've unlocked in this account."
+        label={t("settings.data.export", "Export data")}
+        description={t("settings.data.export.desc", "Download a CSV of the candidates you've unlocked in this account.")}
       >
         <button
           onClick={() => exportMut.mutate()}
@@ -834,37 +845,36 @@ function DataPane() {
           className="flex items-center gap-2 rounded-lg border border-border bg-bg px-3 py-1.5 text-[12.5px] text-text transition hover:bg-bg-hover disabled:opacity-60"
         >
           {exportMut.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-          {exportMut.isPending ? "Exporting…" : "Export CSV"}
+          {exportMut.isPending ? t("settings.data.exporting", "Exporting…") : t("settings.data.export.btn", "Export CSV")}
         </button>
       </Row>
       <Row
-        label="Delete workspace data"
-        description="Permanently remove all workspace data. This cannot be undone."
+        label={t("settings.data.delete", "Delete workspace data")}
+        description={t("settings.data.delete.desc", "Permanently remove all workspace data. This cannot be undone.")}
       >
         <button
           onClick={() => setConfirmOpen(true)}
           className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-1.5 text-[12.5px] font-medium text-destructive transition hover:bg-destructive/15"
         >
-          Delete data
+          {t("settings.data.delete.btn", "Delete data")}
         </button>
       </Row>
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete workspace data?</AlertDialogTitle>
+            <AlertDialogTitle>{t("settings.data.delete.dlg.title", "Delete workspace data?")}</AlertDialogTitle>
             <AlertDialogDescription>
-              Deletion requests are handled by our team. Please contact support at
-              support@findable.work to proceed.
+              {t("settings.data.delete.dlg.desc", "Deletion requests are handled by our team. Please contact support at support@findable.work to proceed.")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("common.cancel", "Cancel")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
                 window.location.href = "mailto:support@findable.work?subject=Delete%20workspace%20data";
               }}
             >
-              Contact support
+              {t("common.contact_support", "Contact support")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -876,6 +886,7 @@ function DataPane() {
 /* -------------------------------- Security -------------------------------- */
 
 function SecurityPane({ onClose }: { onClose: () => void }) {
+  const { t } = useLanguage();
   const [signOutOpen, setSignOutOpen] = useState(false);
   const [pwSending, setPwSending] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
@@ -912,8 +923,8 @@ function SecurityPane({ onClose }: { onClose: () => void }) {
   return (
     <div>
       <Row
-        label="Change password"
-        description="Send a password reset email to your account."
+        label={t("settings.sec.password", "Change password")}
+        description={t("settings.sec.password.desc", "Send a password reset email to your account.")}
       >
         <button
           onClick={changePassword}
@@ -921,39 +932,38 @@ function SecurityPane({ onClose }: { onClose: () => void }) {
           className="flex items-center gap-2 rounded-lg border border-border bg-bg px-3 py-1.5 text-[12.5px] text-text transition hover:bg-bg-hover disabled:opacity-60"
         >
           {pwSending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-          {pwSending ? "Sending…" : "Send email"}
+          {pwSending ? t("settings.sec.password.sending", "Sending…") : t("settings.sec.password.btn", "Send email")}
         </button>
       </Row>
       <Row
-        label="Active sessions"
-        description="This device is currently signed in. Use “Log out all devices” to end any other active sessions."
+        label={t("settings.sec.sessions", "Active sessions")}
+        description={t("settings.sec.sessions.desc", "This device is currently signed in. Use “Log out all devices” to end any other active sessions.")}
       >
-        <span className="text-[12px] text-text-mute">This device</span>
+        <span className="text-[12px] text-text-mute">{t("settings.sec.this_device", "This device")}</span>
       </Row>
       <Row
-        label="Log out all devices"
-        description="End every signed-in session, including this one."
+        label={t("settings.sec.logout_all", "Log out all devices")}
+        description={t("settings.sec.logout_all.desc", "End every signed-in session, including this one.")}
       >
         <button
           onClick={() => setSignOutOpen(true)}
           className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-1.5 text-[12.5px] font-medium text-destructive transition hover:bg-destructive/15"
         >
-          Log out all
+          {t("settings.sec.logout_all.btn", "Log out all")}
         </button>
       </Row>
       <AlertDialog open={signOutOpen} onOpenChange={setSignOutOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Sign out of every device?</AlertDialogTitle>
+            <AlertDialogTitle>{t("settings.sec.logout_all.dlg.title", "Sign out of every device?")}</AlertDialogTitle>
             <AlertDialogDescription>
-              You'll be signed out here and on every other device where you're
-              currently logged in. You can sign back in any time.
+              {t("settings.sec.logout_all.dlg.desc", "You'll be signed out here and on every other device where you're currently logged in. You can sign back in any time.")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={signingOut}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={signingOut}>{t("common.cancel", "Cancel")}</AlertDialogCancel>
             <AlertDialogAction onClick={signOutAll} disabled={signingOut}>
-              {signingOut ? "Signing out…" : "Sign out everywhere"}
+              {signingOut ? t("settings.sec.logout_all.dlg.confirming", "Signing out…") : t("settings.sec.logout_all.dlg.confirm", "Sign out everywhere")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -965,6 +975,7 @@ function SecurityPane({ onClose }: { onClose: () => void }) {
 /* -------------------------------- Account -------------------------------- */
 
 function AccountPane() {
+  const { t } = useLanguage();
   const [email, setEmail] = useState<string>("");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [nameDraft, setNameDraft] = useState<string>("");
@@ -1007,10 +1018,10 @@ function AccountPane() {
     if (!nameHydrated) return;
     const current = profile?.displayName ?? "";
     if (nameDraft === current) return;
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       updateNameMut.mutate(nameDraft);
     }, 600);
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nameDraft, nameHydrated]);
 
@@ -1035,12 +1046,12 @@ function AccountPane() {
         </div>
         <div className="min-w-0">
           <div className="truncate text-[14px] font-medium text-text">
-            {nameDraft || email || "Account"}
+            {nameDraft || email || t("settings.acct.account", "Account")}
           </div>
           <div className="truncate text-[12px] text-text-mute">{email}</div>
         </div>
       </div>
-      <Row label="Display name" description="Shown to your teammates.">
+      <Row label={t("settings.acct.display_name", "Display name")} description={t("settings.acct.display_name.desc", "Shown to your teammates.")}>
         <Input
           value={nameDraft}
           onChange={(e) => setNameDraft(e.target.value)}
@@ -1050,46 +1061,45 @@ function AccountPane() {
           }}
           disabled={profileLoading || updateNameMut.isPending}
           className="h-8 w-[220px]"
-          placeholder="Your name"
+          placeholder={t("settings.acct.display_name.ph", "Your name")}
         />
       </Row>
-      <Row label="Email" description="Used for sign-in and notifications.">
+      <Row label={t("settings.acct.email", "Email")} description={t("settings.acct.email.desc", "Used for sign-in and notifications.")}>
         <span className="text-[12.5px] text-text-mute">{email || "—"}</span>
       </Row>
-      <Row label="Role" description="Your access level in this workspace.">
-        <span className="text-[12.5px] text-text-mute">Owner</span>
+      <Row label={t("settings.acct.role", "Role")} description={t("settings.acct.role.desc", "Your access level in this workspace.")}>
+        <span className="text-[12.5px] text-text-mute">{t("settings.acct.role.owner", "Owner")}</span>
       </Row>
-      <Row label="Seats" description="Members in this workspace.">
+      <Row label={t("settings.acct.seats", "Seats")} description={t("settings.acct.seats.desc", "Members in this workspace.")}>
         <span className="text-[12.5px] text-text-mute">1 of 1</span>
       </Row>
       <Row
-        label="Delete account"
-        description="Permanently delete your account and all data."
+        label={t("settings.acct.delete", "Delete account")}
+        description={t("settings.acct.delete.desc", "Permanently delete your account and all data.")}
       >
         <button
           onClick={() => setConfirmOpen(true)}
           className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-1.5 text-[12.5px] font-medium text-destructive transition hover:bg-destructive/15"
         >
-          Delete account
+          {t("settings.acct.delete", "Delete account")}
         </button>
       </Row>
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete your account?</AlertDialogTitle>
+            <AlertDialogTitle>{t("settings.acct.delete.dlg.title", "Delete your account?")}</AlertDialogTitle>
             <AlertDialogDescription>
-              This permanently deletes your account, all your candidates,
-              conversations, jobs, and outreach. This cannot be undone.
+              {t("settings.acct.delete.dlg.desc", "This permanently deletes your account, all your candidates, conversations, jobs, and outreach. This cannot be undone.")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={deleting}>{t("common.cancel", "Cancel")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
               disabled={deleting}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {deleting ? "Deleting…" : "Delete forever"}
+              {deleting ? t("settings.acct.delete.dlg.confirming", "Deleting…") : t("settings.acct.delete.dlg.confirm", "Delete forever")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1111,6 +1121,7 @@ const HELP_ARTICLES = [
 ];
 
 function HelpPane() {
+  const { t } = useLanguage();
   const [q, setQ] = useState("");
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -1127,7 +1138,7 @@ function HelpPane() {
         <Input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search help articles"
+          placeholder={t("settings.help.search.ph", "Search help articles")}
           className="h-9 pl-8"
         />
         {q && (
@@ -1142,7 +1153,7 @@ function HelpPane() {
       <div className="mt-4 space-y-1.5">
         {filtered.length === 0 ? (
           <p className="py-4 text-center text-[12.5px] text-text-mute">
-            No articles found.
+            {t("settings.help.empty", "No articles found.")}
           </p>
         ) : (
           filtered.map((a) => (
@@ -1158,13 +1169,13 @@ function HelpPane() {
       </div>
       <div className="mt-5 flex items-center justify-between rounded-lg border border-border bg-bg-side p-3">
         <div className="text-[12.5px] text-text-mute">
-          Need a hand? Our team usually replies within a few hours.
+          {t("settings.help.support", "Need a hand? Our team usually replies within a few hours.")}
         </div>
         <a
           href="mailto:support@findable.work"
           className="rounded-lg bg-text px-3 py-1.5 text-[12.5px] font-medium text-text-invert transition hover:opacity-90"
         >
-          Contact support
+          {t("common.contact_support", "Contact support")}
         </a>
       </div>
     </div>
