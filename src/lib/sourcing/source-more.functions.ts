@@ -302,5 +302,7 @@ export const sourceMore = createServerFn({ method: "POST" })
       skipped,
       remaining: Math.max(0, remaining.length - next.length),
       exhausted: remaining.length - next.length === 0,
+      credits_spent: creditsSpent,
+      credits_exhausted: creditsExhausted,
     };
   });
