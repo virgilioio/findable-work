@@ -15,7 +15,7 @@ import { searchApolloWithFallback, enrichApolloProfiles } from "./apollo.server"
 import { searchPdl, PdlQuotaError } from "./pdl.server";
 import { getPrompt } from "@/lib/prompts/registry.server";
 import { spendCreditsAdmin } from "@/lib/billing/credits.functions";
-import { SOURCING_RUN_COST } from "@/lib/billing/bundles";
+import { CANDIDATE_ADD_COST } from "@/lib/billing/bundles";
 
 export type AgentTask = {
   id: string;
@@ -304,26 +304,25 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
   const tSearch = await insertTask(userId, conversationId, "search", "Searching candidate pool", messageId);
   onTask(tSearch);
 
-  // Charge credits BEFORE hitting paid external APIs. Same cost / type as
-  // the standalone sourcing UI (`runSourcingSearch`), so balance is consistent
-  // whether the user runs a search from chat or the sourcing panel.
-  const spend = await spendCreditsAdmin({
-    userId,
-    amount: SOURCING_RUN_COST,
-    type: "sourcing_run",
-    reason: "Sourcing run (agent)",
-    metadata: { project_id: project.id, conversation_id: conversationId },
-  });
-  if (!spend.ok) {
+  // Billing moved to per-candidate. Pre-check balance so we don't burn external
+  // API quota when the user can't collect anything; actual debits happen per
+  // successful insert below.
+  const { data: balRow } = await supabaseAdmin
+    .from("profiles")
+    .select("credits_remaining")
+    .eq("id", userId)
+    .single();
+  const startingBalance = balRow?.credits_remaining ?? 0;
+  if (startingBalance < CANDIDATE_ADD_COST) {
     onTask(
       await finishTask(
         tSearch,
         "failed",
-        `Not enough credits — ${SOURCING_RUN_COST} required, ${spend.balance} available`,
+        `Not enough credits — at least ${CANDIDATE_ADD_COST} required, ${startingBalance} available`,
         {
           insufficient_credits: true,
-          required: SOURCING_RUN_COST,
-          balance: spend.balance,
+          required: CANDIDATE_ADD_COST,
+          balance: startingBalance,
         },
       ),
     );
@@ -340,8 +339,8 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
       pool_limited: false,
       broadened: false,
       insufficient_credits: true,
-      credits_required: SOURCING_RUN_COST,
-      credits_balance: spend.balance,
+      credits_required: CANDIDATE_ADD_COST,
+      credits_balance: startingBalance,
     };
   }
 
