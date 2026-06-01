@@ -328,19 +328,6 @@ export const collectCandidates = createServerFn({ method: "POST" })
     let creditsExhausted = false;
     let creditsSpent = 0;
     for (const e of enriched) {
-      // Per-candidate billing: stop fresh inserts once balance is depleted.
-      const spend = await spendCreditsAdmin({
-        userId,
-        amount: CANDIDATE_ADD_COST,
-        type: "candidate_add",
-        reason: "Candidate sourced",
-        metadata: { project_id: data.project_id, source: "apollo", apollo_id: e.id },
-      });
-      if (!spend.ok) {
-        creditsExhausted = true;
-        break;
-      }
-      creditsSpent += CANDIDATE_ADD_COST;
       const slug = linkedinSlug(e.linkedin_url);
       const { data: ins, error: insErr } = await supabase
         .from("candidates")
@@ -379,16 +366,20 @@ export const collectCandidates = createServerFn({ method: "POST" })
         .single();
       if (insErr) {
         console.error("candidate insert failed:", insErr.message);
-        // Refund the credit since the insert didn't land.
-        await supabaseAdmin.rpc("spend_credits" as never, {
-          _user_id: userId,
-          _amount: -CANDIDATE_ADD_COST,
-          _type: "candidate_add_refund",
-          _reason: "Refund: candidate insert failed",
-          _metadata: { apollo_id: e.id } as never,
-        } as never);
-        creditsSpent -= CANDIDATE_ADD_COST;
         continue;
+      }
+      // Charge AFTER successful insert (so failures don't bill).
+      const spend = await spendCreditsAdmin({
+        userId,
+        amount: CANDIDATE_ADD_COST,
+        type: "candidate_add",
+        reason: "Candidate sourced",
+        metadata: { project_id: data.project_id, source: "apollo", apollo_id: e.id, candidate_id: ins.id },
+      });
+      if (spend.ok) {
+        creditsSpent += CANDIDATE_ADD_COST;
+      } else {
+        creditsExhausted = true;
       }
       insertedCandidates.push(ins);
       // Mark preview as collected
@@ -398,6 +389,7 @@ export const collectCandidates = createServerFn({ method: "POST" })
         .eq("project_id", data.project_id)
         .eq("source", "apollo")
         .eq("external_id", e.id);
+      if (creditsExhausted) break;
     }
 
     const enrichedInsertedCount = insertedCandidates.length - enrichedInsertedCount0;
