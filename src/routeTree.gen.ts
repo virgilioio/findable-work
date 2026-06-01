@@ -25,6 +25,7 @@ import { Route as ApiPublicAuthEmailHookRouteImport } from './routes/api/public/
 import { Route as ApiPublicApolloPhoneRouteImport } from './routes/api/public/apollo/phone'
 import { Route as AuthenticatedOauthGoogleReturnRouteImport } from './routes/_authenticated/oauth.google.return'
 import { Route as AuthenticatedAppCIdRouteImport } from './routes/_authenticated/app.c.$id'
+import { Route as ApiPublicJobsSlugChatRouteImport } from './routes/api/public/jobs/$slug/chat'
 import { Route as ApiPublicJobsSlugApplyRouteImport } from './routes/api/public/jobs/$slug/apply'
 
 const TermsRoute = TermsRouteImport.update({
@@ -108,6 +109,11 @@ const AuthenticatedAppCIdRoute = AuthenticatedAppCIdRouteImport.update({
   path: '/c/$id',
   getParentRoute: () => AuthenticatedAppRoute,
 } as any)
+const ApiPublicJobsSlugChatRoute = ApiPublicJobsSlugChatRouteImport.update({
+  id: '/chat',
+  path: '/chat',
+  getParentRoute: () => ApiPublicJobsSlugRoute,
+} as any)
 const ApiPublicJobsSlugApplyRoute = ApiPublicJobsSlugApplyRouteImport.update({
   id: '/apply',
   path: '/apply',
@@ -131,6 +137,7 @@ export interface FileRoutesByFullPath {
   '/api/public/auth/email-hook': typeof ApiPublicAuthEmailHookRoute
   '/api/public/jobs/$slug': typeof ApiPublicJobsSlugRouteWithChildren
   '/api/public/jobs/$slug/apply': typeof ApiPublicJobsSlugApplyRoute
+  '/api/public/jobs/$slug/chat': typeof ApiPublicJobsSlugChatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -148,6 +155,7 @@ export interface FileRoutesByTo {
   '/api/public/auth/email-hook': typeof ApiPublicAuthEmailHookRoute
   '/api/public/jobs/$slug': typeof ApiPublicJobsSlugRouteWithChildren
   '/api/public/jobs/$slug/apply': typeof ApiPublicJobsSlugApplyRoute
+  '/api/public/jobs/$slug/chat': typeof ApiPublicJobsSlugChatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -168,6 +176,7 @@ export interface FileRoutesById {
   '/api/public/auth/email-hook': typeof ApiPublicAuthEmailHookRoute
   '/api/public/jobs/$slug': typeof ApiPublicJobsSlugRouteWithChildren
   '/api/public/jobs/$slug/apply': typeof ApiPublicJobsSlugApplyRoute
+  '/api/public/jobs/$slug/chat': typeof ApiPublicJobsSlugChatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -188,6 +197,7 @@ export interface FileRouteTypes {
     | '/api/public/auth/email-hook'
     | '/api/public/jobs/$slug'
     | '/api/public/jobs/$slug/apply'
+    | '/api/public/jobs/$slug/chat'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -205,6 +215,7 @@ export interface FileRouteTypes {
     | '/api/public/auth/email-hook'
     | '/api/public/jobs/$slug'
     | '/api/public/jobs/$slug/apply'
+    | '/api/public/jobs/$slug/chat'
   id:
     | '__root__'
     | '/'
@@ -224,6 +235,7 @@ export interface FileRouteTypes {
     | '/api/public/auth/email-hook'
     | '/api/public/jobs/$slug'
     | '/api/public/jobs/$slug/apply'
+    | '/api/public/jobs/$slug/chat'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -354,6 +366,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppCIdRouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
+    '/api/public/jobs/$slug/chat': {
+      id: '/api/public/jobs/$slug/chat'
+      path: '/chat'
+      fullPath: '/api/public/jobs/$slug/chat'
+      preLoaderRoute: typeof ApiPublicJobsSlugChatRouteImport
+      parentRoute: typeof ApiPublicJobsSlugRoute
+    }
     '/api/public/jobs/$slug/apply': {
       id: '/api/public/jobs/$slug/apply'
       path: '/apply'
@@ -395,10 +414,12 @@ const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
 
 interface ApiPublicJobsSlugRouteChildren {
   ApiPublicJobsSlugApplyRoute: typeof ApiPublicJobsSlugApplyRoute
+  ApiPublicJobsSlugChatRoute: typeof ApiPublicJobsSlugChatRoute
 }
 
 const ApiPublicJobsSlugRouteChildren: ApiPublicJobsSlugRouteChildren = {
   ApiPublicJobsSlugApplyRoute: ApiPublicJobsSlugApplyRoute,
+  ApiPublicJobsSlugChatRoute: ApiPublicJobsSlugChatRoute,
 }
 
 const ApiPublicJobsSlugRouteWithChildren =
