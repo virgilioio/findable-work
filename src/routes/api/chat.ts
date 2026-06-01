@@ -4,6 +4,7 @@ import { z } from "zod";
 import { runSourcingAgent, type TaskEvent } from "@/lib/sourcing/agent.server";
 import { generateScreeningQuestions } from "@/lib/jobs/screening.server";
 import { getPrompt } from "@/lib/prompts/registry.server";
+import { buildPersonalizationContext } from "@/lib/profile.functions";
 import {
   OPENAI_CHAT_COMPLETIONS_URL,
   OPENAI_RATE_LIMIT_MESSAGE,
@@ -481,8 +482,38 @@ export const Route = createFileRoute("/api/chat")({
           .eq("conversation_id", conversationId)
           .order("created_at", { ascending: true });
 
+        // Pull personalization (company + role + hiring context) so the AI
+        // can ground outreach drafts, job posts, and answers in the user's
+        // actual business — instead of using placeholder copy.
+        let personalizationBlock = "";
+        try {
+          const { data: prof } = await supabaseAdmin
+            .from("profiles")
+            .select(
+              "company_name, company_website, company_one_liner, company_description, hiring_context, user_role, sourcing_regions",
+            )
+            .eq("id", userId)
+            .maybeSingle();
+          if (prof) {
+            personalizationBlock = buildPersonalizationContext({
+              companyName: (prof as any).company_name ?? null,
+              companyWebsite: (prof as any).company_website ?? null,
+              companyOneLiner: (prof as any).company_one_liner ?? null,
+              companyDescription: (prof as any).company_description ?? null,
+              hiringContext: (prof as any).hiring_context ?? null,
+              userRole: (prof as any).user_role ?? null,
+              sourcingRegions: ((prof as any).sourcing_regions as string[]) ?? null,
+            });
+          }
+        } catch {
+          /* personalization is optional — never block chat on it */
+        }
+
         const baseMessages: ChatMessage[] = [
           { role: "system", content: await getPrompt("chat.main") },
+          ...(personalizationBlock
+            ? [{ role: "system" as const, content: personalizationBlock }]
+            : []),
           ...(history ?? [])
             .filter((m) => m.role === "user" || m.role === "assistant")
             .map((m) => ({ role: m.role as "user" | "assistant", content: m.content || "" })),

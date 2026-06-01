@@ -229,7 +229,7 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 
 function GeneralPane() {
   const { theme, toggle } = useTheme();
-  const { lang, setLang } = useLanguage();
+  const { lang, setLang, t } = useLanguage();
 
   return (
     <div>
@@ -249,7 +249,13 @@ function GeneralPane() {
           Monochrome
         </span>
       </Row>
-      <Row label="Language" description="Interface language.">
+      <Row
+        label={t("settings.language", "Language")}
+        description={t(
+          "settings.language.desc",
+          "Interface language. AI-generated content auto-adapts to whatever language you write in.",
+        )}
+      >
         <Select value={lang} onValueChange={(v) => setLang(v as never)}>
           <SelectTrigger className="h-8 w-[160px]">
             <SelectValue />

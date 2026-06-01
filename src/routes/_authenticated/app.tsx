@@ -18,6 +18,7 @@ import {
 } from "@/lib/conversations.functions";
 import { adminCheck } from "@/lib/prompts/prompts.functions";
 import { getProfile } from "@/lib/profile.functions";
+import { useLanguage } from "@/lib/i18n";
 import {
   Logo,
   Wordmark,
@@ -81,6 +82,7 @@ function AppLayout() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const search = Route.useSearch();
+  const { t } = useLanguage();
   const list = useServerFn(listConversations);
   const create = useServerFn(createConversation);
   const del = useServerFn(deleteConversation);
@@ -353,7 +355,7 @@ function AppLayout() {
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={onSignOut}>
                 <LogOutIcon className="h-3.5 w-3.5" />
-                <span>Sign out</span>
+                <span>{t("common.signout", "Sign out")}</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

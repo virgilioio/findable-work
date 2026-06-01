@@ -4,6 +4,7 @@ import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { supabase } from "@/integrations/supabase/client";
 import { Wordmark } from "@/components/findable-icons";
 import googleLogo from "@/assets/google-logo.png";
+import { useLanguage } from "@/lib/i18n";
 
 export type AuthReason = "nudge" | "sourcing" | "cap" | "manual";
 
@@ -44,6 +45,7 @@ export function AuthDialog({
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const { t } = useLanguage();
 
   const subtitle = REASON_SUBTITLE[reason][mode];
 
@@ -119,12 +121,18 @@ export function AuthDialog({
         }}
       >
         <VisuallyHidden>
-          <DialogTitle>{mode === "signin" ? "Sign in to findable" : "Start hiring with findable"}</DialogTitle>
+          <DialogTitle>
+            {mode === "signin"
+              ? t("auth.signin.title", "Sign in to findable")
+              : t("auth.signup.title", "Start hiring with findable")}
+          </DialogTitle>
           <DialogDescription>{subtitle}</DialogDescription>
         </VisuallyHidden>
 
         <h1 className="text-[22px] font-semibold tracking-[-0.015em] text-[var(--text)]">
-          {mode === "signin" ? "Sign in to findable" : "Start hiring with findable"}
+          {mode === "signin"
+            ? t("auth.signin.title", "Sign in to findable")
+            : t("auth.signup.title", "Start hiring with findable")}
         </h1>
         <p className="mt-1.5 text-[13.5px] text-[var(--text-mute)]">{subtitle}</p>
 
@@ -136,19 +144,19 @@ export function AuthDialog({
             className="flex h-10 items-center justify-center gap-2.5 rounded-[10px] border border-[var(--border-strong)] bg-[var(--bg-elev)] text-[13.5px] font-medium text-[var(--text)] transition hover:bg-[var(--bg-hover)] disabled:opacity-60"
           >
             <img src={googleLogo} alt="" aria-hidden="true" className="h-4 w-4" />
-            Continue with Google
+            {t("auth.continue_google", "Continue with Google")}
           </button>
 
           <div className="my-1 flex items-center gap-2.5">
             <span className="h-px flex-1 bg-[var(--border)]" />
             <span className="text-[11.5px] uppercase tracking-[0.08em] text-[var(--text-faint)]">
-              or
+              {t("auth.or", "or")}
             </span>
             <span className="h-px flex-1 bg-[var(--border)]" />
           </div>
 
           <label className="flex flex-col gap-1.5 text-[12.5px] font-medium text-[var(--text-mute)]">
-            Email
+            {t("auth.email", "Email")}
             <input
               type="email"
               autoFocus
@@ -160,7 +168,7 @@ export function AuthDialog({
             />
           </label>
           <label className="flex flex-col gap-1.5 text-[12.5px] font-medium text-[var(--text-mute)]">
-            Password
+            {t("auth.password", "Password")}
             <input
               type="password"
               value={password}
@@ -178,7 +186,7 @@ export function AuthDialog({
                 href="#"
                 className="text-[12.5px] text-[var(--text-mute)] hover:text-[var(--text)]"
               >
-                Forgot password?
+                {t("auth.forgot", "Forgot password?")}
               </a>
             </div>
           )}
@@ -194,12 +202,18 @@ export function AuthDialog({
             disabled={loading}
             className="mt-1.5 h-10 rounded-[10px] bg-[var(--text)] text-[14px] font-medium text-[var(--text-invert)] disabled:opacity-70"
           >
-            {loading ? "Signing in…" : mode === "signin" ? "Sign in" : "Create account"}
+            {loading
+              ? t("auth.signing_in", "Signing in…")
+              : mode === "signin"
+                ? t("auth.signin", "Sign in")
+                : t("auth.signup", "Create account")}
           </button>
         </form>
 
         <div className="mt-[22px] border-t border-[var(--border)] pt-[18px] text-center text-[13px] text-[var(--text-mute)]">
-          {mode === "signin" ? "New to findable?" : "Already have an account?"}{" "}
+          {mode === "signin"
+            ? t("auth.new_here", "New to findable?")
+            : t("auth.already", "Already have an account?")}{" "}
           <button
             type="button"
             onClick={() => {
@@ -208,7 +222,9 @@ export function AuthDialog({
             }}
             className="font-medium text-[var(--text)] hover:underline"
           >
-            {mode === "signin" ? "Create an account" : "Sign in"}
+            {mode === "signin"
+              ? t("auth.create_account", "Create an account")
+              : t("auth.signin", "Sign in")}
           </button>
         </div>
       </DialogContent>
