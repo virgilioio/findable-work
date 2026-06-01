@@ -149,11 +149,7 @@ function AdminUsagePage() {
                 : undefined
             }
           />
-          <Card
-            label="Sourcing credits"
-            value={s?.sourcingCreditsThisMonth}
-            hint="this month"
-          />
+          <Card label="Sourcing credits" value={s?.sourcingCreditsThisMonth} hint="this month" />
         </section>
 
         {/* Chart */}
@@ -177,11 +173,7 @@ function AdminUsagePage() {
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={tsQ.data ?? []}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                <XAxis
-                  dataKey="day"
-                  tickFormatter={(v: string) => v.slice(5)}
-                  fontSize={10}
-                />
+                <XAxis dataKey="day" tickFormatter={(v: string) => v.slice(5)} fontSize={10} />
                 <YAxis fontSize={10} allowDecimals={false} />
                 <Tooltip
                   contentStyle={{
@@ -317,15 +309,7 @@ function AdminUsagePage() {
   );
 }
 
-function Card({
-  label,
-  value,
-  hint,
-}: {
-  label: string;
-  value: number | undefined;
-  hint?: string;
-}) {
+function Card({ label, value, hint }: { label: string; value: number | undefined; hint?: string }) {
   return (
     <div className="rounded-lg border border-border p-3">
       <p className="text-[11px] text-text-mute">{label}</p>
@@ -335,13 +319,7 @@ function Card({
   );
 }
 
-function Th({
-  children,
-  align,
-}: {
-  children?: React.ReactNode;
-  align?: "right";
-}) {
+function Th({ children, align }: { children?: React.ReactNode; align?: "right" }) {
   return (
     <th
       className={`px-3 py-2 font-normal text-[11px] uppercase tracking-wide ${

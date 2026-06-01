@@ -150,7 +150,9 @@ export const getUsageSummary = createServerFn({ method: "GET" })
       .gte("created_at", from.toISOString())
       .lte("created_at", to.toISOString())
       .limit(5000);
-    (appActiveRows ?? []).forEach((r: any) => r.recruiter_user_id && activeIds.add(r.recruiter_user_id));
+    (appActiveRows ?? []).forEach(
+      (r: any) => r.recruiter_user_id && activeIds.add(r.recruiter_user_id),
+    );
 
     // Sourcing credits used in current month (sum)
     const period = new Date().toISOString().slice(0, 7);
@@ -192,9 +194,7 @@ const metricSchema = z.enum([
 
 export const getUsageTimeseries = createServerFn({ method: "GET" })
   .middleware([requireAdmin])
-  .inputValidator((d) =>
-    rangeSchema.extend({ metric: metricSchema }).parse(d),
-  )
+  .inputValidator((d) => rangeSchema.extend({ metric: metricSchema }).parse(d))
   .handler(async ({ data }) => {
     const { from, to } = range(data);
     if (data.metric === "signups") {
@@ -407,9 +407,7 @@ export const getUserUsageTable = createServerFn({ method: "GET" })
 
     if (data.search) {
       const q = data.search.toLowerCase();
-      result = result.filter(
-        (r) => (r.email ?? "").toLowerCase().includes(q) || r.id.includes(q),
-      );
+      result = result.filter((r) => (r.email ?? "").toLowerCase().includes(q) || r.id.includes(q));
     }
     if (data.plan && data.plan !== "all") {
       result = result.filter((r) => r.plan === data.plan);
