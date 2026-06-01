@@ -119,12 +119,12 @@ export function AuthDialog({
         }}
       >
         <VisuallyHidden>
-          <DialogTitle>{mode === "signin" ? "Welcome back" : "Create your account"}</DialogTitle>
+          <DialogTitle>{mode === "signin" ? "Sign in to findable" : "Start hiring with findable"}</DialogTitle>
           <DialogDescription>{subtitle}</DialogDescription>
         </VisuallyHidden>
 
         <h1 className="text-[22px] font-semibold tracking-[-0.015em] text-[var(--text)]">
-          {mode === "signin" ? "Welcome back" : "Create your account"}
+          {mode === "signin" ? "Sign in to findable" : "Start hiring with findable"}
         </h1>
         <p className="mt-1.5 text-[13.5px] text-[var(--text-mute)]">{subtitle}</p>
 

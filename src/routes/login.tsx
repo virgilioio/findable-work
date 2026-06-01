@@ -130,7 +130,7 @@ function LoginPage() {
       {/* Card */}
       <div className="w-full max-w-[380px] rounded-[14px] border border-[var(--border)] bg-[var(--bg-elev)] px-8 py-9">
         <h1 className="text-[22px] font-semibold tracking-[-0.015em] text-[var(--text)]">
-          {magicSent ? "Check your inbox" : mode === "signin" ? "Welcome back" : "Create your account"}
+          {magicSent ? "Check your inbox" : mode === "signin" ? "Sign in to findable" : "Start hiring with findable"}
         </h1>
         <p className="mt-1.5 text-[13.5px] text-[var(--text-mute)]">
           {magicSent
