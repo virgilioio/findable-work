@@ -1082,9 +1082,13 @@ function JobPanel({
                     Share to
                   </div>
                   {(() => {
-                    const text = `We're hiring — ${form.title ?? ""}`;
+                    const title = form.title ?? "";
+                    const subject = `We're hiring for our ${title} role`;
+                    const text = `We're hiring for our ${title} role.\n\nSee if this role is right for you on Findable.`;
                     const u = encodeURIComponent(publicUrl);
                     const t = encodeURIComponent(text);
+                    const tu = encodeURIComponent(`${text}\n\n${publicUrl}`);
+                    const subj = encodeURIComponent(subject);
                     function open(url: string) {
                       window.open(url, "_blank", "noopener");
                       setShareOpen(false);
@@ -1095,7 +1099,7 @@ function JobPanel({
                     async function nativeShare() {
                       try {
                         await (navigator as any).share({
-                          title: form.title ?? "Job opening",
+                          title: subject,
                           text,
                           url: publicUrl,
                         });
@@ -1117,14 +1121,30 @@ function JobPanel({
                         <ShareRow
                           icon={<WhatsAppIcon size={14} />}
                           label="WhatsApp"
-                          onClick={() => open(`https://wa.me/?text=${t}%20${u}`)}
+                          onClick={() => open(`https://wa.me/?text=${tu}`)}
+                        />
+                        <ShareRow
+                          icon={<XLogoIcon size={14} />}
+                          label="X"
+                          onClick={() =>
+                            open(`https://twitter.com/intent/tweet?text=${tu}`)
+                          }
+                        />
+                        <ShareRow
+                          icon={<RedditIcon size={14} />}
+                          label="Reddit"
+                          onClick={() =>
+                            open(
+                              `https://www.reddit.com/submit?url=${u}&title=${subj}`,
+                            )
+                          }
                         />
                         <ShareRow
                           icon={<MailIcon size={14} />}
                           label="Email"
                           onClick={() =>
                             open(
-                              `mailto:?subject=${t}&body=${encodeURIComponent(text + "\n\n" + publicUrl)}`,
+                              `mailto:?subject=${subj}&body=${encodeURIComponent(text + "\n\n" + publicUrl)}`,
                             )
                           }
                         />
@@ -1564,6 +1584,27 @@ function WhatsAppIcon({ size = 14 }: { size?: number }) {
     <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M10 3a7 7 0 0 0-6 10.6L3 17l3.5-1a7 7 0 1 0 3.5-13Z" />
       <path d="M7.5 8.5c.2 1.5 1.5 3 3 3.5l1-1c.5.2 1.4.5 1.8.6.1.5-.1 1.2-.4 1.5-1 .9-2.7.3-3.9-.6-1.2-.9-2.1-2.4-2.2-3.5 0-.4.3-1 .8-1.3.2 0 1 .1 1.2.2.1.4.3 1.3.4 1.7l-1 0-.7-1.1Z" />
+    </svg>
+  );
+}
+
+function XLogoIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 4 L16 16 M16 4 L4 16" />
+    </svg>
+  );
+}
+
+function RedditIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="10" cy="11" r="6" />
+      <circle cx="16.5" cy="5" r="1.25" />
+      <path d="M10 5 L13.5 5" />
+      <circle cx="7.75" cy="11" r="0.6" fill="currentColor" />
+      <circle cx="12.25" cy="11" r="0.6" fill="currentColor" />
+      <path d="M7.5 13.2c.7.6 1.6.9 2.5.9s1.8-.3 2.5-.9" />
     </svg>
   );
 }
