@@ -14,6 +14,8 @@ import {
 import { searchApolloWithFallback, enrichApolloProfiles } from "./apollo.server";
 import { searchPdl, PdlQuotaError } from "./pdl.server";
 import { getPrompt } from "@/lib/prompts/registry.server";
+import { spendCreditsAdmin } from "@/lib/billing/credits.functions";
+import { SOURCING_RUN_COST } from "@/lib/billing/bundles";
 
 export type AgentTask = {
   id: string;
