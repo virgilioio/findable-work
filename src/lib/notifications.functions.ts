@@ -11,7 +11,7 @@ export const getNotificationPrefs = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<NotificationPrefs> => {
     const { supabase, userId } = context;
-    const { data, error } = await supabase
+    const { data, error } = await (supabase as any)
       .from("profiles")
       .select("notify_on_new_applicant, notify_daily_digest")
       .eq("id", userId)
@@ -35,7 +35,7 @@ export const updateNotificationPrefs = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }): Promise<NotificationPrefs> => {
     const { supabase, userId } = context;
-    const { error } = await supabase
+    const { error } = await (supabase as any)
       .from("profiles")
       .update({
         notify_on_new_applicant: data.notifyOnNewApplicant,
