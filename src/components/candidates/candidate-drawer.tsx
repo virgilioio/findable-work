@@ -376,14 +376,14 @@ function Overview({ c }: { c: Candidate }) {
                 onClick={() => revealMut.mutate()}
                 disabled={disabled}
                 className="inline-flex items-center gap-1.5 rounded-md border border-border-strong bg-bg-elev px-2 py-0.5 text-[12px] text-text hover:bg-bg-hover disabled:opacity-50"
-                title="Apollo delivers phone numbers asynchronously — usually within a few minutes. 1 credit charged only if a number is found."
+                title="Apollo delivers phone numbers asynchronously — usually within a few minutes. 5 credits charged only if a number is found."
               >
                 <Sparkle size={11} />
                 {pending
                   ? "Reveal pending…"
                   : revealMut.isPending
                     ? "Requesting…"
-                    : "Reveal phone (1 credit if found)"}
+                    : "Reveal phone (5 credits if found)"}
               </button>
             </KV>
           );
