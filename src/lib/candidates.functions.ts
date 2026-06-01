@@ -2,6 +2,8 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { requestApolloPhoneReveal } from "@/lib/sourcing/apollo.server";
+import { spendCreditsAdmin } from "@/lib/billing/credits.functions";
+import { PHONE_REVEAL_COST } from "@/lib/billing/bundles";
 
 const STAGES = ["Applied", "Sourced", "Contacted", "Screening", "Interview", "Offer"] as const;
 
@@ -158,10 +160,10 @@ export const revealCandidatePhone = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input) => z.object({ id: z.string().uuid() }).parse(input))
   .handler(async ({ context, data }) => {
-    const { supabase } = context;
+    const { supabase, userId } = context;
     const { data: cand, error: loadErr } = await supabase
       .from("candidates")
-      .select("id, apollo_id, phone, activity")
+      .select("id, apollo_id, phone, activity, source")
       .eq("id", data.id)
       .single();
     if (loadErr) throw new Error(loadErr.message);
@@ -176,6 +178,25 @@ export const revealCandidatePhone = createServerFn({ method: "POST" })
       .some((a) => Date.now() - new Date(a.at).getTime() < 10 * 60 * 1000);
     if (recentPending) {
       return { status: "pending" as const, alreadyPending: true };
+    }
+
+    // Charge 1 credit per phone reveal. Skip for direct-Applicant rows (no
+    // outbound sourcing involved); Apollo-sourced candidates always pay.
+    if (cand.source !== "Applicant") {
+      const spend = await spendCreditsAdmin({
+        userId,
+        amount: PHONE_REVEAL_COST,
+        type: "phone_reveal",
+        reason: "Phone reveal",
+        metadata: { candidate_id: cand.id, apollo_id: cand.apollo_id },
+      });
+      if (!spend.ok) {
+        return {
+          status: "insufficient_credits" as const,
+          balance: spend.balance,
+          required: PHONE_REVEAL_COST,
+        };
+      }
     }
 
     await requestApolloPhoneReveal(cand.apollo_id);
