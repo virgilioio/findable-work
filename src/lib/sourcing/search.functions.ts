@@ -10,6 +10,8 @@ import {
   linkedinSlug,
   type SearchCriteria,
 } from "./budget";
+import { spendCreditsAdmin } from "@/lib/billing/credits.functions";
+import { SOURCING_RUN_COST } from "@/lib/billing/bundles";
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -64,6 +66,24 @@ export const runSourcingSearch = createServerFn({ method: "POST" })
           previews: [] as any[],
         };
       }
+    }
+
+    // Charge 10 credits per fresh sourcing run (skipped above on cache hit).
+    const spend = await spendCreditsAdmin({
+      userId,
+      amount: SOURCING_RUN_COST,
+      type: "sourcing_run",
+      reason: "Sourcing run",
+      metadata: { project_id: data.project_id },
+    });
+    if (!spend.ok) {
+      return {
+        status: "insufficient_credits" as const,
+        balance: spend.balance,
+        required: SOURCING_RUN_COST,
+        from_cache: false,
+        previews: [] as any[],
+      };
     }
 
     // Stage 4: parallel Apollo + PDL
