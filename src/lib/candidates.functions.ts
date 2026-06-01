@@ -1,8 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { revealApolloPhone } from "@/lib/sourcing/apollo.server";
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { requestApolloPhoneReveal } from "@/lib/sourcing/apollo.server";
 
 const STAGES = ["Applied", "Sourced", "Contacted", "Screening", "Interview", "Offer"] as const;
 
@@ -159,7 +158,7 @@ export const revealCandidatePhone = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input) => z.object({ id: z.string().uuid() }).parse(input))
   .handler(async ({ context, data }) => {
-    const { supabase, userId } = context;
+    const { supabase } = context;
     const { data: cand, error: loadErr } = await supabase
       .from("candidates")
       .select("id, apollo_id, phone, activity")
@@ -170,41 +169,30 @@ export const revealCandidatePhone = createServerFn({ method: "POST" })
     if (cand.phone) return { phone: cand.phone, alreadyRevealed: true };
     if (!cand.apollo_id) throw new Error("This candidate did not come from Apollo, no phone to reveal.");
 
-    const phone = await revealApolloPhone(cand.apollo_id);
-    if (!phone) {
-      const activity = Array.isArray(cand.activity) ? [...(cand.activity as any[])] : [];
-      activity.push({
-        id: activity.length + 1,
-        type: "phone_reveal_attempted",
-        by: "you",
-        when: "Just now",
-        text: "Phone reveal attempted — no number on file",
-      });
-      await supabase.from("candidates").update({ activity }).eq("id", data.id);
-      return { phone: null, alreadyRevealed: false, noNumber: true };
+    // Idempotency: skip if a reveal was requested for this candidate in the last 10 min.
+    const activity = Array.isArray(cand.activity) ? [...(cand.activity as any[])] : [];
+    const recentPending = activity
+      .filter((a) => a?.type === "phone_reveal_pending" && a?.at)
+      .some((a) => Date.now() - new Date(a.at).getTime() < 10 * 60 * 1000);
+    if (recentPending) {
+      return { status: "pending" as const, alreadyPending: true };
     }
 
-    const activity = Array.isArray(cand.activity) ? [...(cand.activity as any[])] : [];
+    await requestApolloPhoneReveal(cand.apollo_id);
+
     activity.push({
       id: activity.length + 1,
-      type: "phone_revealed",
+      type: "phone_reveal_pending",
       by: "you",
       when: "Just now",
-      text: "Phone number revealed (1 Apollo credit used)",
+      at: new Date().toISOString(),
+      text: "Phone reveal requested — Apollo delivers within a few minutes",
     });
-
     const { error: updErr } = await supabase
       .from("candidates")
-      .update({ phone, activity })
+      .update({ activity })
       .eq("id", data.id);
     if (updErr) throw new Error(updErr.message);
 
-    // Best-effort credit accounting (1 reveal = 1 credit on most plans).
-    const { error: rpcErr } = await supabaseAdmin.rpc("increment_sourcing_usage", {
-      _user_id: userId,
-      _count: 1,
-    });
-    if (rpcErr) console.error("increment_sourcing_usage failed:", rpcErr.message);
-
-    return { phone, alreadyRevealed: false };
+    return { status: "pending" as const, alreadyPending: false };
   });
