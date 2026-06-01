@@ -250,7 +250,7 @@ function AppLayout() {
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search"
+              placeholder={t("nav.search", "Search")}
               className="w-full bg-transparent text-[13px] outline-none placeholder:text-text-faint"
             />
           </div>
