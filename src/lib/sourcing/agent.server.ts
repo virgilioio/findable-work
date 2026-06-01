@@ -300,6 +300,48 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
   // ── 3. Search Apollo + PDL ─────────────────────────────────────
   const tSearch = await insertTask(userId, conversationId, "search", "Searching candidate pool", messageId);
   onTask(tSearch);
+
+  // Charge credits BEFORE hitting paid external APIs. Same cost / type as
+  // the standalone sourcing UI (`runSourcingSearch`), so balance is consistent
+  // whether the user runs a search from chat or the sourcing panel.
+  const spend = await spendCreditsAdmin({
+    userId,
+    amount: SOURCING_RUN_COST,
+    type: "sourcing_run",
+    reason: "Sourcing run (agent)",
+    metadata: { project_id: project.id, conversation_id: conversationId },
+  });
+  if (!spend.ok) {
+    onTask(
+      await finishTask(
+        tSearch,
+        "failed",
+        `Not enough credits — ${SOURCING_RUN_COST} required, ${spend.balance} available`,
+        {
+          insufficient_credits: true,
+          required: SOURCING_RUN_COST,
+          balance: spend.balance,
+        },
+      ),
+    );
+    return {
+      preview_total: 0,
+      added: 0,
+      skipped: 0,
+      apollo_count: 0,
+      pdl_count: 0,
+      apollo_error: null,
+      pdl_error: null,
+      project_id: project.id,
+      requested: limit,
+      pool_limited: false,
+      broadened: false,
+      insufficient_credits: true as const,
+      credits_required: SOURCING_RUN_COST,
+      credits_balance: spend.balance,
+    };
+  }
+
   const [apolloRes, pdlRes] = await Promise.allSettled([
     searchApolloWithFallback(criteria),
     searchPdl(criteria),
