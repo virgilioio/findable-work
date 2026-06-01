@@ -886,6 +886,7 @@ function DataPane() {
 /* -------------------------------- Security -------------------------------- */
 
 function SecurityPane({ onClose }: { onClose: () => void }) {
+  const { t } = useLanguage();
   const [signOutOpen, setSignOutOpen] = useState(false);
   const [pwSending, setPwSending] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
@@ -922,8 +923,8 @@ function SecurityPane({ onClose }: { onClose: () => void }) {
   return (
     <div>
       <Row
-        label="Change password"
-        description="Send a password reset email to your account."
+        label={t("settings.sec.password", "Change password")}
+        description={t("settings.sec.password.desc", "Send a password reset email to your account.")}
       >
         <button
           onClick={changePassword}
@@ -931,39 +932,38 @@ function SecurityPane({ onClose }: { onClose: () => void }) {
           className="flex items-center gap-2 rounded-lg border border-border bg-bg px-3 py-1.5 text-[12.5px] text-text transition hover:bg-bg-hover disabled:opacity-60"
         >
           {pwSending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-          {pwSending ? "Sending…" : "Send email"}
+          {pwSending ? t("settings.sec.password.sending", "Sending…") : t("settings.sec.password.btn", "Send email")}
         </button>
       </Row>
       <Row
-        label="Active sessions"
-        description="This device is currently signed in. Use “Log out all devices” to end any other active sessions."
+        label={t("settings.sec.sessions", "Active sessions")}
+        description={t("settings.sec.sessions.desc", "This device is currently signed in. Use “Log out all devices” to end any other active sessions.")}
       >
-        <span className="text-[12px] text-text-mute">This device</span>
+        <span className="text-[12px] text-text-mute">{t("settings.sec.this_device", "This device")}</span>
       </Row>
       <Row
-        label="Log out all devices"
-        description="End every signed-in session, including this one."
+        label={t("settings.sec.logout_all", "Log out all devices")}
+        description={t("settings.sec.logout_all.desc", "End every signed-in session, including this one.")}
       >
         <button
           onClick={() => setSignOutOpen(true)}
           className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-1.5 text-[12.5px] font-medium text-destructive transition hover:bg-destructive/15"
         >
-          Log out all
+          {t("settings.sec.logout_all.btn", "Log out all")}
         </button>
       </Row>
       <AlertDialog open={signOutOpen} onOpenChange={setSignOutOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Sign out of every device?</AlertDialogTitle>
+            <AlertDialogTitle>{t("settings.sec.logout_all.dlg.title", "Sign out of every device?")}</AlertDialogTitle>
             <AlertDialogDescription>
-              You'll be signed out here and on every other device where you're
-              currently logged in. You can sign back in any time.
+              {t("settings.sec.logout_all.dlg.desc", "You'll be signed out here and on every other device where you're currently logged in. You can sign back in any time.")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={signingOut}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={signingOut}>{t("common.cancel", "Cancel")}</AlertDialogCancel>
             <AlertDialogAction onClick={signOutAll} disabled={signingOut}>
-              {signingOut ? "Signing out…" : "Sign out everywhere"}
+              {signingOut ? t("settings.sec.logout_all.dlg.confirming", "Signing out…") : t("settings.sec.logout_all.dlg.confirm", "Sign out everywhere")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
