@@ -437,6 +437,8 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
   let added = 0;
   let skipped = 0;
   let collectErr: string | null = null;
+  let creditsExhausted = false;
+  let creditsSpent = 0;
 
   // Dedupe against already-collected rows
   const apolloIds = topApollo.map((c: any) => c.external_id).filter(Boolean);
@@ -464,7 +466,7 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
       const enriched = await enrichApolloProfiles(apolloToFetch);
       for (const e of enriched) {
         const slug = linkedinSlug(e.linkedin_url);
-        const { error: insErr } = await supabaseAdmin.from("candidates").insert({
+        const { data: ins, error: insErr } = await supabaseAdmin.from("candidates").insert({
           user_id: userId,
           conversation_id: conversationId,
           name: e.full_name || `${e.first_name} ${e.last_name}`.trim() || "Unknown",
@@ -494,11 +496,23 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
           apollo_id: e.id,
           linkedin_slug: slug,
           has_direct_phone: apolloPhoneFlag.get(e.id) ?? false,
-        });
+        }).select("id").single();
         if (insErr) {
           console.error("apollo candidate insert failed:", insErr.message);
           skipped++;
-        } else added++;
+        } else {
+          const spend = await spendCreditsAdmin({
+            userId,
+            amount: CANDIDATE_ADD_COST,
+            type: "candidate_add",
+            reason: "Candidate sourced (agent)",
+            metadata: { project_id: project.id, source: "apollo", apollo_id: e.id, candidate_id: ins?.id },
+          });
+          if (spend.ok) creditsSpent += CANDIDATE_ADD_COST;
+          else creditsExhausted = true;
+          added++;
+          if (creditsExhausted) break;
+        }
       }
     } catch (e: any) {
       collectErr = e?.message ?? "Apollo enrichment failed";
@@ -507,6 +521,7 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
 
   // ── PDL: insert directly from search payload ──────────────────
   for (const c of pdlToInsert) {
+    if (creditsExhausted) break;
     const raw: any = (c as any).raw ?? {};
     const fn = raw.first_name ?? "";
     const ln = raw.last_name ?? "";
@@ -521,7 +536,7 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
           desc: h.summary ?? "",
         }))
       : [];
-    const { error: insErr } = await supabaseAdmin.from("candidates").insert({
+    const { data: ins, error: insErr } = await supabaseAdmin.from("candidates").insert({
       user_id: userId,
       conversation_id: conversationId,
       name: fullName,
@@ -547,11 +562,22 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
       pdl_id: c.external_id,
       linkedin_slug: slug,
       has_direct_phone: Boolean(raw.mobile_phone || raw.phone_numbers?.length),
-    });
+    }).select("id").single();
     if (insErr) {
       console.error("pdl candidate insert failed:", insErr.message);
       skipped++;
-    } else added++;
+    } else {
+      const spend = await spendCreditsAdmin({
+        userId,
+        amount: CANDIDATE_ADD_COST,
+        type: "candidate_add",
+        reason: "Candidate sourced (agent)",
+        metadata: { project_id: project.id, source: "pdl", pdl_id: c.external_id, candidate_id: ins?.id },
+      });
+      if (spend.ok) creditsSpent += CANDIDATE_ADD_COST;
+      else creditsExhausted = true;
+      added++;
+    }
   }
 
   if (added > 0) {
@@ -582,5 +608,7 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
     requested: limit,
     pool_limited: poolLimited,
     broadened: broadened,
+    credits_spent: creditsSpent,
+    credits_exhausted: creditsExhausted,
   };
 }
