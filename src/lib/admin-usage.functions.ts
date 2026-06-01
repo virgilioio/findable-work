@@ -285,8 +285,41 @@ export const getUserUsageTable = createServerFn({ method: "GET" })
       .parse(d ?? {}),
   )
   .handler(async ({ data }) => {
-    const { data: dir, error } = await supabaseAdmin.rpc("admin_user_directory");
-    if (error) throw new Error(error.message);
+    const authUsers = await listAuthUsers();
+    const authIds = authUsers.map((u) => u.id);
+
+    const [profileRows, subscriptionRows] = authIds.length
+      ? await Promise.all([
+          selectByIds(
+            "profiles",
+            "id, plan, credits_remaining, sourcing_projects_used",
+            "id",
+            authIds,
+          ),
+          selectByIds(
+            "subscriptions",
+            "user_id, tier_key, status, created_at, current_period_end",
+            "user_id",
+            authIds,
+          ).catch((err) => {
+            console.error("[admin usage] subscriptions read failed:", err.message);
+            return [];
+          }),
+        ])
+      : [[], []];
+
+    const profilesById = new Map<string, any>();
+    profileRows.forEach((p) => profilesById.set(p.id, p));
+
+    const activeSubscriptionByUser = new Map<string, any>();
+    subscriptionRows.forEach((sub) => {
+      if (!ACTIVE_SUBSCRIPTION_STATUSES.has(String(sub.status))) return;
+      const previous = activeSubscriptionByUser.get(sub.user_id);
+      const prevSort = previous?.current_period_end ?? previous?.created_at ?? "";
+      const nextSort = sub.current_period_end ?? sub.created_at ?? "";
+      if (!previous || nextSort > prevSort) activeSubscriptionByUser.set(sub.user_id, sub);
+    });
+
     const users: Array<{
       id: string;
       email: string | null;
@@ -295,7 +328,19 @@ export const getUserUsageTable = createServerFn({ method: "GET" })
       plan: string;
       credits_remaining: number;
       sourcing_projects_used: number;
-    }> = dir ?? [];
+    }> = authUsers.map((u) => {
+      const profile = profilesById.get(u.id);
+      const activeSub = activeSubscriptionByUser.get(u.id);
+      return {
+        id: u.id,
+        email: u.email ?? null,
+        created_at: u.created_at ?? new Date(0).toISOString(),
+        last_sign_in_at: u.last_sign_in_at ?? null,
+        plan: normalizePlan(activeSub?.tier_key ?? profile?.plan),
+        credits_remaining: Number(profile?.credits_remaining ?? 0),
+        sourcing_projects_used: Number(profile?.sourcing_projects_used ?? 0),
+      };
+    });
 
     const ids = users.map((u) => u.id);
     if (ids.length === 0) return [];
