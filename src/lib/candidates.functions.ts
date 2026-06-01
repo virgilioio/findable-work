@@ -180,7 +180,7 @@ export const revealCandidatePhone = createServerFn({ method: "POST" })
       return { status: "pending" as const, alreadyPending: true };
     }
 
-    // Charge 1 credit per phone reveal. Skip for direct-Applicant rows (no
+    // Charge PHONE_REVEAL_COST credits per phone reveal. Skip for direct-Applicant rows (no
     // outbound sourcing involved); Apollo-sourced candidates always pay.
     if (cand.source !== "Applicant") {
       const spend = await spendCreditsAdmin({
