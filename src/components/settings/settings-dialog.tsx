@@ -175,6 +175,7 @@ export function SettingsDialog({
               {active === "notifications" && <NotificationsPane />}
               {active === "personalization" && <PersonalizationPane />}
               {active === "connections" && <ConnectionsPane />}
+              {active === "billing" && <BillingPane />}
               {active === "data" && <DataPane />}
               {active === "security" && <SecurityPane onClose={() => onOpenChange(false)} />}
               {active === "account" && <AccountPane />}
