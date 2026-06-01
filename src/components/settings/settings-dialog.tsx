@@ -1018,10 +1018,10 @@ function AccountPane() {
     if (!nameHydrated) return;
     const current = profile?.displayName ?? "";
     if (nameDraft === current) return;
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       updateNameMut.mutate(nameDraft);
     }, 600);
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nameDraft, nameHydrated]);
 
