@@ -72,6 +72,7 @@ import { openBillingPortal } from "@/lib/billing/portal.functions";
 import { getProfile, updateDisplayName, updatePersonalization } from "@/lib/profile.functions";
 import { exportCandidatesCsv } from "@/lib/data-export.functions";
 import { deleteOwnAccount } from "@/lib/account.functions";
+import { wipeOwnTestData } from "@/lib/data-wipe.functions";
 import { LANGUAGES, useLanguage } from "@/lib/i18n";
 
 export type SettingsSection =
