@@ -4,6 +4,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { requestApolloPhoneReveal } from "@/lib/sourcing/apollo.server";
 import { spendCreditsAdmin } from "@/lib/billing/credits.functions";
 import { PHONE_REVEAL_COST } from "@/lib/billing/bundles";
+import { logAuditEvent } from "@/lib/audit.server";
 
 const STAGES = ["Applied", "Sourced", "Contacted", "Screening", "Interview", "Offer"] as const;
 
@@ -132,10 +133,19 @@ export const updateCandidate = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input) => patchSchema.parse(input))
   .handler(async ({ context, data }) => {
-    const { supabase } = context;
+    const { supabase, userId } = context;
     const { id, ...patch } = data;
     const update: { stage?: typeof STAGES[number]; starred?: boolean; stage_changed_at?: string } = { ...patch };
     if (patch.stage) update.stage_changed_at = new Date().toISOString();
+    let prevStage: string | undefined;
+    if (patch.stage) {
+      const { data: prev } = await supabase
+        .from("candidates")
+        .select("stage")
+        .eq("id", id)
+        .maybeSingle();
+      prevStage = prev?.stage;
+    }
     const { data: row, error } = await supabase
       .from("candidates")
       .update(update)
@@ -143,6 +153,15 @@ export const updateCandidate = createServerFn({ method: "POST" })
       .select("*")
       .single();
     if (error) throw new Error(error.message);
+    if (patch.stage && row && prevStage !== patch.stage) {
+      await logAuditEvent({
+        userId,
+        action: "candidate.stage_changed",
+        entityType: "candidate",
+        entityId: id,
+        metadata: { from: prevStage ?? null, to: patch.stage, name: row.name },
+      });
+    }
     return row;
   });
 
@@ -150,9 +169,25 @@ export const deleteCandidate = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input) => z.object({ id: z.string().uuid() }).parse(input))
   .handler(async ({ context, data }) => {
-    const { supabase } = context;
+    const { supabase, userId } = context;
+    const { data: prev } = await supabase
+      .from("candidates")
+      .select("name, email, stage")
+      .eq("id", data.id)
+      .maybeSingle();
     const { error } = await supabase.from("candidates").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
+    await logAuditEvent({
+      userId,
+      action: "candidate.deleted",
+      entityType: "candidate",
+      entityId: data.id,
+      metadata: {
+        name: prev?.name ?? null,
+        email: prev?.email ?? null,
+        stage: prev?.stage ?? null,
+      },
+    });
     return { ok: true };
   });
 
