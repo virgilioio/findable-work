@@ -22,7 +22,7 @@ export async function logAuditEvent(args: {
   metadata?: Record<string, unknown>;
 }): Promise<void> {
   try {
-    const { error } = await supabaseAdmin.from("audit_events").insert({
+    const { error } = await (supabaseAdmin as any).from("audit_events").insert({
       user_id: args.userId,
       action: args.action,
       entity_type: args.entityType,
