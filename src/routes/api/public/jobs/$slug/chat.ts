@@ -238,6 +238,20 @@ export const Route = createFileRoute("/api/public/jobs/$slug/chat")({
           return Response.json({ error: "Job not found" }, { status: 404 });
         }
 
+        // Optional: interview loop for this job (so the AI can answer
+        // "what's the interview process?" with real stage details).
+        let interviewLoop: any = null;
+        try {
+          const { data: loop } = await (supabaseAdmin as any)
+            .from("interview_loops")
+            .select("stages, context, prep_tips")
+            .eq("job_id", (job as any).id)
+            .maybeSingle();
+          interviewLoop = loop ?? null;
+        } catch (e) {
+          console.error("[jobs-chat] loop load failed", e);
+        }
+
         const lastUser = [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
         const isSpanish = /[áéíóúñ¿¡]|proceso|entrevista|remoto/.test(lastUser.toLowerCase());
         const logEvent = (usedFallback: boolean, reason?: string) => {
@@ -257,7 +271,25 @@ export const Route = createFileRoute("/api/public/jobs/$slug/chat")({
             .then(() => {}, (e: any) => console.error("[jobs-chat] log error", e?.message));
         };
 
-        const grounding = buildGrounding(job as PublicJob, formContext);
+        let grounding = buildGrounding(job as PublicJob, formContext);
+        if (interviewLoop?.stages?.length) {
+          const lines = interviewLoop.stages
+            .slice()
+            .sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0))
+            .map((s: any, i: number) => {
+              const who = (s.interviewers ?? [])
+                .map((p: any) => [p.name, p.role].filter(Boolean).join(", "))
+                .filter(Boolean)
+                .join("; ");
+              return `${i + 1}) ${s.name} — ${s.duration_min ?? 30} min ${s.format ?? "video"}${
+                who ? ` with ${who}` : ""
+              }${s.description ? `. ${s.description}` : ""}`;
+            })
+            .join("\n");
+          grounding +=
+            `\n\nINTERVIEW PROCESS:\n${lines}` +
+            (interviewLoop.context ? `\n\nLoop context: ${interviewLoop.context}` : "");
+        }
 
         const system = buildSystemPrompt(grounding);
 
