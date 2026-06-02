@@ -50,6 +50,7 @@ import { CandidatesPanel } from "@/components/candidates/candidates-panel";
 import { TaskCard, type ChatTask, type ArtifactTab } from "@/components/chat/task-card";
 import { ThinkingTicker } from "@/components/chat/thinking-ticker";
 import { OutreachPanel } from "@/components/outreach/outreach-panel";
+import { InterviewsPanel } from "@/components/interviews/interviews-panel";
 import { useLanguage } from "@/lib/i18n";
 
 // Splits an assistant message into segments rendered before and after the
@@ -140,10 +141,11 @@ function ConversationPage() {
   const [streamStart, setStreamStart] = useState<number>(0);
   const [streamEnd, setStreamEnd] = useState<number>(0);
   const [sending, setSending] = useState(false);
-  const [tab, setTab] = useState<"chat" | "job" | "candidates" | "outreach">("chat");
+  const [tab, setTab] = useState<"chat" | "job" | "candidates" | "outreach" | "interviews">("chat");
   const [pulse, setPulse] = useState(false);
   const [candidatesPulse, setCandidatesPulse] = useState(false);
   const [outreachPulse, setOutreachPulse] = useState(false);
+  const [interviewsPulse, setInterviewsPulse] = useState(false);
   const [composerText, setComposerText] = useState("");
   const [liveTasks, setLiveTasks] = useState<ChatTask[]>([]);
   const [clarifyAnswers, setClarifyAnswers] = useState<Record<string, Record<string, string[]>>>({});
@@ -151,6 +153,7 @@ function ConversationPage() {
   const messages: Message[] = data?.messages ?? [];
   const job: Job | null = (data?.job as Job | null) ?? null;
   const outreach = (data as any)?.outreach ?? null;
+  const interviewLoop = (data as any)?.interviewLoop ?? null;
   const title: string = data?.conversation?.title ?? t("chat.title.untitled", "Untitled project");
   const persistedTasks: ChatTask[] = (data?.tasks as ChatTask[] | undefined) ?? [];
 
@@ -205,6 +208,7 @@ function ConversationPage() {
       let acc = "";
       let jobCreated = false;
       let outreachCreated = false;
+      let interviewLoopCreated = false;
       let candidatesAdded = 0;
 
       while (true) {
@@ -241,6 +245,8 @@ function ConversationPage() {
             jobCreated = true;
           } else if (event === "outreach") {
             outreachCreated = true;
+          } else if (event === "interview_loop") {
+            interviewLoopCreated = true;
           } else if (event === "task") {
             const t = payload as ChatTask;
             setLiveTasks((prev) => {
@@ -281,6 +287,13 @@ function ConversationPage() {
       if (outreachCreated && tab !== "outreach") {
         setOutreachPulse(true);
         setTimeout(() => setOutreachPulse(false), 3500);
+      }
+      if (interviewLoopCreated) {
+        qc.invalidateQueries({ queryKey: ["interview-loop", id] });
+        if (tab !== "interviews") {
+          setInterviewsPulse(true);
+          setTimeout(() => setInterviewsPulse(false), 3500);
+        }
       }
     } finally {
       setSending(false);
@@ -331,6 +344,15 @@ function ConversationPage() {
               icon={<SendIcon size={14} />}
               label={t("chat.tab.outreach", "Outreach")}
               pulse={outreachPulse && tab !== "outreach"}
+            />
+          )}
+          {(interviewLoop || job) && (
+            <TabButton
+              active={tab === "interviews"}
+              onClick={() => setTab("interviews")}
+              icon={<Briefcase size={14} />}
+              label={t("chat.tab.interviews", "Interviews")}
+              pulse={interviewsPulse && tab !== "interviews"}
             />
           )}
         </div>
@@ -392,6 +414,8 @@ function ConversationPage() {
           <CandidatesPanel conversationId={id} onAskFindable={askFindable} />
         ) : tab === "outreach" ? (
           <OutreachPanel conversationId={id} />
+        ) : tab === "interviews" ? (
+          <InterviewsPanel conversationId={id} />
         ) : null}
       </div>
     </div>
