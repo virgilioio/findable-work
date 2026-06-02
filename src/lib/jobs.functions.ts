@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { generateScreeningQuestions, type ScreeningQuestion } from "@/lib/jobs/screening.server";
+import { logAuditEvent } from "@/lib/audit.server";
 
 const jobUpdateSchema = z.object({
   conversationId: z.string().uuid(),
@@ -160,6 +161,13 @@ export const publishJob = createServerFn({ method: "POST" })
       .select("*")
       .single();
     if (upErr) throw new Error(upErr.message);
+    await logAuditEvent({
+      userId: context.userId,
+      action: "job.published",
+      entityType: "job",
+      entityId: updated.id,
+      metadata: { slug: updated.slug, title: updated.title },
+    });
     return updated;
   });
 
@@ -175,6 +183,13 @@ export const unpublishJob = createServerFn({ method: "POST" })
       .select("*")
       .single();
     if (error) throw new Error(error.message);
+    await logAuditEvent({
+      userId: context.userId,
+      action: "job.unpublished",
+      entityType: "job",
+      entityId: row.id,
+      metadata: { slug: row.slug, title: row.title },
+    });
     return row;
   });
 
