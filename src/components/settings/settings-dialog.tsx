@@ -979,6 +979,9 @@ function AccountPane() {
   const { t } = useLanguage();
   const [email, setEmail] = useState<string>("");
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [wipeOpen, setWipeOpen] = useState(false);
+  const [wipeConfirm, setWipeConfirm] = useState("");
+  const [wiping, setWiping] = useState(false);
   const [nameDraft, setNameDraft] = useState<string>("");
   const [nameHydrated, setNameHydrated] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -986,6 +989,7 @@ function AccountPane() {
   const getProfileFn = useServerFn(getProfile);
   const updateNameFn = useServerFn(updateDisplayName);
   const deleteAccountFn = useServerFn(deleteOwnAccount);
+  const wipeDataFn = useServerFn(wipeOwnTestData);
 
   const { data: profile, isLoading: profileLoading } = useQuery({
     queryKey: ["profile"],
@@ -1038,6 +1042,21 @@ function AccountPane() {
     }
   };
 
+  const handleWipe = async () => {
+    setWiping(true);
+    try {
+      const res = await wipeDataFn({ data: { confirm: "WIPE" } });
+      toast.success(`Wiped ${res.totalDeleted} rows across your workspace.`);
+      setWipeOpen(false);
+      setWipeConfirm("");
+      qc.invalidateQueries();
+    } catch (e) {
+      toast.error("Wipe failed: " + (e as Error).message);
+    } finally {
+      setWiping(false);
+    }
+  };
+
   const initial = (nameDraft || email || "?")[0]?.toUpperCase() ?? "?";
   return (
     <div>
@@ -1083,6 +1102,17 @@ function AccountPane() {
           className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-1.5 text-[12.5px] font-medium text-destructive transition hover:bg-destructive/15"
         >
           {t("settings.acct.delete", "Delete account")}
+        </button>
+      </Row>
+      <Row
+        label="Wipe workspace data"
+        description="Delete all candidates, jobs, conversations, outreach, and audit logs. Keeps your account, billing and connections."
+      >
+        <button
+          onClick={() => setWipeOpen(true)}
+          className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-1.5 text-[12.5px] font-medium text-destructive transition hover:bg-destructive/15"
+        >
+          Wipe data
         </button>
       </Row>
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
