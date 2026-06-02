@@ -187,6 +187,63 @@ const draftOutreachTool = {
   },
 };
 
+const buildInterviewLoopTool = {
+  type: "function" as const,
+  function: {
+    name: "build_interview_loop",
+    description:
+      "Create or replace the interview loop for this conversation. CALL ONLY after you've asked the user (via ask_clarifying_questions) for: (1) the stages and their order, (2) who interviews each one, and (3) duration per stage. You will fill in description, focus_areas, suggested_questions, and the overall context/prep_tips yourself based on the job. The result renders in the Interviews tab and is shown to candidates on the public job page.",
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        stages: {
+          type: "array",
+          minItems: 1,
+          maxItems: 12,
+          items: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              name: { type: "string", description: "Short stage name e.g. 'Recruiter screen'." },
+              format: { type: "string", enum: ["video", "async", "onsite", "phone"] },
+              duration_min: { type: "number", description: "Duration in minutes." },
+              interviewers: {
+                type: "array",
+                items: {
+                  type: "object",
+                  additionalProperties: false,
+                  properties: {
+                    name: { type: "string" },
+                    role: { type: "string" },
+                    email: { type: "string" },
+                  },
+                  required: ["name"],
+                },
+              },
+              description: { type: "string", description: "1-2 sentence purpose of this stage." },
+              focus_areas: {
+                type: "array",
+                items: { type: "string" },
+                description: "3-6 short bullets of what to assess.",
+              },
+              suggested_questions: {
+                type: "array",
+                items: { type: "string" },
+                description: "3-6 concrete questions the interviewer can ask.",
+              },
+            },
+            required: ["name", "duration_min"],
+          },
+        },
+        context: { type: "string", description: "Overall context paragraph for what the loop is testing for." },
+        prep_tips: { type: "string", description: "Short prep tips shown to interviewers and candidates." },
+      },
+      required: ["stages"],
+    },
+  },
+};
+
 // ============================================================
 // Read-only context tools — scoped to the current conversation.
 // Safe to call any time; do not spend credits or create artifacts.
@@ -366,6 +423,7 @@ async function callOpenAI(
           publishJobTool,
           unpublishJobTool,
           draftOutreachTool,
+          buildInterviewLoopTool,
           getConversationContextTool,
           getJobTool,
           listCandidatesTool,
@@ -1257,6 +1315,81 @@ export const Route = createFileRoute("/api/chat")({
                       content: JSON.stringify({ ok: true }),
                     });
                   }
+                } else if (call.name === "build_interview_loop") {
+                  const rawStages = Array.isArray(args.stages) ? args.stages : [];
+                  const stages = rawStages.slice(0, 12).map((s: any, i: number) => ({
+                    id: `stg_${Math.random().toString(36).slice(2, 10)}`,
+                    order: i,
+                    name: String(s?.name ?? `Stage ${i + 1}`).slice(0, 120),
+                    format: ["video", "async", "onsite", "phone"].includes(s?.format)
+                      ? s.format
+                      : "video",
+                    duration_min: Math.min(480, Math.max(5, Number(s?.duration_min) || 30)),
+                    interviewers: Array.isArray(s?.interviewers)
+                      ? s.interviewers.slice(0, 8).map((p: any) => ({
+                          name: String(p?.name ?? "").slice(0, 120),
+                          role: String(p?.role ?? "").slice(0, 120),
+                          ...(p?.email ? { email: String(p.email).slice(0, 200) } : {}),
+                        }))
+                      : [],
+                    description: String(s?.description ?? "").slice(0, 2000),
+                    focus_areas: Array.isArray(s?.focus_areas)
+                      ? s.focus_areas.map((x: any) => String(x).slice(0, 200)).slice(0, 12)
+                      : [],
+                    suggested_questions: Array.isArray(s?.suggested_questions)
+                      ? s.suggested_questions.map((x: any) => String(x).slice(0, 400)).slice(0, 12)
+                      : [],
+                  }));
+                  const { data: existingJob } = await supabaseAdmin
+                    .from("jobs")
+                    .select("id")
+                    .eq("conversation_id", conversationId)
+                    .maybeSingle();
+                  const { data: loopRow } = await (supabaseAdmin as any)
+                    .from("interview_loops")
+                    .upsert(
+                      {
+                        user_id: userId,
+                        conversation_id: conversationId,
+                        job_id: existingJob?.id ?? null,
+                        stages,
+                        context: String(args.context ?? "").slice(0, 4000),
+                        prep_tips: String(args.prep_tips ?? "").slice(0, 4000),
+                      },
+                      { onConflict: "conversation_id" },
+                    )
+                    .select("*")
+                    .single();
+                  send("interview_loop", loopRow);
+                  const { data: loopTask } = await supabaseAdmin
+                    .from("agent_tasks")
+                    .insert({
+                      user_id: userId,
+                      conversation_id: conversationId,
+                      message_id: assistantMessageId,
+                      kind: "create_interview_loop",
+                      label: "Interview loop drafted",
+                      status: "done",
+                      summary: `${stages.length} stages · open Interviews tab`,
+                      data: { loop_id: (loopRow as any)?.id, stage_count: stages.length },
+                      finished_at: new Date().toISOString(),
+                    })
+                    .select("*")
+                    .single();
+                  if (loopTask) {
+                    allTaskIds.push(loopTask.id);
+                    send("task", loopTask);
+                  }
+                  toolResults.push({
+                    role: "tool",
+                    tool_call_id: call.id ?? "",
+                    name: "build_interview_loop",
+                    content: JSON.stringify({
+                      ok: true,
+                      stage_count: stages.length,
+                      stages: stages.map((s: any) => ({ name: s.name, duration_min: s.duration_min })),
+                    }),
+                  });
                 } else if (call.name === "get_conversation_context") {
                   const [{ data: job }, { data: outreach }, { data: cands }] =
                     await Promise.all([
