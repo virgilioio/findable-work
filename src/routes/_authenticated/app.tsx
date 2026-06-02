@@ -136,6 +136,7 @@ function AppLayout() {
   const [settingsSection, setSettingsSection] = useState<SettingsSection | null>(
     null,
   );
+  const [bugReportOpen, setBugReportOpen] = useState(false);
 
   // Handle Stripe Checkout return.
   useEffect(() => {
