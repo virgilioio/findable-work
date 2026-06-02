@@ -187,6 +187,63 @@ const draftOutreachTool = {
   },
 };
 
+const buildInterviewLoopTool = {
+  type: "function" as const,
+  function: {
+    name: "build_interview_loop",
+    description:
+      "Create or replace the interview loop for this conversation. CALL ONLY after you've asked the user (via ask_clarifying_questions) for: (1) the stages and their order, (2) who interviews each one, and (3) duration per stage. You will fill in description, focus_areas, suggested_questions, and the overall context/prep_tips yourself based on the job. The result renders in the Interviews tab and is shown to candidates on the public job page.",
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        stages: {
+          type: "array",
+          minItems: 1,
+          maxItems: 12,
+          items: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              name: { type: "string", description: "Short stage name e.g. 'Recruiter screen'." },
+              format: { type: "string", enum: ["video", "async", "onsite", "phone"] },
+              duration_min: { type: "number", description: "Duration in minutes." },
+              interviewers: {
+                type: "array",
+                items: {
+                  type: "object",
+                  additionalProperties: false,
+                  properties: {
+                    name: { type: "string" },
+                    role: { type: "string" },
+                    email: { type: "string" },
+                  },
+                  required: ["name"],
+                },
+              },
+              description: { type: "string", description: "1-2 sentence purpose of this stage." },
+              focus_areas: {
+                type: "array",
+                items: { type: "string" },
+                description: "3-6 short bullets of what to assess.",
+              },
+              suggested_questions: {
+                type: "array",
+                items: { type: "string" },
+                description: "3-6 concrete questions the interviewer can ask.",
+              },
+            },
+            required: ["name", "duration_min"],
+          },
+        },
+        context: { type: "string", description: "Overall context paragraph for what the loop is testing for." },
+        prep_tips: { type: "string", description: "Short prep tips shown to interviewers and candidates." },
+      },
+      required: ["stages"],
+    },
+  },
+};
+
 // ============================================================
 // Read-only context tools — scoped to the current conversation.
 // Safe to call any time; do not spend credits or create artifacts.
@@ -366,6 +423,7 @@ async function callOpenAI(
           publishJobTool,
           unpublishJobTool,
           draftOutreachTool,
+          buildInterviewLoopTool,
           getConversationContextTool,
           getJobTool,
           listCandidatesTool,
