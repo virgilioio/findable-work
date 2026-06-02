@@ -1,37 +1,37 @@
-Add a Help sub-menu to the authenticated app's footer dropup and reorder items per the user's spec.
+## Enhance "Report a bug" dialog
 
-## Changes
+Update the dialog to match the mockups with structured fields, and pass them through to the support email.
 
-### 1. Reorder dropup menu (`src/routes/_authenticated/app.tsx`)
-New order:
-- Configuration (opens General settings)
-- Personalization
-- Usage & billing
-- `<DropdownMenuSeparator />`
-- Help (sub-menu trigger)
-- Sign out
+### UI — `src/components/settings/bug-report-dialog.tsx`
 
-### 2. Help sub-menu items
-Inside a `<DropdownMenuSub>`:
-- **Help center** — opens SettingsDialog at Help section
-- `<DropdownMenuSeparator />`
-- **Terms** — navigates to `/terms`
-- **Privacy** — navigates to `/privacy`
-- **Report a bug** — opens a bug-report dialog
+Replace the single-textarea form with:
 
-### 3. Bug report dialog (`src/components/settings/bug-report-dialog.tsx`)
-- Textarea for bug description (1–2000 chars)
-- Submit button with loading state
-- On submit, calls server function
-- Success toast: "Bug report sent"
+1. **Area** — `Select` (shadcn) with options:
+   - General (default)
+   - Chat
+   - Job & posts
+   - Sourcing
+   - Candidates
+   - Outreach
+   - Interviews
+   - Billing & credits
+2. **Summary** — short `Input`, placeholder "A short title for the issue", max 140 chars.
+3. **What happened?** — `Textarea`, placeholder "What did you do, what did you expect, and what happened instead?", max 4000 chars.
+4. **Include technical details (page, browser, timestamp)** — `Checkbox`, default checked.
+5. Footer: left-aligned helper text "Goes to support@findable.work", right-aligned Cancel + Send report buttons.
+6. Submit disabled until Summary and What happened are both non-empty.
+7. On success: toast, reset fields, close.
 
-### 4. Bug report server function (`src/lib/bug-report.functions.ts`)
-- `sendBugReport` — createsServerFn POST, requires auth
-- Reads user's email from context
-- Calls `sendBrandedEmail` (existing Resend helper) to `support@findable.work`
-- Subject: `Bug report from findable` — includes user email + timestamp
-- Body: user's description
-- Returns `{ sent: true }`
+### Server fn — `src/lib/bug-report.functions.ts`
 
-### 5. No new secrets needed
-`RESEND_API_KEY` is already configured.
+Extend Zod schema and email template:
+
+- Schema adds `area` (enum of the 8 values above), `summary` (1–140), and `includeTech` (boolean). Keep existing `description` + `pageUrl`. Add optional `userAgent` (≤500) and `clientTimestamp` (≤40).
+- Subject becomes `[Bug][{area}] {summary} — {email}`.
+- HTML/text body includes Area, Summary, Description, and — only when `includeTech` is true — Page URL, User Agent, Client timestamp, User ID, Server timestamp.
+
+### Client wiring
+
+The dialog sends `userAgent` (`navigator.userAgent`) and `clientTimestamp` (`new Date().toISOString()`) only when the checkbox is checked; otherwise omits them and `pageUrl`.
+
+No changes to `app.tsx` menu or routing — the trigger already opens this dialog.
