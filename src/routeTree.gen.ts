@@ -23,6 +23,7 @@ import { Route as AuthenticatedAppIndexRouteImport } from './routes/_authenticat
 import { Route as ApiPublicGuestChatRouteImport } from './routes/api/public/guest-chat'
 import { Route as AuthenticatedAdminUsageRouteImport } from './routes/_authenticated/admin.usage'
 import { Route as AuthenticatedAdminPromptsRouteImport } from './routes/_authenticated/admin.prompts'
+import { Route as AuthenticatedAdminPhoneRevealsRouteImport } from './routes/_authenticated/admin.phone-reveals'
 import { Route as ApiPublicStripeWebhookRouteImport } from './routes/api/public/stripe/webhook'
 import { Route as ApiPublicJobsSlugRouteImport } from './routes/api/public/jobs/$slug'
 import { Route as ApiPublicHooksSendApplicationDigestsRouteImport } from './routes/api/public/hooks/send-application-digests'
@@ -102,6 +103,12 @@ const AuthenticatedAdminPromptsRoute =
     path: '/admin/prompts',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const AuthenticatedAdminPhoneRevealsRoute =
+  AuthenticatedAdminPhoneRevealsRouteImport.update({
+    id: '/admin/phone-reveals',
+    path: '/admin/phone-reveals',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const ApiPublicStripeWebhookRoute = ApiPublicStripeWebhookRouteImport.update({
   id: '/api/public/stripe/webhook',
   path: '/api/public/stripe/webhook',
@@ -155,6 +162,7 @@ export interface FileRoutesByFullPath {
   '/app': typeof AuthenticatedAppRouteWithChildren
   '/api/chat': typeof ApiChatRoute
   '/jobs/$slug': typeof JobsSlugRoute
+  '/admin/phone-reveals': typeof AuthenticatedAdminPhoneRevealsRoute
   '/admin/prompts': typeof AuthenticatedAdminPromptsRoute
   '/admin/usage': typeof AuthenticatedAdminUsageRoute
   '/api/public/guest-chat': typeof ApiPublicGuestChatRoute
@@ -177,6 +185,7 @@ export interface FileRoutesByTo {
   '/terms': typeof TermsRoute
   '/api/chat': typeof ApiChatRoute
   '/jobs/$slug': typeof JobsSlugRoute
+  '/admin/phone-reveals': typeof AuthenticatedAdminPhoneRevealsRoute
   '/admin/prompts': typeof AuthenticatedAdminPromptsRoute
   '/admin/usage': typeof AuthenticatedAdminUsageRoute
   '/api/public/guest-chat': typeof ApiPublicGuestChatRoute
@@ -202,6 +211,7 @@ export interface FileRoutesById {
   '/_authenticated/app': typeof AuthenticatedAppRouteWithChildren
   '/api/chat': typeof ApiChatRoute
   '/jobs/$slug': typeof JobsSlugRoute
+  '/_authenticated/admin/phone-reveals': typeof AuthenticatedAdminPhoneRevealsRoute
   '/_authenticated/admin/prompts': typeof AuthenticatedAdminPromptsRoute
   '/_authenticated/admin/usage': typeof AuthenticatedAdminUsageRoute
   '/api/public/guest-chat': typeof ApiPublicGuestChatRoute
@@ -227,6 +237,7 @@ export interface FileRouteTypes {
     | '/app'
     | '/api/chat'
     | '/jobs/$slug'
+    | '/admin/phone-reveals'
     | '/admin/prompts'
     | '/admin/usage'
     | '/api/public/guest-chat'
@@ -249,6 +260,7 @@ export interface FileRouteTypes {
     | '/terms'
     | '/api/chat'
     | '/jobs/$slug'
+    | '/admin/phone-reveals'
     | '/admin/prompts'
     | '/admin/usage'
     | '/api/public/guest-chat'
@@ -273,6 +285,7 @@ export interface FileRouteTypes {
     | '/_authenticated/app'
     | '/api/chat'
     | '/jobs/$slug'
+    | '/_authenticated/admin/phone-reveals'
     | '/_authenticated/admin/prompts'
     | '/_authenticated/admin/usage'
     | '/api/public/guest-chat'
@@ -404,6 +417,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminPromptsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/admin/phone-reveals': {
+      id: '/_authenticated/admin/phone-reveals'
+      path: '/admin/phone-reveals'
+      fullPath: '/admin/phone-reveals'
+      preLoaderRoute: typeof AuthenticatedAdminPhoneRevealsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/api/public/stripe/webhook': {
       id: '/api/public/stripe/webhook'
       path: '/api/public/stripe/webhook'
@@ -478,6 +498,7 @@ const AuthenticatedAppRouteWithChildren =
 
 interface AuthenticatedRouteChildren {
   AuthenticatedAppRoute: typeof AuthenticatedAppRouteWithChildren
+  AuthenticatedAdminPhoneRevealsRoute: typeof AuthenticatedAdminPhoneRevealsRoute
   AuthenticatedAdminPromptsRoute: typeof AuthenticatedAdminPromptsRoute
   AuthenticatedAdminUsageRoute: typeof AuthenticatedAdminUsageRoute
   AuthenticatedOauthGoogleReturnRoute: typeof AuthenticatedOauthGoogleReturnRoute
@@ -485,6 +506,7 @@ interface AuthenticatedRouteChildren {
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedAppRoute: AuthenticatedAppRouteWithChildren,
+  AuthenticatedAdminPhoneRevealsRoute: AuthenticatedAdminPhoneRevealsRoute,
   AuthenticatedAdminPromptsRoute: AuthenticatedAdminPromptsRoute,
   AuthenticatedAdminUsageRoute: AuthenticatedAdminUsageRoute,
   AuthenticatedOauthGoogleReturnRoute: AuthenticatedOauthGoogleReturnRoute,

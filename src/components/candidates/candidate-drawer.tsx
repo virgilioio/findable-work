@@ -367,26 +367,58 @@ function Overview({ c }: { c: Candidate }) {
         )}
         {c.phone && <KV label="Phone" value={c.phone} />}
         {!c.phone && c.apollo_id && (() => {
-          const pending = (c.activity ?? []).some(
-            (a: any) =>
-              a?.type === "phone_reveal_pending" &&
-              a?.at &&
-              Date.now() - new Date(a.at).getTime() < 10 * 60 * 1000,
-          );
-          const disabled = revealMut.isPending || pending;
+          const activity = (c.activity ?? []) as Array<{ type?: string; at?: string }>;
+          const latest = (type: string) => {
+            let best = 0;
+            for (const a of activity) {
+              if (a?.type === type && a.at) {
+                const t = new Date(a.at).getTime();
+                if (t > best) best = t;
+              }
+            }
+            return best;
+          };
+          const pendingAt = latest("phone_reveal_pending");
+          const attemptedAt = latest("phone_reveal_attempted");
+          const isPending = pendingAt > 0 && pendingAt > attemptedAt;
+          const ageMin = pendingAt ? Math.floor((Date.now() - pendingAt) / 60000) : 0;
+          const stuck = isPending && ageMin >= 30;
+          // Apollo replied that no number is on file (and we haven't re-requested since).
+          const noNumber = attemptedAt > 0 && attemptedAt >= pendingAt;
+
+          if (noNumber) {
+            return (
+              <KV label="Phone">
+                <span className="text-[12px] text-text-mute">
+                  No mobile on file (Apollo)
+                </span>
+                <button
+                  onClick={() => revealMut.mutate()}
+                  disabled={revealMut.isPending}
+                  className="ml-2 inline-flex items-center gap-1.5 rounded-md border border-border-strong bg-bg-elev px-2 py-0.5 text-[11.5px] text-text-mute hover:bg-bg-hover disabled:opacity-50"
+                >
+                  Try again
+                </button>
+              </KV>
+            );
+          }
+
+          const disabled = revealMut.isPending || (isPending && !stuck);
           return (
             <KV label="Phone">
               <button
                 onClick={() => revealMut.mutate()}
                 disabled={disabled}
                 className="inline-flex items-center gap-1.5 rounded-md border border-border-strong bg-bg-elev px-2 py-0.5 text-[12px] text-text hover:bg-bg-hover disabled:opacity-50"
-                title="Phone numbers are delivered asynchronously — usually within a few minutes. 5 credits charged only if a number is found."
+                title="Phone numbers are delivered asynchronously by Apollo — usually within a few minutes. 5 credits charged only if a number is found."
               >
                 <Sparkle size={11} />
-                {pending
-                  ? "Reveal pending…"
-                  : revealMut.isPending
-                    ? "Requesting…"
+                {revealMut.isPending
+                  ? "Requesting…"
+                  : isPending
+                    ? stuck
+                      ? `Stuck — request again (${ageMin} min)`
+                      : `Pending — requested ${ageMin === 0 ? "just now" : `${ageMin} min ago`}`
                     : "Reveal phone (5 credits if found)"}
               </button>
             </KV>
