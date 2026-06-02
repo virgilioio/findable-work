@@ -345,23 +345,50 @@ function AppLayout() {
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent side="top" align="end" className="w-52">
-              <DropdownMenuItem onSelect={() => setSettingsSection("personalization")}>
-                <Sparkle size={14} />
-                <span>{t("nav.menu.personalization", "Personalization")}</span>
-              </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setSettingsSection("general")}>
                 <SettingsIcon className="h-3.5 w-3.5" />
                 <span>{t("nav.menu.configuration", "Configuration")}</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setSettingsSection("personalization")}>
+                <Sparkle size={14} />
+                <span>{t("nav.menu.personalization", "Personalization")}</span>
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setSettingsSection("billing")}>
                 <CreditCard className="h-3.5 w-3.5" />
                 <span>{t("nav.menu.billing", "Usage & billing")}</span>
               </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setSettingsSection("help")}>
-                <LifeBuoy className="h-3.5 w-3.5" />
-                <span>{t("nav.menu.help", "Help")}</span>
-              </DropdownMenuItem>
               <DropdownMenuSeparator />
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  <LifeBuoy className="h-3.5 w-3.5" />
+                  <span>{t("nav.menu.help", "Help")}</span>
+                </DropdownMenuSubTrigger>
+                <DropdownMenuPortal>
+                  <DropdownMenuSubContent className="w-48">
+                    <DropdownMenuItem onSelect={() => setSettingsSection("help")}>
+                      <LifeBuoy className="h-3.5 w-3.5" />
+                      <span>{t("nav.menu.help_center", "Help center")}</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild>
+                      <a href="/terms" target="_blank" rel="noreferrer">
+                        <FileText className="h-3.5 w-3.5" />
+                        <span>{t("nav.menu.terms", "Terms")}</span>
+                      </a>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <a href="/privacy" target="_blank" rel="noreferrer">
+                        <ShieldCheck className="h-3.5 w-3.5" />
+                        <span>{t("nav.menu.privacy", "Privacy")}</span>
+                      </a>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setBugReportOpen(true)}>
+                      <Bug className="h-3.5 w-3.5" />
+                      <span>{t("nav.menu.report_bug", "Report a bug")}</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuSubContent>
+                </DropdownMenuPortal>
+              </DropdownMenuSub>
               <DropdownMenuItem onSelect={onSignOut}>
                 <LogOutIcon className="h-3.5 w-3.5" />
                 <span>{t("common.signout", "Sign out")}</span>
