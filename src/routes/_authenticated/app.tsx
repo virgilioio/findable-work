@@ -410,6 +410,8 @@ function AppLayout() {
         }}
       />
 
+      <BugReportDialog open={bugReportOpen} onOpenChange={setBugReportOpen} />
+
       <AlertDialog open={Boolean(deletingId)} onOpenChange={(open) => { if (!open) setDeletingId(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
