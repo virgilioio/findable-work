@@ -1135,6 +1135,33 @@ function AccountPane() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <AlertDialog open={wipeOpen} onOpenChange={(o) => { setWipeOpen(o); if (!o) setWipeConfirm(""); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Wipe all workspace data?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Permanently deletes every candidate, job, conversation, message, outreach thread, interview, and audit log. Your account, billing, and connected services stay intact. Type <strong>WIPE</strong> to confirm.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <Input
+            value={wipeConfirm}
+            onChange={(e) => setWipeConfirm(e.target.value)}
+            placeholder="Type WIPE"
+            className="h-9"
+            autoFocus
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={wiping}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleWipe}
+              disabled={wiping || wipeConfirm !== "WIPE"}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {wiping ? "Wiping…" : "Wipe everything"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
