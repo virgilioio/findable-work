@@ -6,6 +6,7 @@ import {
   applicationConfirmationHtml,
   newApplicantInstantHtml,
 } from "@/lib/email/templates.server";
+import { enforceRateLimit, hashSubject } from "@/lib/rate-limit.server";
 
 type Screening = Array<{
   id: string;
@@ -77,6 +78,21 @@ export const Route = createFileRoute("/api/public/jobs/$slug/apply")({
       POST: async ({ request, params }) => {
         const slug = String(params.slug || "").slice(0, 200);
         if (!slug) return new Response("Not found", { status: 404 });
+
+        // Per-IP throttle: 5 applications / hour. Hash the IP so we never
+        // persist raw client addresses.
+        const ipHeader =
+          request.headers.get("cf-connecting-ip") ||
+          request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+          "unknown";
+        const ipSubject = await hashSubject(`${slug}:${ipHeader}`);
+        const limited = await enforceRateLimit({
+          bucket: "public.apply",
+          subject: ipSubject,
+          max: 5,
+          windowSeconds: 3600,
+        });
+        if (limited) return limited;
 
         // Load job (admin — public flow).
         const { data: job, error: jobErr } = await supabaseAdmin

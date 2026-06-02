@@ -5,6 +5,7 @@ import { runSourcingAgent, type TaskEvent } from "@/lib/sourcing/agent.server";
 import { generateScreeningQuestions } from "@/lib/jobs/screening.server";
 import { getPrompt } from "@/lib/prompts/registry.server";
 import { buildPersonalizationContext } from "@/lib/profile.functions";
+import { enforceRateLimit } from "@/lib/rate-limit.server";
 import {
   OPENAI_CHAT_COMPLETIONS_URL,
   OPENAI_RATE_LIMIT_MESSAGE,
@@ -500,6 +501,14 @@ export const Route = createFileRoute("/api/chat")({
       POST: async ({ request }) => {
         const userId = await getUserFromRequest(request);
         if (!userId) return new Response("Unauthorized", { status: 401 });
+
+        const limited = await enforceRateLimit({
+          bucket: "chat.post",
+          subject: userId,
+          max: 60,
+          windowSeconds: 60,
+        });
+        if (limited) return limited;
 
         const json = await request.json().catch(() => null);
         const parsed = bodySchema.safeParse(json);
