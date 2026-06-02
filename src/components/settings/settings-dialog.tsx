@@ -72,6 +72,7 @@ import { openBillingPortal } from "@/lib/billing/portal.functions";
 import { getProfile, updateDisplayName, updatePersonalization } from "@/lib/profile.functions";
 import { exportCandidatesCsv } from "@/lib/data-export.functions";
 import { deleteOwnAccount } from "@/lib/account.functions";
+import { wipeOwnTestData } from "@/lib/data-wipe.functions";
 import { LANGUAGES, useLanguage } from "@/lib/i18n";
 
 export type SettingsSection =
@@ -978,6 +979,9 @@ function AccountPane() {
   const { t } = useLanguage();
   const [email, setEmail] = useState<string>("");
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [wipeOpen, setWipeOpen] = useState(false);
+  const [wipeConfirm, setWipeConfirm] = useState("");
+  const [wiping, setWiping] = useState(false);
   const [nameDraft, setNameDraft] = useState<string>("");
   const [nameHydrated, setNameHydrated] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -985,6 +989,7 @@ function AccountPane() {
   const getProfileFn = useServerFn(getProfile);
   const updateNameFn = useServerFn(updateDisplayName);
   const deleteAccountFn = useServerFn(deleteOwnAccount);
+  const wipeDataFn = useServerFn(wipeOwnTestData);
 
   const { data: profile, isLoading: profileLoading } = useQuery({
     queryKey: ["profile"],
@@ -1037,6 +1042,21 @@ function AccountPane() {
     }
   };
 
+  const handleWipe = async () => {
+    setWiping(true);
+    try {
+      const res = await wipeDataFn({ data: { confirm: "WIPE" } });
+      toast.success(`Wiped ${res.totalDeleted} rows across your workspace.`);
+      setWipeOpen(false);
+      setWipeConfirm("");
+      qc.invalidateQueries();
+    } catch (e) {
+      toast.error("Wipe failed: " + (e as Error).message);
+    } finally {
+      setWiping(false);
+    }
+  };
+
   const initial = (nameDraft || email || "?")[0]?.toUpperCase() ?? "?";
   return (
     <div>
@@ -1084,6 +1104,17 @@ function AccountPane() {
           {t("settings.acct.delete", "Delete account")}
         </button>
       </Row>
+      <Row
+        label="Wipe workspace data"
+        description="Delete all candidates, jobs, conversations, outreach, and audit logs. Keeps your account, billing and connections."
+      >
+        <button
+          onClick={() => setWipeOpen(true)}
+          className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-1.5 text-[12.5px] font-medium text-destructive transition hover:bg-destructive/15"
+        >
+          Wipe data
+        </button>
+      </Row>
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -1100,6 +1131,33 @@ function AccountPane() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {deleting ? t("settings.acct.delete.dlg.confirming", "Deleting…") : t("settings.acct.delete.dlg.confirm", "Delete forever")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog open={wipeOpen} onOpenChange={(o) => { setWipeOpen(o); if (!o) setWipeConfirm(""); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Wipe all workspace data?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Permanently deletes every candidate, job, conversation, message, outreach thread, interview, and audit log. Your account, billing, and connected services stay intact. Type <strong>WIPE</strong> to confirm.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <Input
+            value={wipeConfirm}
+            onChange={(e) => setWipeConfirm(e.target.value)}
+            placeholder="Type WIPE"
+            className="h-9"
+            autoFocus
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={wiping}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleWipe}
+              disabled={wiping || wipeConfirm !== "WIPE"}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {wiping ? "Wiping…" : "Wipe everything"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

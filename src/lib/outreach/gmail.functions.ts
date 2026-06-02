@@ -2,6 +2,8 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { logAuditEvent } from "@/lib/audit.server";
+import { checkRateLimit } from "@/lib/rate-limit.server";
 import {
   GMAIL_SCOPES,
   buildAuthorizeUrl,
@@ -182,6 +184,17 @@ export const sendOutreachEmail = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     const { userId } = context;
+    const limit = await checkRateLimit({
+      bucket: "outreach.send",
+      subject: userId,
+      max: 30,
+      windowSeconds: 3600,
+    });
+    if (!limit.ok) {
+      throw new Error(
+        `Outreach send rate limit reached. Try again in ${limit.retryAfterSeconds}s.`,
+      );
+    }
     const conn = await loadConnection(userId);
 
     const { data: cand, error: candErr } = await supabaseAdmin
@@ -259,6 +272,19 @@ export const sendOutreachEmail = createServerFn({ method: "POST" })
       })
       .eq("id", data.candidateId)
       .eq("user_id", userId);
+
+    await logAuditEvent({
+      userId,
+      action: "outreach.email_sent",
+      entityType: "outreach_thread",
+      entityId: thread.id,
+      metadata: {
+        candidate_id: data.candidateId,
+        to: cand.email,
+        subject: data.subject,
+        gmail_message_id: sent.id,
+      },
+    });
 
     return { threadId: thread.id, gmailMessageId: sent.id };
   });
@@ -343,6 +369,17 @@ export const replyInThread = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     const { userId } = context;
+    const limit = await checkRateLimit({
+      bucket: "outreach.send",
+      subject: userId,
+      max: 30,
+      windowSeconds: 3600,
+    });
+    if (!limit.ok) {
+      throw new Error(
+        `Outreach send rate limit reached. Try again in ${limit.retryAfterSeconds}s.`,
+      );
+    }
     const conn = await loadConnection(userId);
 
     const { data: thread, error: tErr } = await supabaseAdmin
@@ -407,6 +444,18 @@ export const replyInThread = createServerFn({ method: "POST" })
       .from("outreach_threads")
       .update({ last_snippet: snippet, last_message_at: now, updated_at: now })
       .eq("id", thread.id);
+
+    await logAuditEvent({
+      userId,
+      action: "outreach.reply_sent",
+      entityType: "outreach_thread",
+      entityId: thread.id,
+      metadata: {
+        to: cand.email,
+        subject,
+        gmail_message_id: sent.id,
+      },
+    });
 
     return { ok: true };
   });
