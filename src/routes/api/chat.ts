@@ -1315,6 +1315,81 @@ export const Route = createFileRoute("/api/chat")({
                       content: JSON.stringify({ ok: true }),
                     });
                   }
+                } else if (call.name === "build_interview_loop") {
+                  const rawStages = Array.isArray(args.stages) ? args.stages : [];
+                  const stages = rawStages.slice(0, 12).map((s: any, i: number) => ({
+                    id: `stg_${Math.random().toString(36).slice(2, 10)}`,
+                    order: i,
+                    name: String(s?.name ?? `Stage ${i + 1}`).slice(0, 120),
+                    format: ["video", "async", "onsite", "phone"].includes(s?.format)
+                      ? s.format
+                      : "video",
+                    duration_min: Math.min(480, Math.max(5, Number(s?.duration_min) || 30)),
+                    interviewers: Array.isArray(s?.interviewers)
+                      ? s.interviewers.slice(0, 8).map((p: any) => ({
+                          name: String(p?.name ?? "").slice(0, 120),
+                          role: String(p?.role ?? "").slice(0, 120),
+                          ...(p?.email ? { email: String(p.email).slice(0, 200) } : {}),
+                        }))
+                      : [],
+                    description: String(s?.description ?? "").slice(0, 2000),
+                    focus_areas: Array.isArray(s?.focus_areas)
+                      ? s.focus_areas.map((x: any) => String(x).slice(0, 200)).slice(0, 12)
+                      : [],
+                    suggested_questions: Array.isArray(s?.suggested_questions)
+                      ? s.suggested_questions.map((x: any) => String(x).slice(0, 400)).slice(0, 12)
+                      : [],
+                  }));
+                  const { data: existingJob } = await supabaseAdmin
+                    .from("jobs")
+                    .select("id")
+                    .eq("conversation_id", conversationId)
+                    .maybeSingle();
+                  const { data: loopRow } = await (supabaseAdmin as any)
+                    .from("interview_loops")
+                    .upsert(
+                      {
+                        user_id: userId,
+                        conversation_id: conversationId,
+                        job_id: existingJob?.id ?? null,
+                        stages,
+                        context: String(args.context ?? "").slice(0, 4000),
+                        prep_tips: String(args.prep_tips ?? "").slice(0, 4000),
+                      },
+                      { onConflict: "conversation_id" },
+                    )
+                    .select("*")
+                    .single();
+                  send("interview_loop", loopRow);
+                  const { data: loopTask } = await supabaseAdmin
+                    .from("agent_tasks")
+                    .insert({
+                      user_id: userId,
+                      conversation_id: conversationId,
+                      message_id: assistantMessageId,
+                      kind: "create_interview_loop",
+                      label: "Interview loop drafted",
+                      status: "done",
+                      summary: `${stages.length} stages · open Interviews tab`,
+                      data: { loop_id: (loopRow as any)?.id, stage_count: stages.length },
+                      finished_at: new Date().toISOString(),
+                    })
+                    .select("*")
+                    .single();
+                  if (loopTask) {
+                    allTaskIds.push(loopTask.id);
+                    send("task", loopTask);
+                  }
+                  toolResults.push({
+                    role: "tool",
+                    tool_call_id: call.id ?? "",
+                    name: "build_interview_loop",
+                    content: JSON.stringify({
+                      ok: true,
+                      stage_count: stages.length,
+                      stages: stages.map((s: any) => ({ name: s.name, duration_min: s.duration_min })),
+                    }),
+                  });
                 } else if (call.name === "get_conversation_context") {
                   const [{ data: job }, { data: outreach }, { data: cands }] =
                     await Promise.all([
