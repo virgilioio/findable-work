@@ -104,6 +104,9 @@ function AdminUsagePage() {
           <Link to="/admin/prompts" className="text-xs text-text-mute hover:text-text">
             Prompts
           </Link>
+          <Link to="/admin/phone-reveals" className="text-xs text-text-mute hover:text-text">
+            Phone reveals
+          </Link>
           <Link to="/app" className="text-xs text-text-mute hover:text-text">
             ← Back to app
           </Link>
