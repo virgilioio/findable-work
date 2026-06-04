@@ -1,6 +1,11 @@
+import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { Briefcase, Users, ArrowRight, Megaphone, Send } from "@/components/findable-icons";
+import { Briefcase, Users, ArrowRight, Megaphone, Send, Check } from "@/components/findable-icons";
 import { ClarifyCard, type ClarifyData } from "./clarify-card";
+import { includeExistingCandidatesInConversation } from "@/lib/sourcing/include-duplicates.functions";
 
 export type ChatTask = {
   id: string;
@@ -56,6 +61,7 @@ export function TaskCard({
   onProposalClick,
   proposalInteractive,
   proposalDisabled,
+  conversationId,
 }: {
   task: ChatTask;
   onOpenTab?: (tab: ArtifactTab) => void;
@@ -65,6 +71,7 @@ export function TaskCard({
   onProposalClick?: (step: ProposalStep, prompt: string) => void;
   proposalInteractive?: boolean;
   proposalDisabled?: boolean;
+  conversationId?: string;
 }) {
   const running = task.status === "running";
   const failed = task.status === "failed";
@@ -168,21 +175,123 @@ export function TaskCard({
 
   // Artifact card — clickable, switches workspace tab.
   return (
-    <button
-      type="button"
-      onClick={() => onOpenTab?.(artifact.tab)}
-      className="animate-fade-in group flex w-full items-center gap-3 rounded-xl border border-border bg-bg-elev px-3.5 py-3 text-left transition hover:border-border-strong hover:bg-bg-hover"
-    >
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-bg-bubble text-text-mute">
-        {artifact.icon}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-[13.5px] font-medium text-text">{task.label}</span>
-        <span className="block truncate text-[12px] text-text-mute">{artifact.subtitle}</span>
-      </span>
-      <span className="text-text-faint transition group-hover:translate-x-0.5 group-hover:text-text">
-        <ArrowRight size={14} />
-      </span>
-    </button>
+    <div className="space-y-2">
+      <button
+        type="button"
+        onClick={() => onOpenTab?.(artifact.tab)}
+        className="animate-fade-in group flex w-full items-center gap-3 rounded-xl border border-border bg-bg-elev px-3.5 py-3 text-left transition hover:border-border-strong hover:bg-bg-hover"
+      >
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-bg-bubble text-text-mute">
+          {artifact.icon}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[13.5px] font-medium text-text">{task.label}</span>
+          <span className="block truncate text-[12px] text-text-mute">{artifact.subtitle}</span>
+        </span>
+        <span className="text-text-faint transition group-hover:translate-x-0.5 group-hover:text-text">
+          <ArrowRight size={14} />
+        </span>
+      </button>
+      {task.kind === "collect" && conversationId && (
+        <IncludeDuplicatesCard task={task} conversationId={conversationId} />
+      )}
+    </div>
+  );
+}
+
+type DupRef = {
+  candidate_id: string;
+  source: "apollo" | "pdl";
+  name: string | null;
+  role: string | null;
+  company: string | null;
+};
+
+function IncludeDuplicatesCard({
+  task,
+  conversationId,
+}: {
+  task: ChatTask;
+  conversationId: string;
+}) {
+  const data = (task.data ?? {}) as { dupes_from_other_convs?: DupRef[] };
+  const dupes = Array.isArray(data.dupes_from_other_convs) ? data.dupes_from_other_convs : [];
+  const [dismissed, setDismissed] = useState(false);
+  const [addedCount, setAddedCount] = useState<number | null>(null);
+  const includeFn = useServerFn(includeExistingCandidatesInConversation);
+  const qc = useQueryClient();
+  const mut = useMutation({
+    mutationFn: () =>
+      includeFn({
+        data: {
+          conversationId,
+          candidateIds: dupes.map((d) => d.candidate_id).slice(0, 50),
+        },
+      }),
+    onSuccess: (res) => {
+      setAddedCount(res.added);
+      qc.invalidateQueries({ queryKey: ["conversation", conversationId] });
+      if (res.added > 0) {
+        toast.success(
+          `Added ${res.added} profile${res.added === 1 ? "" : "s"} to this project.`,
+        );
+      } else {
+        toast.message("Already in this project.");
+      }
+    },
+    onError: (err: any) => {
+      toast.error(err?.message ?? "Could not include profiles.");
+    },
+  });
+
+  if (dupes.length === 0 || dismissed) return null;
+
+  if (addedCount !== null) {
+    return (
+      <div className="animate-fade-in flex items-center gap-2 rounded-xl border border-border bg-bg-elev px-3.5 py-2.5 text-[12.5px] text-text-mute">
+        <Check size={14} className="text-text" />
+        <span>
+          Added {addedCount} profile{addedCount === 1 ? "" : "s"} from other projects to this one.
+        </span>
+      </div>
+    );
+  }
+
+  const names = dupes
+    .map((d) => d.name)
+    .filter((n): n is string => Boolean(n));
+  const previewNames = names.slice(0, 3).join(", ");
+  const more = names.length > 3 ? ` and ${names.length - 3} more` : "";
+
+  return (
+    <div className="animate-fade-in rounded-xl border border-border bg-bg-elev px-3.5 py-3">
+      <div className="text-[12.5px] text-text">
+        {dupes.length} profile{dupes.length === 1 ? "" : "s"} you've already sourced in other projects {dupes.length === 1 ? "was" : "were"} skipped.
+      </div>
+      {previewNames && (
+        <div className="mt-0.5 truncate text-[11.5px] text-text-faint">
+          {previewNames}
+          {more}
+        </div>
+      )}
+      <div className="mt-2.5 flex items-center gap-2">
+        <button
+          type="button"
+          disabled={mut.isPending}
+          onClick={() => mut.mutate()}
+          className="inline-flex items-center gap-1.5 rounded-full bg-text px-3 py-1.5 text-[12px] font-medium text-text-invert transition hover:opacity-90 disabled:opacity-50"
+        >
+          {mut.isPending ? "Adding…" : "Add them here"}
+        </button>
+        <button
+          type="button"
+          disabled={mut.isPending}
+          onClick={() => setDismissed(true)}
+          className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-[12px] font-medium text-text-mute transition hover:bg-bg-hover hover:text-text disabled:opacity-50"
+        >
+          Skip
+        </button>
+      </div>
+    </div>
   );
 }
