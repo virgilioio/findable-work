@@ -1017,6 +1017,8 @@ export const Route = createFileRoute("/api/chat")({
                         requested: limit,
                         added: result.added,
                         skipped_duplicates: result.skipped,
+                        dupes_from_other_convs_count:
+                          result.dupes_from_other_convs?.length ?? 0,
                         preview_total: result.preview_total,
                         apollo_count: result.apollo_count,
                         pdl_count: result.pdl_count,
@@ -1033,6 +1035,10 @@ export const Route = createFileRoute("/api/chat")({
                               ? `Requested ${limit}, added ${result.added}. ${
                                   result.skipped > 0
                                     ? `${result.skipped} matching profile${result.skipped === 1 ? " was" : "s were"} already in your pipeline and skipped. `
+                                    : ""
+                                }${
+                                  (result.dupes_from_other_convs?.length ?? 0) > 0
+                                    ? `Of those, ${result.dupes_from_other_convs!.length} live in other projects of the same user — the UI is offering them an inline action to include those here too, so do NOT ask the user about it in prose. `
                                     : ""
                                 }${
                                   result.preview_total < limit
