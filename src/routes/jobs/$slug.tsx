@@ -45,16 +45,72 @@ export const Route = createFileRoute("/jobs/$slug")({
   },
   head: ({ loaderData }) => {
     const j = loaderData?.job;
-    const title = j ? `${j.title}${j.company ? ` — ${j.company}` : ""} | Apply` : "Apply | findable";
-    const desc = j?.summary?.slice(0, 160) || "Apply to this role.";
+    if (!j) {
+      return {
+        meta: [
+          { title: "Apply | findable" },
+          { name: "description", content: "Apply to this role." },
+        ],
+      };
+    }
+    const company = j.company || "the hiring team";
+    const title = `${j.title} at ${company} — Apply via findable`;
+    const summary = j.summary?.trim() || "";
+    const desc = (
+      `Apply to ${j.title} at ${company}. ` + summary
+    ).slice(0, 160);
+    const canonical = `https://findable.work/jobs/${j.slug}`;
+
+    const jobPosting: Record<string, unknown> = {
+      "@context": "https://schema.org",
+      "@type": "JobPosting",
+      title: j.title,
+      description: summary || j.description || j.title,
+      datePosted: j.published_at || undefined,
+      employmentType: j.employment_type
+        ? j.employment_type.toUpperCase().replace(/-/g, "_")
+        : undefined,
+      hiringOrganization: j.company
+        ? { "@type": "Organization", name: j.company }
+        : undefined,
+      jobLocation: j.location
+        ? {
+            "@type": "Place",
+            address: { "@type": "PostalAddress", addressLocality: j.location },
+          }
+        : undefined,
+      directApply: true,
+    };
+    if (j.salary_min || j.salary_max) {
+      jobPosting.baseSalary = {
+        "@type": "MonetaryAmount",
+        currency: j.currency || "USD",
+        value: {
+          "@type": "QuantitativeValue",
+          minValue: j.salary_min ?? undefined,
+          maxValue: j.salary_max ?? undefined,
+          unitText: "YEAR",
+        },
+      };
+    }
+
     return {
       meta: [
         { title },
         { name: "description", content: desc },
+        { name: "robots", content: "index, follow" },
         { property: "og:title", content: title },
         { property: "og:description", content: desc },
         { property: "og:type", content: "website" },
+        { property: "og:url", content: canonical },
         { name: "twitter:card", content: "summary" },
+      ],
+      links: [{ rel: "canonical", href: canonical }],
+      scripts: [
+        {
+          type: "application/ld+json",
+          children: JSON.stringify(jobPosting),
+        },
       ],
     };
   },
