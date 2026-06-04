@@ -128,6 +128,13 @@ export type SourceResult = {
   credits_balance?: number;
   credits_spent?: number;
   credits_exhausted?: boolean;
+  dupes_from_other_convs?: Array<{
+    candidate_id: string;
+    source: "apollo" | "pdl";
+    name: string | null;
+    role: string | null;
+    company: string | null;
+  }>;
 };
 
 export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
