@@ -342,6 +342,9 @@ function ApplyPage() {
                   onChange={(e) => setForm({ ...form, phone: e.target.value })}
                   className={inputCls}
                 />
+                <p className="mt-1 text-[11px] text-text-faint">
+                  Optional. Only used by the hiring team to contact you about this role.
+                </p>
               </Field>
               <Field label="Location">
                 <input
@@ -467,9 +470,22 @@ function ApplyPage() {
             >
               {submitting ? "Submitting…" : "Submit application"}
             </button>
+            <p className="text-center text-[11px] leading-relaxed text-text-faint">
+              We never ask for passwords, payments, or ID documents. Your info is shared only with{" "}
+              {job.company || "the hiring team"}.
+            </p>
           </form>
         </aside>
       </div>
+
+      <footer className="mt-4 border-t border-border py-6 text-center text-[11.5px] text-text-faint">
+        <div className="mx-auto max-w-[1100px] px-6">
+          Operated by findable ·{" "}
+          <a href="/privacy" className="hover:text-text-mute">Privacy</a> ·{" "}
+          <a href="/terms" className="hover:text-text-mute">Terms</a> ·{" "}
+          <a href="https://findable.work" className="hover:text-text-mute">findable.work</a>
+        </div>
+      </footer>
 
       {!submitted && (
         <HiringAssistant
