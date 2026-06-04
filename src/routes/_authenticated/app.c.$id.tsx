@@ -581,6 +581,7 @@ function ChatPanel({
                     <TimelineRow key={t.id}>
                       <TaskCard
                         task={t}
+                        conversationId={id}
                         onOpenTab={onOpenTab}
                         onSubmitClarify={onSubmitClarify}
                         clarifyAnswered={Boolean(clarifyAnswers[t.id])}
@@ -643,6 +644,7 @@ function ChatPanel({
                       <TimelineRow key={t.id}>
                         <TaskCard
                           task={t}
+                          conversationId={id}
                           onOpenTab={onOpenTab}
                           onSubmitClarify={onSubmitClarify}
                           clarifyAnswered={Boolean(clarifyAnswers[t.id])}
