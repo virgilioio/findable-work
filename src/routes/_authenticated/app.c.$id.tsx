@@ -377,6 +377,7 @@ function ConversationPage() {
       <div className="flex flex-1 flex-col overflow-hidden">
         {tab === "chat" ? (
           <ChatPanel
+            conversationId={id}
             messages={messages}
             streaming={streaming}
             reasoning={reasoning}
@@ -454,6 +455,7 @@ function TabButton({
 }
 
 function ChatPanel({
+  conversationId,
   messages,
   streaming,
   reasoning,
@@ -469,6 +471,7 @@ function ChatPanel({
   clarifyAnswers,
   onSubmitClarify,
 }: {
+  conversationId: string;
   messages: Message[];
   streaming: string;
   reasoning: string;
@@ -581,7 +584,7 @@ function ChatPanel({
                     <TimelineRow key={t.id}>
                       <TaskCard
                         task={t}
-                        conversationId={id}
+                        conversationId={conversationId}
                         onOpenTab={onOpenTab}
                         onSubmitClarify={onSubmitClarify}
                         clarifyAnswered={Boolean(clarifyAnswers[t.id])}
@@ -644,7 +647,7 @@ function ChatPanel({
                       <TimelineRow key={t.id}>
                         <TaskCard
                           task={t}
-                          conversationId={id}
+                          conversationId={conversationId}
                           onOpenTab={onOpenTab}
                           onSubmitClarify={onSubmitClarify}
                           clarifyAnswered={Boolean(clarifyAnswers[t.id])}
