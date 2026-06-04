@@ -45,16 +45,72 @@ export const Route = createFileRoute("/jobs/$slug")({
   },
   head: ({ loaderData }) => {
     const j = loaderData?.job;
-    const title = j ? `${j.title}${j.company ? ` — ${j.company}` : ""} | Apply` : "Apply | findable";
-    const desc = j?.summary?.slice(0, 160) || "Apply to this role.";
+    if (!j) {
+      return {
+        meta: [
+          { title: "Apply | findable" },
+          { name: "description", content: "Apply to this role." },
+        ],
+      };
+    }
+    const company = j.company || "the hiring team";
+    const title = `${j.title} at ${company} — Apply via findable`;
+    const summary = j.summary?.trim() || "";
+    const desc = (
+      `Apply to ${j.title} at ${company}. ` + summary
+    ).slice(0, 160);
+    const canonical = `https://findable.work/jobs/${j.slug}`;
+
+    const jobPosting: Record<string, unknown> = {
+      "@context": "https://schema.org",
+      "@type": "JobPosting",
+      title: j.title,
+      description: summary || j.description || j.title,
+      datePosted: j.published_at || undefined,
+      employmentType: j.employment_type
+        ? j.employment_type.toUpperCase().replace(/-/g, "_")
+        : undefined,
+      hiringOrganization: j.company
+        ? { "@type": "Organization", name: j.company }
+        : undefined,
+      jobLocation: j.location
+        ? {
+            "@type": "Place",
+            address: { "@type": "PostalAddress", addressLocality: j.location },
+          }
+        : undefined,
+      directApply: true,
+    };
+    if (j.salary_min || j.salary_max) {
+      jobPosting.baseSalary = {
+        "@type": "MonetaryAmount",
+        currency: j.currency || "USD",
+        value: {
+          "@type": "QuantitativeValue",
+          minValue: j.salary_min ?? undefined,
+          maxValue: j.salary_max ?? undefined,
+          unitText: "YEAR",
+        },
+      };
+    }
+
     return {
       meta: [
         { title },
         { name: "description", content: desc },
+        { name: "robots", content: "index, follow" },
         { property: "og:title", content: title },
         { property: "og:description", content: desc },
         { property: "og:type", content: "website" },
+        { property: "og:url", content: canonical },
         { name: "twitter:card", content: "summary" },
+      ],
+      links: [{ rel: "canonical", href: canonical }],
+      scripts: [
+        {
+          type: "application/ld+json",
+          children: JSON.stringify(jobPosting),
+        },
       ],
     };
   },
@@ -286,6 +342,9 @@ function ApplyPage() {
                   onChange={(e) => setForm({ ...form, phone: e.target.value })}
                   className={inputCls}
                 />
+                <p className="mt-1 text-[11px] text-text-faint">
+                  Optional. Only used by the hiring team to contact you about this role.
+                </p>
               </Field>
               <Field label="Location">
                 <input
@@ -411,9 +470,22 @@ function ApplyPage() {
             >
               {submitting ? "Submitting…" : "Submit application"}
             </button>
+            <p className="text-center text-[11px] leading-relaxed text-text-faint">
+              We never ask for passwords, payments, or ID documents. Your info is shared only with{" "}
+              {job.company || "the hiring team"}.
+            </p>
           </form>
         </aside>
       </div>
+
+      <footer className="mt-4 border-t border-border py-6 text-center text-[11.5px] text-text-faint">
+        <div className="mx-auto max-w-[1100px] px-6">
+          Operated by findable ·{" "}
+          <a href="/privacy" className="hover:text-text-mute">Privacy</a> ·{" "}
+          <a href="/terms" className="hover:text-text-mute">Terms</a> ·{" "}
+          <a href="https://findable.work" className="hover:text-text-mute">findable.work</a>
+        </div>
+      </footer>
 
       {!submitted && (
         <HiringAssistant

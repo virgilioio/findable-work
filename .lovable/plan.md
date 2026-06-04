@@ -1,56 +1,66 @@
-## What I already verified (no changes needed)
+## Objetivo
 
-- Webhook route `/api/public/apollo/phone` is **deployed and live** on production. POSTing without a token returns `401 Unauthorized` (correct — signature check works).
-- Both `APOLLO_WEBHOOK_URL` and `APOLLO_WEBHOOK_SECRET` secrets are set.
-- Code path is wired: `Reveal phone` button → `revealCandidatePhone` server fn → `requestApolloPhoneReveal()` → Apollo `/people/bulk_match` with `reveal_phone_number: true` + `webhook_url` → Apollo POSTs result async to our webhook → handler writes `phone` into `candidates.phone` and logs `phone_revealed` in activity.
+Bajar las señales que disparan el clasificador de "social engineering" de Safe Browsing en las páginas públicas de aplicación (`/jobs/$slug`), **sin cambiar la marca, los colores, ni la estructura visual** del sitio. Solo metadata, microcopy textual y un footer legal mínimo.
 
-## The one likely silent failure
+## Cambios
 
-`findable-work.lovable.app/api/public/apollo/phone` returns **HTTP 307 redirect** to `findable.work/...`. Apollo's webhook delivery typically does **NOT follow redirects on POST** — the body is dropped and we never receive the number.
+### 1. Metadata invisible en `/jobs/$slug` (sin cambios visibles)
 
-If `APOLLO_WEBHOOK_URL` is set to the `lovable.app` host, **that's why phones never arrive**. It must be the custom-domain URL directly: `https://findable.work/api/public/apollo/phone?token=<APOLLO_WEBHOOK_SECRET>`.
+Archivo: `src/routes/jobs/$slug.tsx` (función `head()`).
 
-## Plan
+- `title`: incluir empresa contratante de forma más prominente → `"{title} at {company} — Apply via findable"`. Si no hay company, fallback al actual.
+- `description`: si hay company, anteponer `"Apply to {title} at {company}. "` + summary. Esto le dice al crawler "esta página representa a una empresa real conocida", no a un dominio genérico.
+- Añadir `<meta name="robots" content="index, follow">` explícito.
+- Añadir `<link rel="canonical">` a `https://findable.work/jobs/{slug}` (vía `links` en el leaf — el root no tiene canonical, así que no hay duplicado).
+- Añadir JSON-LD `JobPosting` (schema.org) en `scripts`. Es el schema oficial para ofertas de empleo, y es **la señal más fuerte** para que Google clasifique la página como "job listing legítimo" en vez de "form que pide datos personales". Campos: `title`, `description`, `hiringOrganization` (con `name` = company), `jobLocation`, `employmentType`, `datePosted`, `baseSalary` cuando exista. Todo derivado de `loaderData.job`.
 
-### 1. Verify the webhook URL secret (1 min, user action)
-Open Lovable Cloud → Secrets → `APOLLO_WEBHOOK_URL`. Confirm it is exactly:
+Cero cambios visuales.
+
+### 2. Microcopy junto a Phone y al botón de submit
+
+Archivo: `src/routes/jobs/$slug.tsx` (sin cambiar layout — solo añadir `<p>` debajo de los campos existentes).
+
+- Debajo del campo **Phone**: texto pequeño `text-text-faint text-[11.5px]` →  
+  *"Optional. Only used by the hiring team to contact you about this role."*
+- Debajo del botón **Submit application**, en el mismo bloque del form: una línea fina centrada →  
+  *"We never ask for passwords, payments, or ID documents. Your info is shared only with {company}."* (si no hay company → "with the hiring team").
+
+Misma tipografía y tokens que ya usa el formulario (`text-text-faint`, `text-[11.5px]`). No añade secciones nuevas, no cambia el grid.
+
+### 3. Footer legal mínimo en `/jobs/$slug`
+
+Hoy la página no tiene footer (solo header). Añadir un footer **al final del `<div>` principal**, antes del `<HiringAssistant />`, con el mismo lenguaje visual que el resto:
+
+```text
+─────────────────────────────────────────────
+Operated by findable · Privacy · Terms · findable.work
+─────────────────────────────────────────────
 ```
-https://findable.work/api/public/apollo/phone?token=<APOLLO_WEBHOOK_SECRET-value>
-```
-Not `findable-work.lovable.app`, not missing `?token=`. If wrong, update it.
 
-### 2. Add an admin diagnostic page (`/admin/phone-reveals`)
+- Usa `border-t border-border`, `text-[11.5px] text-text-faint`, `py-6`, links inline a `/privacy`, `/terms`, `https://findable.work`.
+- Sin logos extra, sin secciones. Una sola línea centrada.
+- Esto le da al crawler de Safe Browsing señales de "negocio identificable con política de privacidad accesible desde cada página de captura de datos" — uno de los criterios explícitos de su clasificador.
 
-New server function `getPhoneRevealStats` (admin-only, uses `has_role('admin')`) returns, across the caller's own data:
+### 4. Después de desplegar: enviar revisión a Google
 
-- Total candidates with `has_direct_phone = true`
-- How many of those have `phone` populated (success rate)
-- Count of candidates with a `phone_reveal_pending` activity entry but no `phone` yet, broken down by age (<5 min, 5–15 min, 15–60 min, >1 h, >24 h)
-- Last 20 reveal events (pending / revealed / attempted-no-number) with candidate name and timestamp
+Una vez los 3 cambios estén en producción (URL pública `https://findable.work/jobs/<algún-slug-publicado>`), tú envías la revisión desde Search Console → Seguridad y acciones manuales → Solicitar revisión, con un mensaje del estilo:
 
-New route `src/routes/_authenticated/admin/phone-reveals.tsx` renders a simple table. This lets you confirm at a glance whether Apollo is actually delivering numbers, or whether they're all stuck "pending forever" (= URL mis-configured).
+> findable.work is a recruitment SaaS. The `/jobs/<slug>` pages are standard job application forms (name, email, optional phone, LinkedIn, CV). We have:
+> - Added schema.org JobPosting structured data identifying the hiring company.
+> - Added visible microcopy clarifying that we never request passwords, payments or ID documents.
+> - Added a footer with links to Privacy, Terms, and our company site on every application page.
+> No passwords, payments, downloads or executables are ever requested. Please re-review.
 
-### 3. Make the candidate drawer state explicit
+Yo te dejo el texto exacto listo para copiar cuando los cambios estén en main.
 
-Update `candidate-drawer.tsx` so the phone row clearly shows:
-- `Pending — requested 7 min ago` (instead of just "Reveal phone" being disabled)
-- `No number on file` when Apollo returned empty
-- `Stuck? Reveal again` button after 30 min with no reply
+## Fuera de alcance
 
-### 4. Add a "ping webhook" button on the admin page
+- No se toca el header, el form layout, los colores, ni el assistant.
+- No se cambia el flujo de datos ni los endpoints.
+- No se añade ninguna nueva ruta ni componente reutilizable más allá del footer inline.
 
-Sends a fake payload to our own webhook with the secret, asserts a 200, and confirms the handler is reachable from the public internet (catches DNS / Cloudflare / route regressions in one click).
+## Archivos tocados
 
-## Out of scope (not changing)
+- `src/routes/jobs/$slug.tsx` — `head()` enriquecido + JSON-LD JobPosting + microcopy + footer inline.
 
-- No auto-reveal during sourcing (per your answer).
-- No switch to PDL for phones (per your answer).
-- No changes to credit cost or Apollo request shape.
-
-## Files touched
-
-- `src/lib/candidates.functions.ts` — add `getPhoneRevealStats` + `pingApolloWebhook` server fns (admin-guarded).
-- `src/routes/_authenticated/admin/phone-reveals.tsx` — new diagnostic page.
-- `src/components/candidates/candidate-drawer.tsx` — clearer pending / no-number / retry states.
-
-After step 1 + step 2, you'll know within minutes whether the flow is healthy or whether Apollo is silently dropping our webhook deliveries.
+Nada más.
