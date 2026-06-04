@@ -128,6 +128,13 @@ export type SourceResult = {
   credits_balance?: number;
   credits_spent?: number;
   credits_exhausted?: boolean;
+  dupes_from_other_convs?: Array<{
+    candidate_id: string;
+    source: "apollo" | "pdl";
+    name: string | null;
+    role: string | null;
+    company: string | null;
+  }>;
 };
 
 export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
@@ -442,7 +449,9 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
   let creditsExhausted = false;
   let creditsSpent = 0;
 
-  // Dedupe against already-collected rows
+  // Dedupe against already-collected rows. We split duplicates into two
+  // buckets so the chat UI can offer to clone the "other conversation" ones
+  // into the current project instead of silently dropping them.
   const apolloIds = topApollo.map((c: any) => c.external_id).filter(Boolean);
   const pdlIds = topPdl.map((c: any) => c.external_id).filter(Boolean);
   // Map Apollo preview external_id → has_direct_phone, so we can persist the flag
@@ -451,9 +460,13 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
     topApollo.map((c: any) => [c.external_id, Boolean(c.has_direct_phone)]),
   );
   const [{ data: aRows }, { data: pRows }] = await Promise.all([
-    supabaseAdmin.from("candidates").select("apollo_id").eq("user_id", userId)
+    supabaseAdmin.from("candidates")
+      .select("id, apollo_id, conversation_id, name, role, company")
+      .eq("user_id", userId)
       .in("apollo_id", apolloIds.length ? apolloIds : ["__none__"]),
-    supabaseAdmin.from("candidates").select("pdl_id").eq("user_id", userId)
+    supabaseAdmin.from("candidates")
+      .select("id, pdl_id, conversation_id, name, role, company")
+      .eq("user_id", userId)
       .in("pdl_id", pdlIds.length ? pdlIds : ["__none__"]),
   ]);
   const apolloAlready = new Set((aRows ?? []).map((r: any) => r.apollo_id));
@@ -461,6 +474,44 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
   const apolloToFetch = apolloIds.filter((id) => !apolloAlready.has(id));
   const pdlToInsert = topPdl.filter((c: any) => c.external_id && !pdlAlready.has(c.external_id));
   skipped = (apolloIds.length - apolloToFetch.length) + (topPdl.length - pdlToInsert.length);
+
+  // Duplicates that live in OTHER conversations of the same user — surfaced
+  // back to the chat so we can ask whether to also include them here.
+  type DupRef = {
+    candidate_id: string;
+    source: "apollo" | "pdl";
+    name: string | null;
+    role: string | null;
+    company: string | null;
+  };
+  const dupesFromOtherConvs: DupRef[] = [];
+  const seenCandidateIds = new Set<string>();
+  for (const r of aRows ?? []) {
+    if (!r.apollo_id) continue;
+    if (r.conversation_id === conversationId) continue;
+    if (seenCandidateIds.has(r.id)) continue;
+    seenCandidateIds.add(r.id);
+    dupesFromOtherConvs.push({
+      candidate_id: r.id,
+      source: "apollo",
+      name: r.name,
+      role: r.role,
+      company: r.company,
+    });
+  }
+  for (const r of pRows ?? []) {
+    if (!r.pdl_id) continue;
+    if (r.conversation_id === conversationId) continue;
+    if (seenCandidateIds.has(r.id)) continue;
+    seenCandidateIds.add(r.id);
+    dupesFromOtherConvs.push({
+      candidate_id: r.id,
+      source: "pdl",
+      name: r.name,
+      role: r.role,
+      company: r.company,
+    });
+  }
 
   // ── Apollo: enrich + insert ────────────────────────────────────
   if (apolloToFetch.length > 0) {
@@ -594,7 +645,12 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
       tCollect,
       collectErr ? "failed" : added > 0 ? "done" : "failed",
       collectErr ?? (added > 0 ? `${added} candidate${added === 1 ? "" : "s"} sourced` : "No new candidates"),
-      { added, skipped, period: currentPeriod() },
+      {
+        added,
+        skipped,
+        period: currentPeriod(),
+        dupes_from_other_convs: dupesFromOtherConvs,
+      },
     ),
   );
 
@@ -602,6 +658,7 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
     preview_total: combined.length,
     added,
     skipped,
+    dupes_from_other_convs: dupesFromOtherConvs,
     apollo_count: apollo.length,
     pdl_count: pdl.length,
     apollo_error: apolloErr,
