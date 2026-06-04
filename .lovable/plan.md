@@ -1,66 +1,67 @@
-## Objetivo
+## Goal
 
-Bajar las señales que disparan el clasificador de "social engineering" de Safe Browsing en las páginas públicas de aplicación (`/jobs/$slug`), **sin cambiar la marca, los colores, ni la estructura visual** del sitio. Solo metadata, microcopy textual y un footer legal mínimo.
+Today, when the agent sources candidates inside a new conversation and a profile is already in another conversation of the same user, it is silently filtered out (counted in `skipped_duplicates`). The user wants to keep that smart filtering, **but be offered a choice**: include those duplicates in the current conversation too, or not.
 
-## Cambios
+## Where the filtering happens
 
-### 1. Metadata invisible en `/jobs/$slug` (sin cambios visibles)
+`src/lib/sourcing/agent.server.ts` (lines ~445‑463):
 
-Archivo: `src/routes/jobs/$slug.tsx` (función `head()`).
+- Selects `candidates.apollo_id` / `pdl_id` for the whole user (`eq("user_id", userId)`).
+- Builds `apolloAlready` / `pdlAlready` sets → drops them from `apolloToFetch` / `pdlToInsert`.
+- Bumps `skipped` by the number removed.
 
-- `title`: incluir empresa contratante de forma más prominente → `"{title} at {company} — Apply via findable"`. Si no hay company, fallback al actual.
-- `description`: si hay company, anteponer `"Apply to {title} at {company}. "` + summary. Esto le dice al crawler "esta página representa a una empresa real conocida", no a un dominio genérico.
-- Añadir `<meta name="robots" content="index, follow">` explícito.
-- Añadir `<link rel="canonical">` a `https://findable.work/jobs/{slug}` (vía `links` en el leaf — el root no tiene canonical, así que no hay duplicado).
-- Añadir JSON-LD `JobPosting` (schema.org) en `scripts`. Es el schema oficial para ofertas de empleo, y es **la señal más fuerte** para que Google clasifique la página como "job listing legítimo" en vez de "form que pide datos personales". Campos: `title`, `description`, `hiringOrganization` (con `name` = company), `jobLocation`, `employmentType`, `datePosted`, `baseSalary` cuando exista. Todo derivado de `loaderData.job`.
+Right now both kinds of skips (same conversation and other conversation) collapse into one `skipped` count.
 
-Cero cambios visuales.
+## Plan
 
-### 2. Microcopy junto a Phone y al botón de submit
+### 1. Backend — distinguish "skipped in this conversation" vs "skipped from other conversations"
 
-Archivo: `src/routes/jobs/$slug.tsx` (sin cambiar layout — solo añadir `<p>` debajo de los campos existentes).
+In `agent.server.ts` `runSourcingAgent`:
 
-- Debajo del campo **Phone**: texto pequeño `text-text-faint text-[11.5px]` →  
-  *"Optional. Only used by the hiring team to contact you about this role."*
-- Debajo del botón **Submit application**, en el mismo bloque del form: una línea fina centrada →  
-  *"We never ask for passwords, payments, or ID documents. Your info is shared only with {company}."* (si no hay company → "with the hiring team").
+- Change the dedupe SELECT to also pull `conversation_id, id, name, role, company` (still scoped to this user).
+- Build two sets per source:
+  - `inThisConv` (apollo_id / pdl_id already attached to `conversationId`) → keep filtering as today.
+  - `inOtherConv` (in some other conversation, not this one) → collect a small list `dupesFromOtherConvs: Array<{ source, external_id, candidate_id, name, role, company }>` and **still skip** them by default (preserve current behaviour).
+- Subtract these from `apolloToFetch` / `pdlToInsert` exactly like today.
+- Return `dupes_from_other_convs` in the agent result alongside `added`, `skipped`, etc.
 
-Misma tipografía y tokens que ya usa el formulario (`text-text-faint`, `text-[11.5px]`). No añade secciones nuevas, no cambia el grid.
+### 2. Surface the choice in the chat tool result
 
-### 3. Footer legal mínimo en `/jobs/$slug`
+In `src/routes/api/chat.ts` around line 1011 (`source_candidates` tool result):
 
-Hoy la página no tiene footer (solo header). Añadir un footer **al final del `<div>` principal**, antes del `<HiringAssistant />`, con el mismo lenguaje visual que el resto:
+- Pass through `dupes_from_other_convs` (id + name + role + company).
+- Adjust `summary` so the model mentions: "N profiles from other projects were skipped — ask the user if they want to include them here too." (Just guidance for the model so it phrases it naturally; the actual UI affordance comes from the next step.)
 
-```text
-─────────────────────────────────────────────
-Operated by findable · Privacy · Terms · findable.work
-─────────────────────────────────────────────
-```
+### 3. New server function: `includeExistingCandidatesInConversation`
 
-- Usa `border-t border-border`, `text-[11.5px] text-text-faint`, `py-6`, links inline a `/privacy`, `/terms`, `https://findable.work`.
-- Sin logos extra, sin secciones. Una sola línea centrada.
-- Esto le da al crawler de Safe Browsing señales de "negocio identificable con política de privacidad accesible desde cada página de captura de datos" — uno de los criterios explícitos de su clasificador.
+New file `src/lib/sourcing/include-duplicates.functions.ts`:
 
-### 4. Después de desplegar: enviar revisión a Google
+- Input: `{ conversationId: uuid, candidateIds: uuid[] (max 50) }`.
+- `requireSupabaseAuth`; verify each source candidate belongs to `userId` and is NOT already in `conversationId`.
+- Reuse the `cloneInternal` pattern from `source-more.functions.ts` (lines 124‑156) — copy each source row into the conversation with `source: "Internal"`, no credit charge.
+- Return `{ added, skipped }`.
 
-Una vez los 3 cambios estén en producción (URL pública `https://findable.work/jobs/<algún-slug-publicado>`), tú envías la revisión desde Search Console → Seguridad y acciones manuales → Solicitar revisión, con un mensaje del estilo:
+### 4. UI affordance — "Also include duplicates" card
 
-> findable.work is a recruitment SaaS. The `/jobs/<slug>` pages are standard job application forms (name, email, optional phone, LinkedIn, CV). We have:
-> - Added schema.org JobPosting structured data identifying the hiring company.
-> - Added visible microcopy clarifying that we never request passwords, payments or ID documents.
-> - Added a footer with links to Privacy, Terms, and our company site on every application page.
-> No passwords, payments, downloads or executables are ever requested. Please re-review.
+Render a lightweight inline action card inside the assistant's `source_candidates` tool result rendering (whatever component shows the sourcing task summary today — find via `task-card.tsx` or wherever the agent task results render). When `dupes_from_other_convs.length > 0` AND none have been included yet for this task:
 
-Yo te dejo el texto exacto listo para copiar cuando los cambios estén en main.
+- One-line copy: "N profile(s) you've already sourced in other projects were skipped" + small list of up to 3 names ("Jane Doe, John Smith and 4 more").
+- Two buttons:
+  - **Add them here** → calls `includeExistingCandidatesInConversation` with the ids → on success, invalidates the candidates query so they appear in the pipeline; replaces the card with "Added N to this project."
+  - **Skip** → dismisses the card locally (persists nothing; can re-decide if they re-source).
 
-## Fuera de alcance
+No new chat turn is required — this is a pure side-action.
 
-- No se toca el header, el form layout, los colores, ni el assistant.
-- No se cambia el flujo de datos ni los endpoints.
-- No se añade ninguna nueva ruta ni componente reutilizable más allá del footer inline.
+### 5. Out of scope
 
-## Archivos tocados
+- `source-more` (already clones internal duplicates by design — that flow is fine).
+- `search.functions.ts` previews (preview UI already shows `display_source: "internal"`).
+- Any change to credit accounting; clones stay free.
+- Visual / brand changes beyond the small inline action card.
 
-- `src/routes/jobs/$slug.tsx` — `head()` enriquecido + JSON-LD JobPosting + microcopy + footer inline.
+## Files touched
 
-Nada más.
+- `src/lib/sourcing/agent.server.ts` — return `dupes_from_other_convs`.
+- `src/routes/api/chat.ts` — pass new field through tool result + tune `summary`.
+- `src/lib/sourcing/include-duplicates.functions.ts` — new server fn.
+- One UI component (the agent task / sourcing result card) — render the action card and call the new server fn.
