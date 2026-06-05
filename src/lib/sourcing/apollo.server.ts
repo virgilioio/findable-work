@@ -143,15 +143,29 @@ export async function searchApolloWithFallback(criteria: SearchCriteria): Promis
   const c = budgetSearchCriteria(criteria);
 
   const titles = normalizeTitles(c.title_keywords ?? []);
-  const locationsArr = (c.locations ?? []).flatMap(normalizeLocationForApollo);
-  // De-dupe while preserving order
-  const locations = [...new Set(locationsArr)];
-  // Country-only variants are the entries with no comma. `normalizeLocationForApollo`
-  // always appends a bare country at the end of its output when one is resolved,
-  // so this filter still reliably yields the country fallback.
-  const countryOnly = [...new Set(
-    locations.filter((l) => !l.includes(",")),
-  )];
+  // Be intentional: only send the MOST SPECIFIC variant the user asked for
+  // to Apollo's `person_locations` in the base query. Apollo treats the
+  // array as OR, so including ["City, Country", "Country"] silently
+  // expands a city search to the whole country. The country-only fallback
+  // lives in the broadening ladder below, gated on user intent.
+  const userGaveCityOrRegion = (c.locations ?? []).some((l) => l.includes(","));
+  const locations = [
+    ...new Set(
+      (c.locations ?? [])
+        .flatMap((l) => normalizeLocationForApollo(l).slice(0, 1)),
+    ),
+  ];
+  // Country fallback (only used by the country_only step in the ladder).
+  const countryOnly = [
+    ...new Set(
+      (c.locations ?? []).flatMap((l) => {
+        const variants = normalizeLocationForApollo(l);
+        // The country-only entry is always the last with no comma.
+        const country = variants.filter((v) => !v.includes(",")).pop();
+        return country ? [country] : [];
+      }),
+    ),
+  ];
   const seniorities = mapSeniorities(c.seniorities ?? []);
   const rawCompanies = [
     ...(c.user_company_names ?? []),
@@ -210,11 +224,17 @@ export async function searchApolloWithFallback(criteria: SearchCriteria): Promis
       step: "dropped_companies",
       body: buildBody({ ...baseOpts, seniorities: [], technologies: [], employerHiringTitles: [], mustHaveKeywords: [], industries: [], companies: [] }),
     },
-    {
+  ];
+
+  // Country-only broadening is only safe when the user did NOT scope to a
+  // specific city/region. If they asked for "São Paulo", we don't silently
+  // expand to all of Brazil — we'd rather return zero and let the chat ask.
+  if (!userGaveCityOrRegion && countryOnly.length > 0) {
+    attempts.push({
       step: "country_only_location",
       body: buildBody({ ...baseOpts, seniorities: [], technologies: [], employerHiringTitles: [], mustHaveKeywords: [], industries: [], companies: [], locations: countryOnly }),
-    },
-  ];
+    });
+  }
 
   // Only allow the global title-only fallback when the user did NOT specify a
   // location. Otherwise we'd silently return e.g. US candidates for a
