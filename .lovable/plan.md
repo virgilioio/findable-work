@@ -1,67 +1,62 @@
-## Goal
+# Be intentional about location
 
-Today, when the agent sources candidates inside a new conversation and a profile is already in another conversation of the same user, it is silently filtered out (counted in `skipped_duplicates`). The user wants to keep that smart filtering, **but be offered a choice**: include those duplicates in the current conversation too, or not.
+Today the agent treats location as optional context: the clarify menu has no dedicated "Where" question, the normalizer accepts vague inputs ("LATAM", a language hint, empty), and the collect step inserts whatever Apollo/PDL return without verifying the candidate is actually in the requested geography. Result: we sometimes push candidates from countries the user never asked for.
 
-## Where the filtering happens
+This plan fixes three places — what the agent asks, what it sends to providers, and what it accepts back.
 
-`src/lib/sourcing/agent.server.ts` (lines ~445‑463):
+## 1. Ask for location explicitly (prompt change)
 
-- Selects `candidates.apollo_id` / `pdl_id` for the whole user (`eq("user_id", userId)`).
-- Builds `apolloAlready` / `pdlAlready` sets → drops them from `apolloToFetch` / `pdlToInsert`.
-- Bumps `skipped` by the number removed.
+Add a dedicated **Locations** question to the `chat.main` clarify menu, and tighten the rule that gates sourcing:
 
-Right now both kinds of skips (same conversation and other conversation) collapse into one `skipped` count.
+- New menu item: `Locations (multi, allow_other=true)`. The agent must call it when:
+  - location is missing, OR
+  - the user gave only a region acronym (LATAM, EMEA, APAC, DACH, Nordics, …), OR
+  - the user gave only a continent / country group ("Europe", "Asia"), OR
+  - sourcing returned 0 results and the brief lacks a concrete country/city.
+  Default options should be sensible per context (e.g. for "LATAM" → Mexico, Brazil, Argentina, Colombia, Chile, Peru, + Other; for "remote" → ask which countries are in-scope for remote).
+- Tighten the pre-sourcing rule to: "At least one **specific country, city, or remote-with-named-countries** must be known before calling `source_candidates`." A bare "remote" or region acronym counts as missing.
+- Update `sourcing.agent_normalize` to emit `locations: string[]` (specific places only), and to leave it empty when the user only gave a region/continent/"remote" with no countries — so the existing `detectAmbiguousRegion` guard triggers and the chat asks instead of guessing.
 
-## Plan
+These changes ship as a new `supabase/migrations/<ts>_sourcing_location_intent.sql` that `UPDATE`s `chat.main` and `sourcing.agent_normalize` (additive — no schema changes).
 
-### 1. Backend — distinguish "skipped in this conversation" vs "skipped from other conversations"
+## 2. Don't silently broaden the location filter (Apollo)
 
-In `agent.server.ts` `runSourcingAgent`:
+In `src/lib/sourcing/apollo.server.ts`:
 
-- Change the dedupe SELECT to also pull `conversation_id, id, name, role, company` (still scoped to this user).
-- Build two sets per source:
-  - `inThisConv` (apollo_id / pdl_id already attached to `conversationId`) → keep filtering as today.
-  - `inOtherConv` (in some other conversation, not this one) → collect a small list `dupesFromOtherConvs: Array<{ source, external_id, candidate_id, name, role, company }>` and **still skip** them by default (preserve current behaviour).
-- Subtract these from `apolloToFetch` / `pdlToInsert` exactly like today.
-- Return `dupes_from_other_convs` in the agent result alongside `added`, `skipped`, etc.
+- The progressive-relaxation ladder already keeps `locations` in every step except `title_only`, and `title_only` is already gated by `locations.length === 0`. Keep that — but also drop the `country_only_location` step when the user explicitly gave **only cities** in a country where they didn't also mention the country at the brief level. Rationale: today a "São Paulo" search will silently expand to all of Brazil on the broadening fallback. Instead, fail to zero results and let the clarify card ask "Open to other Brazilian cities?".
+- `normalizeLocationForApollo` currently emits all of `[City+State+Country, City+Country, State+Country, Country]` in a single `person_locations[]` array, which Apollo OR's together. Trim it to only the most specific variant the user actually provided (keep the country fallback only inside the broadening ladder, not in the base query).
 
-### 2. Surface the choice in the chat tool result
+## 3. Enforce location scope on the way back (post-filter)
 
-In `src/routes/api/chat.ts` around line 1011 (`source_candidates` tool result):
+In `src/lib/sourcing/agent.server.ts`, between the search step and the collect inserts, add an in-scope check before any row is written to `candidates`:
 
-- Pass through `dupes_from_other_convs` (id + name + role + company).
-- Adjust `summary` so the model mentions: "N profiles from other projects were skipped — ask the user if they want to include them here too." (Just guidance for the model so it phrases it naturally; the actual UI affordance comes from the next step.)
+- Build a `requestedScope` from `criteria.locations` using the existing `splitLocationForPdl` helper — a set of `{ countries, regions, cities }` (lowercased).
+- For each Apollo `enriched` row (`e.city`, `e.state`, `e.country`) and each PDL `raw` row (`raw.location_locality`, `raw.location_region`, `raw.location_country`):
+  - If `requestedScope.cities` is non-empty → keep only rows whose `city` is in the set, OR (when city is unknown on the record) whose `region` matches.
+  - Else if `requestedScope.regions` is non-empty → keep only rows whose `region` is in the set.
+  - Else if `requestedScope.countries` is non-empty → keep only rows whose `country` is in the set.
+  - If the candidate record has **no** location fields at all (neither city/state/country) → drop it. We don't push unknown-geography candidates when a scope was given.
+- Drops are counted as `out_of_scope` (separate from `skipped` duplicates) and surfaced:
+  - In the `collect` task `data` as `out_of_scope_dropped: number`.
+  - In the `SourceResult` and the `source_candidates` tool result so chat can say e.g. "Filtered out 7 profiles outside Mexico/Argentina."
 
-### 3. New server function: `includeExistingCandidatesInConversation`
+No credit is charged for dropped rows (the existing per-insert `spendCreditsAdmin` only runs after a successful insert, so this is already the case — just keep it that way).
 
-New file `src/lib/sourcing/include-duplicates.functions.ts`:
+## 4. Out of scope
 
-- Input: `{ conversationId: uuid, candidateIds: uuid[] (max 50) }`.
-- `requireSupabaseAuth`; verify each source candidate belongs to `userId` and is NOT already in `conversationId`.
-- Reuse the `cloneInternal` pattern from `source-more.functions.ts` (lines 124‑156) — copy each source row into the conversation with `source: "Internal"`, no credit charge.
-- Return `{ added, skipped }`.
+- No UI / visual changes — chat surfaces the out-of-scope count via the existing task card summary.
+- No changes to the include-duplicates flow, billing bundles, or the public job pages.
+- No changes to `splitLocationForPdl` / `normalizeLocationForApollo` signatures — only call sites.
 
-### 4. UI affordance — "Also include duplicates" card
+## Technical notes
 
-Render a lightweight inline action card inside the assistant's `source_candidates` tool result rendering (whatever component shows the sourcing task summary today — find via `task-card.tsx` or wherever the agent task results render). When `dupes_from_other_convs.length > 0` AND none have been included yet for this task:
+Files touched:
+- `supabase/migrations/<new>_sourcing_location_intent.sql` — `UPDATE` `chat.main` clarify menu + tighten pre-sourcing rule; `UPDATE` `sourcing.agent_normalize` to require specific places.
+- `src/lib/sourcing/apollo.server.ts` — trim `normalizeLocationForApollo` output to the most-specific variant in the base query; gate `country_only_location` broadening step on user-provided country.
+- `src/lib/sourcing/agent.server.ts` — add `requestedScope` + post-fetch in-scope filter for Apollo and PDL, count drops as `out_of_scope`, thread the count through the `collect` task and `SourceResult`.
+- `src/routes/api/chat.ts` — pass `out_of_scope_dropped` from `runSourcingAgent` into the `source_candidates` tool result so the model can mention it.
 
-- One-line copy: "N profile(s) you've already sourced in other projects were skipped" + small list of up to 3 names ("Jane Doe, John Smith and 4 more").
-- Two buttons:
-  - **Add them here** → calls `includeExistingCandidatesInConversation` with the ids → on success, invalidates the candidates query so they appear in the pipeline; replaces the card with "Added N to this project."
-  - **Skip** → dismisses the card locally (persists nothing; can re-decide if they re-source).
-
-No new chat turn is required — this is a pure side-action.
-
-### 5. Out of scope
-
-- `source-more` (already clones internal duplicates by design — that flow is fine).
-- `search.functions.ts` previews (preview UI already shows `display_source: "internal"`).
-- Any change to credit accounting; clones stay free.
-- Visual / brand changes beyond the small inline action card.
-
-## Files touched
-
-- `src/lib/sourcing/agent.server.ts` — return `dupes_from_other_convs`.
-- `src/routes/api/chat.ts` — pass new field through tool result + tune `summary`.
-- `src/lib/sourcing/include-duplicates.functions.ts` — new server fn.
-- One UI component (the agent task / sourcing result card) — render the action card and call the new server fn.
+Existing safety nets we keep:
+- `detectAmbiguousRegion` (region acronym → clarify card) — still triggers first.
+- `dropLocationLikeCompanies` — unchanged.
+- The "title_only fallback is forbidden when locations are set" rule in the Apollo ladder — unchanged, this plan reinforces it.

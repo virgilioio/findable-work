@@ -9,6 +9,7 @@ import {
   currentPeriod,
   detectAmbiguousRegion,
   linkedinSlug,
+  splitLocationForPdl,
   type SearchCriteria,
 } from "./budget";
 import { searchApolloWithFallback, enrichApolloProfiles } from "./apollo.server";
@@ -128,6 +129,7 @@ export type SourceResult = {
   credits_balance?: number;
   credits_spent?: number;
   credits_exhausted?: boolean;
+  out_of_scope_dropped?: number;
   dupes_from_other_convs?: Array<{
     candidate_id: string;
     source: "apollo" | "pdl";
@@ -445,9 +447,53 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
 
   let added = 0;
   let skipped = 0;
+  let outOfScopeDropped = 0;
   let collectErr: string | null = null;
   let creditsExhausted = false;
   let creditsSpent = 0;
+
+  // Build a normalized in-scope set from the user's requested locations.
+  // We only enforce when the user actually scoped a location — empty
+  // criteria.locations means "global", in which case we don't drop anything.
+  const scopeCountries = new Set<string>();
+  const scopeRegions = new Set<string>();
+  const scopeCities = new Set<string>();
+  for (const loc of criteria.locations ?? []) {
+    const { locality, region, country } = splitLocationForPdl(loc);
+    if (country) scopeCountries.add(country);
+    if (region) scopeRegions.add(region);
+    if (locality) scopeCities.add(locality);
+  }
+  const scopeActive =
+    scopeCountries.size > 0 || scopeRegions.size > 0 || scopeCities.size > 0;
+
+  function inScope(
+    rawCity: string | null | undefined,
+    rawRegion: string | null | undefined,
+    rawCountry: string | null | undefined,
+  ): boolean {
+    if (!scopeActive) return true;
+    const city = (rawCity ?? "").trim().toLowerCase();
+    const region = (rawRegion ?? "").trim().toLowerCase();
+    const country = (rawCountry ?? "").trim().toLowerCase();
+    // No location info at all on the record — drop when a scope was given;
+    // we don't push unknown-geography candidates against an explicit scope.
+    if (!city && !region && !country) return false;
+    if (scopeCities.size > 0) {
+      if (city && scopeCities.has(city)) return true;
+      // City unknown on the record but region matches → accept (close enough).
+      if (!city && region && scopeRegions.has(region)) return true;
+      // Otherwise reject — user asked for specific cities.
+      return false;
+    }
+    if (scopeRegions.size > 0) {
+      if (region && scopeRegions.has(region)) return true;
+      return false;
+    }
+    // Country-only scope.
+    if (country && scopeCountries.has(country)) return true;
+    return false;
+  }
 
   // Dedupe against already-collected rows. We split duplicates into two
   // buckets so the chat UI can offer to clone the "other conversation" ones
@@ -518,6 +564,10 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
     try {
       const enriched = await enrichApolloProfiles(apolloToFetch);
       for (const e of enriched) {
+        if (!inScope(e.city, e.state, e.country)) {
+          outOfScopeDropped++;
+          continue;
+        }
         const slug = linkedinSlug(e.linkedin_url);
         const { data: ins, error: insErr } = await supabaseAdmin.from("candidates").insert({
           user_id: userId,
@@ -576,6 +626,16 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
   for (const c of pdlToInsert) {
     if (creditsExhausted) break;
     const raw: any = (c as any).raw ?? {};
+    if (
+      !inScope(
+        raw.location_locality,
+        raw.location_region,
+        raw.location_country,
+      )
+    ) {
+      outOfScopeDropped++;
+      continue;
+    }
     const fn = raw.first_name ?? "";
     const ln = raw.last_name ?? "";
     const fullName = (raw.full_name ?? `${fn} ${ln}`).trim() || "Unknown";
@@ -644,10 +704,20 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
     await finishTask(
       tCollect,
       collectErr ? "failed" : added > 0 ? "done" : "failed",
-      collectErr ?? (added > 0 ? `${added} candidate${added === 1 ? "" : "s"} sourced` : "No new candidates"),
+      collectErr ??
+        (added > 0
+          ? `${added} candidate${added === 1 ? "" : "s"} sourced${
+              outOfScopeDropped > 0
+                ? ` · ${outOfScopeDropped} dropped (outside requested location)`
+                : ""
+            }`
+          : outOfScopeDropped > 0
+            ? `No new candidates — ${outOfScopeDropped} dropped (outside requested location)`
+            : "No new candidates"),
       {
         added,
         skipped,
+        out_of_scope_dropped: outOfScopeDropped,
         period: currentPeriod(),
         dupes_from_other_convs: dupesFromOtherConvs,
       },
@@ -658,6 +728,7 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
     preview_total: combined.length,
     added,
     skipped,
+    out_of_scope_dropped: outOfScopeDropped,
     dupes_from_other_convs: dupesFromOtherConvs,
     apollo_count: apollo.length,
     pdl_count: pdl.length,
