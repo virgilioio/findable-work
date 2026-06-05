@@ -447,9 +447,53 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
 
   let added = 0;
   let skipped = 0;
+  let outOfScopeDropped = 0;
   let collectErr: string | null = null;
   let creditsExhausted = false;
   let creditsSpent = 0;
+
+  // Build a normalized in-scope set from the user's requested locations.
+  // We only enforce when the user actually scoped a location — empty
+  // criteria.locations means "global", in which case we don't drop anything.
+  const scopeCountries = new Set<string>();
+  const scopeRegions = new Set<string>();
+  const scopeCities = new Set<string>();
+  for (const loc of criteria.locations ?? []) {
+    const { locality, region, country } = splitLocationForPdl(loc);
+    if (country) scopeCountries.add(country);
+    if (region) scopeRegions.add(region);
+    if (locality) scopeCities.add(locality);
+  }
+  const scopeActive =
+    scopeCountries.size > 0 || scopeRegions.size > 0 || scopeCities.size > 0;
+
+  function inScope(
+    rawCity: string | null | undefined,
+    rawRegion: string | null | undefined,
+    rawCountry: string | null | undefined,
+  ): boolean {
+    if (!scopeActive) return true;
+    const city = (rawCity ?? "").trim().toLowerCase();
+    const region = (rawRegion ?? "").trim().toLowerCase();
+    const country = (rawCountry ?? "").trim().toLowerCase();
+    // No location info at all on the record — drop when a scope was given;
+    // we don't push unknown-geography candidates against an explicit scope.
+    if (!city && !region && !country) return false;
+    if (scopeCities.size > 0) {
+      if (city && scopeCities.has(city)) return true;
+      // City unknown on the record but region matches → accept (close enough).
+      if (!city && region && scopeRegions.has(region)) return true;
+      // Otherwise reject — user asked for specific cities.
+      return false;
+    }
+    if (scopeRegions.size > 0) {
+      if (region && scopeRegions.has(region)) return true;
+      return false;
+    }
+    // Country-only scope.
+    if (country && scopeCountries.has(country)) return true;
+    return false;
+  }
 
   // Dedupe against already-collected rows. We split duplicates into two
   // buckets so the chat UI can offer to clone the "other conversation" ones
