@@ -9,6 +9,7 @@ import {
   currentPeriod,
   detectAmbiguousRegion,
   linkedinSlug,
+  splitLocationForPdl,
   type SearchCriteria,
 } from "./budget";
 import { searchApolloWithFallback, enrichApolloProfiles } from "./apollo.server";
@@ -128,6 +129,7 @@ export type SourceResult = {
   credits_balance?: number;
   credits_spent?: number;
   credits_exhausted?: boolean;
+  out_of_scope_dropped?: number;
   dupes_from_other_convs?: Array<{
     candidate_id: string;
     source: "apollo" | "pdl";
