@@ -1031,7 +1031,9 @@ export const Route = createFileRoute("/api/chat")({
                           result.added === 0
                             ? result.pool_limited
                               ? "Candidate pool was rate-limited; no new candidates added this run."
-                              : "No matches for this brief — try broadening it."
+                              : (result.out_of_scope_dropped ?? 0) > 0
+                                ? `No new candidates added — ${result.out_of_scope_dropped} match${result.out_of_scope_dropped === 1 ? "" : "es"} were dropped because they were outside the requested location. Suggest the user expand the location scope (via ask_clarifying_questions) or confirm the original scope.`
+                                : "No matches for this brief — try broadening it."
                             : result.added < limit
                               ? `Requested ${limit}, added ${result.added}. ${
                                   result.skipped > 0
