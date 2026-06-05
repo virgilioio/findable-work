@@ -564,6 +564,10 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
     try {
       const enriched = await enrichApolloProfiles(apolloToFetch);
       for (const e of enriched) {
+        if (!inScope(e.city, e.state, e.country)) {
+          outOfScopeDropped++;
+          continue;
+        }
         const slug = linkedinSlug(e.linkedin_url);
         const { data: ins, error: insErr } = await supabaseAdmin.from("candidates").insert({
           user_id: userId,
