@@ -626,6 +626,16 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
   for (const c of pdlToInsert) {
     if (creditsExhausted) break;
     const raw: any = (c as any).raw ?? {};
+    if (
+      !inScope(
+        raw.location_locality,
+        raw.location_region,
+        raw.location_country,
+      )
+    ) {
+      outOfScopeDropped++;
+      continue;
+    }
     const fn = raw.first_name ?? "";
     const ln = raw.last_name ?? "";
     const fullName = (raw.full_name ?? `${fn} ${ln}`).trim() || "Unknown";
