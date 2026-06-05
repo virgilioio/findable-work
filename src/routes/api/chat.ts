@@ -1017,6 +1017,7 @@ export const Route = createFileRoute("/api/chat")({
                         requested: limit,
                         added: result.added,
                         skipped_duplicates: result.skipped,
+                        out_of_scope_dropped: result.out_of_scope_dropped ?? 0,
                         dupes_from_other_convs_count:
                           result.dupes_from_other_convs?.length ?? 0,
                         preview_total: result.preview_total,
@@ -1035,6 +1036,10 @@ export const Route = createFileRoute("/api/chat")({
                               ? `Requested ${limit}, added ${result.added}. ${
                                   result.skipped > 0
                                     ? `${result.skipped} matching profile${result.skipped === 1 ? " was" : "s were"} already in your pipeline and skipped. `
+                                    : ""
+                                }${
+                                  (result.out_of_scope_dropped ?? 0) > 0
+                                    ? `${result.out_of_scope_dropped} profile${result.out_of_scope_dropped === 1 ? " was" : "s were"} dropped because they were outside the requested location — mention this in prose so the recruiter knows we filtered for scope. `
                                     : ""
                                 }${
                                   (result.dupes_from_other_convs?.length ?? 0) > 0
