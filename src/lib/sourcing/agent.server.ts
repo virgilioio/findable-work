@@ -704,10 +704,20 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
     await finishTask(
       tCollect,
       collectErr ? "failed" : added > 0 ? "done" : "failed",
-      collectErr ?? (added > 0 ? `${added} candidate${added === 1 ? "" : "s"} sourced` : "No new candidates"),
+      collectErr ??
+        (added > 0
+          ? `${added} candidate${added === 1 ? "" : "s"} sourced${
+              outOfScopeDropped > 0
+                ? ` · ${outOfScopeDropped} dropped (outside requested location)`
+                : ""
+            }`
+          : outOfScopeDropped > 0
+            ? `No new candidates — ${outOfScopeDropped} dropped (outside requested location)`
+            : "No new candidates"),
       {
         added,
         skipped,
+        out_of_scope_dropped: outOfScopeDropped,
         period: currentPeriod(),
         dupes_from_other_convs: dupesFromOtherConvs,
       },
@@ -718,6 +728,7 @@ export async function runSourcingAgent(ctx: Ctx): Promise<SourceResult> {
     preview_total: combined.length,
     added,
     skipped,
+    out_of_scope_dropped: outOfScopeDropped,
     dupes_from_other_convs: dupesFromOtherConvs,
     apollo_count: apollo.length,
     pdl_count: pdl.length,
