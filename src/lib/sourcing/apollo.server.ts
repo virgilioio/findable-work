@@ -338,18 +338,28 @@ export async function enrichApolloProfiles(
 }
 
 /**
- * Request an async phone-number reveal for a single Apollo profile.
- * Apollo requires a webhook URL for phone reveals and delivers results
- * asynchronously (minutes later) to that webhook. This call returns
- * once Apollo has accepted the request — the phone is saved by the
- * webhook handler at /api/public/apollo/phone when it arrives.
+ * Request a phone-number reveal for a single Apollo profile.
  *
- * Credits are only consumed when a number is actually returned, which
- * we account for in the webhook handler.
+ * Apollo's /people/bulk_match with `reveal_phone_number: true` returns the
+ * person's phone numbers SYNCHRONOUSLY in `matches[0].phone_numbers` when it
+ * has them. The `webhook_url` is a fallback path for late-arriving numbers
+ * delivered by Apollo's data waterfall — handled by /api/public/apollo/phone.
+ *
+ * Returns a discriminated outcome so callers can charge credits only on
+ * success and surface accurate UI states.
  */
+export type RevealPhoneOutcome =
+  | { ok: true; phone: string; person: Record<string, unknown> } // sync hit
+  | { ok: true; phone: null; queued: true }                       // accepted, awaiting webhook
+  | {
+      ok: false;
+      reason: "not_matched" | "waterfall_failed" | "no_permission" | "unknown";
+      message: string;
+    };
+
 export async function requestApolloPhoneReveal(
   apolloId: string,
-): Promise<{ queued: boolean }> {
+): Promise<RevealPhoneOutcome> {
   if (!apolloId) throw new Error("Missing Apollo person id");
   const webhookUrl = process.env.APOLLO_WEBHOOK_URL;
   if (!webhookUrl) {
@@ -357,10 +367,66 @@ export async function requestApolloPhoneReveal(
       "APOLLO_WEBHOOK_URL is not configured. Set it to the public phone-reveal webhook URL (including the ?token=... secret).",
     );
   }
-  await apolloFetch("/people/bulk_match", {
-    details: [{ id: apolloId }],
-    reveal_phone_number: true,
-    webhook_url: webhookUrl,
+
+  let json: any;
+  try {
+    json = await apolloFetch("/people/bulk_match", {
+      details: [{ id: apolloId }],
+      reveal_phone_number: true,
+      webhook_url: webhookUrl,
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[apollo phone reveal] HTTP error", { apolloId, msg });
+    return { ok: false, reason: "unknown", message: msg };
+  }
+
+  const person = json?.matches?.[0] ?? null;
+  const waterfall = json?.waterfall ?? null;
+  const phone =
+    person?.phone_numbers?.[0]?.sanitized_number ??
+    person?.phone_numbers?.[0]?.raw_number ??
+    null;
+
+  console.log("[apollo phone reveal]", {
+    apolloId,
+    waterfall_status: waterfall?.status ?? null,
+    waterfall_message: waterfall?.message ?? null,
+    has_match: !!person,
+    has_phone: !!phone,
+    phone_count: person?.phone_numbers?.length ?? 0,
   });
-  return { queued: true };
+
+  // Permission / plan failures from Apollo's waterfall.
+  if (waterfall?.status === "failed") {
+    const message: string = waterfall?.message ?? "Apollo waterfall failed";
+    const reason: RevealPhoneOutcome extends infer _ ? never : never =
+      undefined as never;
+    if (/permission|plan|not enabled/i.test(message)) {
+      return { ok: false, reason: "no_permission", message };
+    }
+    return { ok: false, reason: "waterfall_failed", message };
+  }
+
+  // No match at all from Apollo (id not found or filtered out).
+  if (!person) {
+    return {
+      ok: false,
+      reason: "not_matched",
+      message: "Apollo couldn't match this profile.",
+    };
+  }
+
+  // Synchronous hit — phone is already in the response.
+  if (phone) {
+    return { ok: true, phone, person };
+  }
+
+  // Matched but no phone in the sync payload. Apollo may still deliver via
+  // webhook (waterfall continues asynchronously). If `phone_numbers` is an
+  // empty array AND no waterfall is pending, treat it as "no mobile on file"
+  // — but we can't reliably tell those apart from the response, so we queue
+  // and let the webhook + drawer polling resolve it. If nothing arrives
+  // within the drawer's pending window, the UI will surface "Stuck".
+  return { ok: true, phone: null, queued: true };
 }
