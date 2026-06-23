@@ -381,12 +381,16 @@ export async function requestApolloPhoneReveal(
     return { ok: false, reason: "unknown", message: msg };
   }
 
-  const person = json?.matches?.[0] ?? null;
+  const person = json?.matches?.[0] ?? json?.people?.[0] ?? null;
   const waterfall = json?.waterfall ?? null;
-  const phone =
-    person?.phone_numbers?.[0]?.sanitized_number ??
-    person?.phone_numbers?.[0]?.raw_number ??
-    null;
+  const nums: any[] = person?.phone_numbers ?? [];
+  const mobile =
+    nums.find(
+      (n) =>
+        String(n?.type ?? "").toLowerCase().includes("mobile") ||
+        String(n?.type_cd ?? "").toLowerCase().includes("mobile"),
+    ) ?? nums[0];
+  const phone = mobile?.sanitized_number ?? mobile?.raw_number ?? null;
 
   console.log("[apollo phone reveal]", {
     apolloId,
