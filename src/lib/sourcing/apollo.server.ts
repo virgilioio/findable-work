@@ -400,8 +400,6 @@ export async function requestApolloPhoneReveal(
   // Permission / plan failures from Apollo's waterfall.
   if (waterfall?.status === "failed") {
     const message: string = waterfall?.message ?? "Apollo waterfall failed";
-    const reason: RevealPhoneOutcome extends infer _ ? never : never =
-      undefined as never;
     if (/permission|plan|not enabled/i.test(message)) {
       return { ok: false, reason: "no_permission", message };
     }
