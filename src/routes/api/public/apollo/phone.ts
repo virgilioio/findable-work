@@ -156,7 +156,13 @@ export const Route = createFileRoute("/api/public/apollo/phone")({
             continue;
           }
 
-          console.log("Apollo phone webhook: revealed", { apolloId, phone });
+          const { error: rpcErr } = await supabaseAdmin.rpc("increment_sourcing_usage", {
+            _user_id: cand.user_id,
+            _count: 5,
+          });
+          if (rpcErr) console.error("increment_sourcing_usage failed:", rpcErr.message);
+
+          console.log("Apollo phone webhook: revealed", { apolloId });
         }
 
         return new Response("ok", { status: 200 });
