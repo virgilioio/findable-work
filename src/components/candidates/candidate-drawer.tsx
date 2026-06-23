@@ -366,6 +366,17 @@ function Overview({ c }: { c: Candidate }) {
         toast.error(
           `Out of credits — need ${r.required}, have ${r.balance}. Top up in Settings → Usage & billing.`,
         );
+      else if (r.status === "revealed")
+        toast.success(`Phone number revealed: ${r.phone}`);
+      else if (r.status === "no_number") {
+        if (r.reason === "no_permission")
+          toast.error(
+            "Phone reveal isn't enabled on the Apollo plan — contact admin.",
+          );
+        else if (r.reason === "not_matched")
+          toast("Apollo couldn't match this profile — no phone available.");
+        else toast("No mobile on file for this profile (Apollo).");
+      }
       else if (r.status === "pending" && r.alreadyPending)
         toast("Phone reveal already in progress — results usually arrive within a few minutes");
       else if (r.status === "pending")

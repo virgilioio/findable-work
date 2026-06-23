@@ -1,40 +1,79 @@
-## Problem
+## The gap, cross-checked against Gio ATS
 
-Clicking "Reveal phone" correctly fires `revealCandidatePhone` and writes a `phone_reveal_pending` entry — that's why the drawer shows "Pending — requested X min ago". But Apollo delivers the actual number asynchronously to our webhook, and **nothing on the client polls for it**. The drawer reads from the `["candidates", conversation_id]` query, which is invalidated exactly once (on the reveal mutation's success) and then never again. So the number can land in the DB minutes ago and the UI will still say "Pending" until you reload the page or close/reopen the drawer.
+I compared our Apollo phone reveal flow with Gio ATS's working implementation. **Same endpoint, same params — but Gio reads the synchronous response and we throw it away.**
 
-The fix is purely on the client.
+### Gio's flow (works):
 
-## Fix — auto-refresh in the candidate drawer
+`supabase/functions/enrich-apollo-profile/index.ts:366-413`
+- Calls `POST /api/v1/people/bulk_match` with `{ details: [{id}], reveal_phone_number: true, webhook_url }`
+- **Awaits `apolloData = await apolloResponse.json()`**
+- **Reads `person.phone_numbers[0].sanitized_number` synchronously from the response** (line 412)
+- Saves the phone right then to the candidate row
+- The webhook is just a backup that fills in late-arriving numbers (`apollo-phone-webhook/index.ts:53-70` — same extraction logic, only updates if `!candidate.phone`)
 
-Only `src/components/candidates/candidate-drawer.tsx` changes. No server, billing, webhook, or Apollo logic is touched.
+### Our flow (broken):
 
-1. **Reuse the existing `isPending` detection** (already computed inline in `Overview` from `activity[]`). Lift it to a small helper so the effect can read the same value.
+`src/lib/sourcing/apollo.server.ts:350-365`
+- Same exact request payload ✅
+- **`await apolloFetch(...)` — return value never captured** ❌
+- Returns `{ queued: true }` unconditionally
+- All hope pinned on a webhook that often never comes
+- 5 credits charged before the call, regardless of outcome
 
-2. **Polling effect** that runs whenever the drawer is open on a candidate with `apollo_id` and no `phone`:
-   - On mount / when `c.id` changes: kick one immediate `qc.invalidateQueries({ queryKey: ["candidates", c.conversation_id] })` so a number that arrived while the drawer was closed shows up instantly.
-   - If `isPending && !c.phone`: start an interval — **every 5 s for the first minute, then every 15 s** — each tick invalidates the same query key. Stop after **30 min total** (matches the existing "Stuck" threshold).
-   - Stop immediately when `c.phone` becomes set, when `isPending` becomes false (Apollo returned "no number on file"), or on unmount.
-   - Pause while `document.hidden` and resume on `visibilitychange` so background tabs don't burn requests.
+That's it. The "Pending forever" symptom on Daniela De Regil is because Apollo handed us her phone (or "no phone") inside the `bulk_match` response we discarded, and the async webhook either silently didn't fire or fired with an empty payload our handler treated correctly but with no signal back to the UI.
 
-3. **Toast on arrival**: track the previous `c.phone` value in a ref; when it transitions from empty → set, fire `toast.success("Phone number revealed")` exactly once.
+## Fix — mirror Gio's pattern, scoped to our codebase
 
-4. **No new server function, no new query key, no schema change.** The existing candidates list query is already keyed per conversation and returns the updated `activity[]` + `phone`, so invalidation is sufficient.
+Three files change. No new schema, no new tables, no new server function.
 
-## Why this is enough
+### 1. `src/lib/sourcing/apollo.server.ts` — capture and use the response
 
-- Apollo's webhook (`/api/public/apollo/phone`) already writes `phone` and a `phone_revealed` activity entry — that path is fine and is exercised correctly today.
-- The `revealCandidatePhone` server fn is also fine — your "Pending" badge proves it wrote the activity entry.
-- The only missing link is the client noticing that the row changed. Polling the existing query is the smallest, safest fix.
+Change `requestApolloPhoneReveal` to:
+- Keep the response: `const json = await apolloFetch("/people/bulk_match", { details: [{ id: apolloId }], reveal_phone_number: true, webhook_url: webhookUrl })`
+- Read `const person = json?.matches?.[0]`
+- Extract phone the same way Gio does: `person?.phone_numbers?.[0]?.sanitized_number ?? person?.phone_numbers?.[0]?.raw_number ?? null`
+- Inspect `json?.waterfall?.status` for failure cases (`"failed"` → wrong plan / not matched)
+- Log the response (`console.log("[apollo phone reveal]", { apolloId, waterfall: json?.waterfall, hasMatch: !!person, hasPhone: !!phone })`) so the admin diagnostics page becomes useful
+- Return a richer outcome:
+  ```ts
+  type RevealOutcome =
+    | { ok: true; phone: string; person: ApolloPerson } // sync hit — done
+    | { ok: true; phone: null; queued: true }           // accepted, awaiting webhook
+    | { ok: false; reason: "not_matched" | "waterfall_failed" | "no_permission"; message: string };
+  ```
 
-## Out of scope
+### 2. `src/lib/candidates.functions.ts` `revealCandidatePhone` — act on the outcome
 
-- No changes to `src/lib/candidates.functions.ts`
-- No changes to `src/routes/api/public/apollo/phone.ts`
-- No changes to the admin diagnostics page
-- No changes to billing, credits, or activity logging
-- No background polling on the candidates list itself — only when the drawer is open
+Currently lines 194-254. Restructure:
+- **Move credit charge to AFTER** the Apollo call returns successfully. (Today it's lines 221-237, before the call — burns credits on rejection.)
+- Call `requestApolloPhoneReveal` first.
+- Switch on the outcome:
+  - **`ok: true` + phone present (sync hit)**: charge credits, write `phone_revealed` activity, save phone, return `{ status: "revealed", phone }`. **This is the common case Gio handles and we miss.**
+  - **`ok: true` + queued (no sync phone, awaiting webhook)**: charge credits, write `phone_reveal_pending`, return `{ status: "pending" }` (existing behavior).
+  - **`ok: false`**: do **not** charge credits. Write a truthful `phone_reveal_attempted` entry with text reflecting the reason ("No mobile available from Apollo" / "Phone reveal not enabled on this Apollo plan"). Return `{ status: "no_number" | "failed", reason, message }`.
+- Existing idempotency guard (lines 211-216) stays.
 
-## Technical notes
+### 3. `src/components/candidates/candidate-drawer.tsx` — surface the new outcomes
 
-- 5 s → 15 s backoff matches Apollo's typical delivery window (most numbers arrive within 1–3 min) without hammering the DB.
-- I'll also verify the candidates list query returns `phone` and the full `activity[]` array; if any field is currently projected away, I'll add it. (Quick check during implementation, not a separate task.)
+Tiny addition to the existing `revealMut.onSuccess` toast switch (around lines 282-298):
+- `status === "revealed"` → success toast "Phone number revealed" (the drawer's polling already handles the row update; this just confirms instantly).
+- `status === "no_number"` → toast "No mobile on file (Apollo)" and the UI flips to the existing "No mobile on file" KV immediately because `phone_reveal_attempted` was written server-side.
+- `status === "failed"` with `reason === "no_permission"` → error toast "Phone reveal not enabled on the Apollo plan — contact admin."
+
+The drawer's polling effect and the webhook handler at `routes/api/public/apollo/phone.ts` stay completely unchanged — they remain the safety net for the genuinely-queued case.
+
+## What we do NOT change
+
+- The endpoint (`bulk_match`) and params (`reveal_phone_number: true`, `webhook_url`) are already correct — Gio uses the exact same call.
+- No switch to `run_waterfall_phone` (Gio doesn't use it and their flow works; one less variable to introduce).
+- No schema / table changes.
+- No changes to billing logic beyond the order-of-operations fix (charge after Apollo accepts).
+- No changes to the webhook handler, the admin diagnostics page, or the drawer's polling loop.
+
+## Why this fixes Daniela's case
+
+Either:
+- Apollo returned her phone in the sync response — we'll now save it instantly and the drawer will show it on the next render. No more "Pending" at all.
+- Apollo returned `waterfall.status: "failed"` or matched-with-no-phone — we'll now write `phone_reveal_attempted`, refund the credit, and the drawer immediately shows "No mobile on file (Apollo)" with a "Try again" button.
+
+Either way, the user gets a definitive answer in seconds instead of staring at "Pending" indefinitely.
