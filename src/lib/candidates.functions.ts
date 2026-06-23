@@ -215,8 +215,43 @@ export const revealCandidatePhone = createServerFn({ method: "POST" })
       return { status: "pending" as const, alreadyPending: true };
     }
 
-    // Charge PHONE_REVEAL_COST credits per phone reveal. Skip for direct-Applicant rows (no
-    // outbound sourcing involved); Apollo-sourced candidates always pay.
+    // Call Apollo first; only charge credits if Apollo accepted and either
+    // returned a phone synchronously OR queued the request for async webhook
+    // delivery. Failures (no permission / not matched / waterfall failed)
+    // are surfaced to the UI without burning credits.
+    const outcome = await requestApolloPhoneReveal(cand.apollo_id);
+
+    if (!outcome.ok) {
+      const text =
+        outcome.reason === "no_permission"
+          ? "Phone reveal not enabled on the Apollo plan"
+          : outcome.reason === "not_matched"
+            ? "Apollo couldn't match this profile"
+            : "No mobile available from Apollo";
+      activity.push({
+        id: activity.length + 1,
+        type: "phone_reveal_attempted",
+        by: "apollo",
+        when: "Just now",
+        at: new Date().toISOString(),
+        text,
+      });
+      const { error: updErr } = await supabase
+        .from("candidates")
+        .update({ activity })
+        .eq("id", data.id);
+      if (updErr) throw new Error(updErr.message);
+      return {
+        status: "no_number" as const,
+        reason: outcome.reason,
+        message: outcome.message,
+      };
+    }
+
+    // Apollo accepted. Charge credits before persisting the result (so a
+    // credit shortage doesn't leave a candidate row with a revealed phone
+    // we never billed for). Skip for direct-Applicant rows (no outbound
+    // sourcing involved); Apollo-sourced candidates always pay.
     if (cand.source !== "Applicant") {
       const spend = await spendCreditsAdmin({
         userId,
@@ -234,8 +269,26 @@ export const revealCandidatePhone = createServerFn({ method: "POST" })
       }
     }
 
-    await requestApolloPhoneReveal(cand.apollo_id);
+    if (outcome.phone) {
+      // Synchronous hit — Apollo handed us the number in the bulk_match
+      // response. Save it and mark the activity as revealed.
+      activity.push({
+        id: activity.length + 1,
+        type: "phone_revealed",
+        by: "apollo",
+        when: "Just now",
+        at: new Date().toISOString(),
+        text: `Phone number revealed (${PHONE_REVEAL_COST} credits used)`,
+      });
+      const { error: updErr } = await supabase
+        .from("candidates")
+        .update({ phone: outcome.phone, activity })
+        .eq("id", data.id);
+      if (updErr) throw new Error(updErr.message);
+      return { status: "revealed" as const, phone: outcome.phone };
+    }
 
+    // Queued — Apollo will deliver via webhook. The drawer polls until then.
     activity.push({
       id: activity.length + 1,
       type: "phone_reveal_pending",
