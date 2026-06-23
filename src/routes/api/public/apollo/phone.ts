@@ -12,7 +12,9 @@ const PhoneNumber = z
     sanitized_number: z.string().nullish(),
     raw_number: z.string().nullish(),
     type: z.string().nullish(),
+    type_cd: z.string().nullish(),
     status: z.string().nullish(),
+    status_cd: z.string().nullish(),
   })
   .passthrough();
 
@@ -26,13 +28,26 @@ const Payload = z
       })
       .passthrough()
       .nullish(),
+    people: z
+      .array(
+        z
+          .object({
+            id: z.string().nullish(),
+            phone_numbers: z.array(PhoneNumber).nullish(),
+          })
+          .passthrough(),
+      )
+      .nullish(),
     phone_numbers: z.array(PhoneNumber).nullish(),
   })
   .passthrough();
 
 function pickPhone(nums: Array<z.infer<typeof PhoneNumber>> | null | undefined): string | null {
   if (!nums || nums.length === 0) return null;
-  const mobile = nums.find((n) => (n.type ?? "").toLowerCase().includes("mobile"));
+  const isMobile = (n: z.infer<typeof PhoneNumber>) =>
+    (n.type ?? "").toLowerCase().includes("mobile") ||
+    (n.type_cd ?? "").toLowerCase().includes("mobile");
+  const mobile = nums.find(isMobile);
   const chosen = mobile ?? nums[0];
   return chosen.sanitized_number || chosen.raw_number || null;
 }
@@ -63,71 +78,86 @@ export const Route = createFileRoute("/api/public/apollo/phone")({
         }
 
         const body = parsed.data;
-        const apolloId =
-          body.person?.id ?? body.id ?? null;
-        const nums = body.person?.phone_numbers ?? body.phone_numbers ?? [];
-        if (!apolloId) {
-          console.error("Apollo phone webhook: missing person id", raw);
+
+        // Apollo sends successful bulk_match webhooks as `people: [{id, phone_numbers}]`.
+        // Older / single-person shapes may use `person` or top-level id/phone_numbers.
+        type PersonShape = {
+          id?: string | null;
+          phone_numbers?: Array<z.infer<typeof PhoneNumber>> | null;
+        };
+        const people: PersonShape[] =
+          (body.people && body.people.length ? body.people : null) ??
+          (body.person ? [body.person] : null) ??
+          (body.id || body.phone_numbers
+            ? [{ id: body.id ?? null, phone_numbers: body.phone_numbers ?? null }]
+            : []);
+
+        if (people.length === 0) {
+          console.error("Apollo phone webhook: no person data in payload", raw);
           return new Response("ok", { status: 200 });
         }
 
-        const phone = pickPhone(nums);
+        for (const person of people) {
+          const apolloId = person?.id ?? null;
+          if (!apolloId) {
+            console.warn("Apollo phone webhook: person missing id", person);
+            continue;
+          }
+          const phone = pickPhone(person.phone_numbers ?? null);
 
-        const { data: cand, error: loadErr } = await supabaseAdmin
-          .from("candidates")
-          .select("id, user_id, phone, activity")
-          .eq("apollo_id", apolloId)
-          .maybeSingle();
-        if (loadErr) {
-          console.error("Apollo phone webhook: load failed", loadErr.message);
-          return new Response("ok", { status: 200 });
-        }
-        if (!cand) {
-          console.warn("Apollo phone webhook: no candidate for apollo_id", apolloId);
-          return new Response("ok", { status: 200 });
-        }
+          const { data: cand, error: loadErr } = await supabaseAdmin
+            .from("candidates")
+            .select("id, user_id, phone, activity")
+            .eq("apollo_id", apolloId)
+            .maybeSingle();
+          if (loadErr) {
+            console.error("Apollo phone webhook: load failed", loadErr.message);
+            continue;
+          }
+          if (!cand) {
+            console.warn("Apollo phone webhook: no candidate for apollo_id", apolloId);
+            continue;
+          }
+          if (cand.phone) {
+            console.log("Apollo phone webhook: candidate already has phone", apolloId);
+            continue;
+          }
 
-        // Idempotent: ignore if phone already set.
-        if (cand.phone) {
-          return new Response("ok", { status: 200 });
-        }
+          const activity = Array.isArray(cand.activity) ? [...(cand.activity as any[])] : [];
 
-        const activity = Array.isArray(cand.activity) ? [...(cand.activity as any[])] : [];
+          if (!phone) {
+            activity.push({
+              id: activity.length + 1,
+              type: "phone_reveal_attempted",
+              by: "apollo",
+              when: "Just now",
+              at: new Date().toISOString(),
+              text: "Phone reveal completed — no number on file",
+            });
+            await supabaseAdmin.from("candidates").update({ activity }).eq("id", cand.id);
+            continue;
+          }
 
-        if (!phone) {
           activity.push({
             id: activity.length + 1,
-            type: "phone_reveal_attempted",
+            type: "phone_revealed",
             by: "apollo",
             when: "Just now",
-            text: "Phone reveal completed — no number on file",
+            at: new Date().toISOString(),
+            text: "Phone number revealed (5 credits used)",
           });
-          await supabaseAdmin.from("candidates").update({ activity }).eq("id", cand.id);
-          return new Response("ok", { status: 200 });
+
+          const { error: updErr } = await supabaseAdmin
+            .from("candidates")
+            .update({ phone, activity })
+            .eq("id", cand.id);
+          if (updErr) {
+            console.error("Apollo phone webhook: update failed", updErr.message);
+            continue;
+          }
+
+          console.log("Apollo phone webhook: revealed", { apolloId, phone });
         }
-
-        activity.push({
-          id: activity.length + 1,
-          type: "phone_revealed",
-          by: "apollo",
-          when: "Just now",
-          text: "Phone number revealed (5 credits used)",
-        });
-
-        const { error: updErr } = await supabaseAdmin
-          .from("candidates")
-          .update({ phone, activity })
-          .eq("id", cand.id);
-        if (updErr) {
-          console.error("Apollo phone webhook: update failed", updErr.message);
-          return new Response("ok", { status: 200 });
-        }
-
-        const { error: rpcErr } = await supabaseAdmin.rpc("increment_sourcing_usage", {
-          _user_id: cand.user_id,
-          _count: 5,
-        });
-        if (rpcErr) console.error("increment_sourcing_usage failed:", rpcErr.message);
 
         return new Response("ok", { status: 200 });
       },
