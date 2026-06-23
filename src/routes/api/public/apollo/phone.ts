@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 // Apollo phone-reveal webhook. Apollo POSTs here asynchronously (minutes
 // after the reveal request) with the person's phone numbers, if any.
@@ -56,6 +55,7 @@ export const Route = createFileRoute("/api/public/apollo/phone")({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
         const url = new URL(request.url);
         const token = url.searchParams.get("token");
         const expected = process.env.APOLLO_WEBHOOK_SECRET;
