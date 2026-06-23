@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -74,6 +74,83 @@ export function CandidateDrawer({
   }, [onClose]);
 
   const inv = () => qc.invalidateQueries({ queryKey: ["candidates", candidate.conversation_id] });
+
+  // Auto-refresh while an Apollo phone reveal is pending. Apollo delivers the
+  // number asynchronously via webhook (usually within 1–3 min), so we poll
+  // the candidates query in the background and let React Query push the
+  // updated row into the drawer when it lands.
+  const phonePendingAt = (() => {
+    if (!candidate.apollo_id || candidate.phone) return 0;
+    const activity = (candidate.activity ?? []) as Array<{
+      type?: string;
+      at?: string;
+    }>;
+    let pending = 0;
+    let attempted = 0;
+    for (const a of activity) {
+      if (!a?.at) continue;
+      const t = new Date(a.at).getTime();
+      if (a.type === "phone_reveal_pending" && t > pending) pending = t;
+      else if (a.type === "phone_reveal_attempted" && t > attempted) attempted = t;
+    }
+    return pending > attempted ? pending : 0;
+  })();
+  const isPhonePending = phonePendingAt > 0;
+
+  // One-shot refresh whenever the drawer opens a different candidate — picks
+  // up a number that landed while the drawer was closed.
+  useEffect(() => {
+    qc.invalidateQueries({ queryKey: ["candidates", candidate.conversation_id] });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [candidate.id]);
+
+  useEffect(() => {
+    if (!isPhonePending) return;
+    const startedAt = phonePendingAt; // freeze pending timestamp for this run
+    const MAX_MS = 30 * 60 * 1000; // give up after 30 min (matches "Stuck" UI)
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const tick = () => {
+      if (cancelled) return;
+      const elapsed = Date.now() - startedAt;
+      if (elapsed > MAX_MS) return;
+      if (document.visibilityState !== "hidden") {
+        qc.invalidateQueries({
+          queryKey: ["candidates", candidate.conversation_id],
+        });
+      }
+      // 5s for the first minute, then 15s.
+      const nextDelay = elapsed < 60_000 ? 5_000 : 15_000;
+      timer = setTimeout(tick, nextDelay);
+    };
+
+    timer = setTimeout(tick, 5_000);
+
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        qc.invalidateQueries({
+          queryKey: ["candidates", candidate.conversation_id],
+        });
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [isPhonePending, phonePendingAt, candidate.conversation_id, qc]);
+
+  // Toast exactly once when the phone transitions from empty -> set.
+  const prevPhoneRef = useRef<string | null>(candidate.phone);
+  useEffect(() => {
+    if (!prevPhoneRef.current && candidate.phone) {
+      toast.success("Phone number revealed");
+    }
+    prevPhoneRef.current = candidate.phone;
+  }, [candidate.phone]);
 
   const stageMut = useMutation({
     mutationFn: (stage: Stage) => update({ data: { id: candidate.id, stage } }),
