@@ -470,7 +470,7 @@ function Overview({ c }: { c: Candidate }) {
           const attemptedAt = latest("phone_reveal_attempted");
           const isPending = pendingAt > 0 && pendingAt > attemptedAt;
           const ageMin = pendingAt ? Math.floor((Date.now() - pendingAt) / 60000) : 0;
-          const stuck = isPending && ageMin >= 30;
+          const stuck = isPending && ageMin >= 12;
           // Apollo replied that no number is on file (and we haven't re-requested since).
           const noNumber = attemptedAt > 0 && attemptedAt >= pendingAt;
 
