@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 // Apollo phone-reveal webhook. Apollo POSTs here asynchronously (minutes
 // after the reveal request) with the person's phone numbers, if any.
@@ -56,6 +55,7 @@ export const Route = createFileRoute("/api/public/apollo/phone")({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
         const url = new URL(request.url);
         const token = url.searchParams.get("token");
         const expected = process.env.APOLLO_WEBHOOK_SECRET;
@@ -156,7 +156,13 @@ export const Route = createFileRoute("/api/public/apollo/phone")({
             continue;
           }
 
-          console.log("Apollo phone webhook: revealed", { apolloId, phone });
+          const { error: rpcErr } = await supabaseAdmin.rpc("increment_sourcing_usage", {
+            _user_id: cand.user_id,
+            _count: 5,
+          });
+          if (rpcErr) console.error("increment_sourcing_usage failed:", rpcErr.message);
+
+          console.log("Apollo phone webhook: revealed", { apolloId });
         }
 
         return new Response("ok", { status: 200 });
