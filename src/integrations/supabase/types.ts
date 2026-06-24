@@ -914,6 +914,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_grant_credits: {
+        Args: {
+          _amount: number
+          _granted_by: string
+          _note: string
+          _user_id: string
+        }
+        Returns: number
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
