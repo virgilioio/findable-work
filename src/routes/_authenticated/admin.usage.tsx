@@ -1,6 +1,7 @@
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { Fragment, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
 import {
   LineChart,
@@ -18,8 +19,17 @@ import {
   getUserUsageTable,
   getUserUsageDetail,
 } from "@/lib/admin-usage.functions";
+import { adminGrantCredits } from "@/lib/admin-credits.functions";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 export const Route = createFileRoute("/_authenticated/admin/usage")({
   beforeLoad: async () => {
@@ -56,12 +66,44 @@ function AdminUsagePage() {
   const tsFn = useServerFn(getUsageTimeseries);
   const tableFn = useServerFn(getUserUsageTable);
   const detailFn = useServerFn(getUserUsageDetail);
+  const grantFn = useServerFn(adminGrantCredits);
 
   const [days, setDays] = useState<30 | 90>(30);
   const [metric, setMetric] = useState<Metric>("signups");
   const [search, setSearch] = useState("");
   const [plan, setPlan] = useState("all");
   const [openUser, setOpenUser] = useState<string | null>(null);
+  const [refillTarget, setRefillTarget] = useState<{ id: string; email: string | null } | null>(
+    null,
+  );
+  const [refillAmount, setRefillAmount] = useState<number>(1000);
+  const [refillNote, setRefillNote] = useState<string>("");
+  const [refilling, setRefilling] = useState(false);
+
+  async function submitRefill() {
+    if (!refillTarget) return;
+    const amount = Math.floor(Number(refillAmount));
+    if (!Number.isFinite(amount) || amount < 1 || amount > 100000) {
+      toast.error("Amount must be 1–100,000");
+      return;
+    }
+    setRefilling(true);
+    try {
+      const res = await grantFn({
+        data: { userId: refillTarget.id, amount, note: refillNote || undefined },
+      });
+      toast.success(
+        `+${amount} credits granted to ${refillTarget.email ?? refillTarget.id.slice(0, 8)} (balance: ${res.balanceAfter})`,
+      );
+      setRefillTarget(null);
+      setRefillNote("");
+      await tableQ.refetch();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to grant credits");
+    } finally {
+      setRefilling(false);
+    }
+  }
 
   const range = useMemo(() => {
     const to = new Date();
@@ -236,6 +278,7 @@ function AdminUsagePage() {
                   <Th align="right">Outr</Th>
                   <Th align="right">Credits</Th>
                   <Th />
+                  <Th />
                 </tr>
               </thead>
               <tbody>
@@ -254,6 +297,17 @@ function AdminUsagePage() {
                       <Td align="right">{u.credits_remaining}</Td>
                       <Td>
                         <button
+                          className="text-primary hover:underline"
+                          onClick={() => {
+                            setRefillTarget({ id: u.id, email: u.email });
+                            setRefillAmount(1000);
+                          }}
+                        >
+                          + Credits
+                        </button>
+                      </Td>
+                      <Td>
+                        <button
                           className="text-text-mute hover:text-text"
                           onClick={() => setOpenUser(openUser === u.id ? null : u.id)}
                         >
@@ -263,7 +317,7 @@ function AdminUsagePage() {
                     </tr>
                     {openUser === u.id && (
                       <tr className="bg-bg-hover/40">
-                        <td colSpan={11} className="p-4">
+                        <td colSpan={12} className="p-4">
                           {detailQ.isLoading || !detailQ.data ? (
                             <p className="text-text-mute">Loading…</p>
                           ) : (
@@ -298,7 +352,7 @@ function AdminUsagePage() {
                 ))}
                 {tableQ.isLoading && (
                   <tr>
-                    <td colSpan={11} className="p-6 text-center text-text-mute">
+                    <td colSpan={12} className="p-6 text-center text-text-mute">
                       Loading users…
                     </td>
                   </tr>
@@ -308,6 +362,59 @@ function AdminUsagePage() {
           </div>
         </section>
       </main>
+
+      <Dialog open={Boolean(refillTarget)} onOpenChange={(o) => !o && setRefillTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add credits</DialogTitle>
+            <DialogDescription>
+              Grant credits to {refillTarget?.email ?? refillTarget?.id}. Logged to the credit
+              ledger.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="flex gap-2">
+              {[100, 500, 1000, 5000].map((n) => (
+                <Button
+                  key={n}
+                  size="sm"
+                  variant={refillAmount === n ? "default" : "outline"}
+                  onClick={() => setRefillAmount(n)}
+                >
+                  +{n}
+                </Button>
+              ))}
+            </div>
+            <div>
+              <label className="text-xs text-text-mute">Amount</label>
+              <Input
+                type="number"
+                min={1}
+                max={100000}
+                value={refillAmount}
+                onChange={(e) => setRefillAmount(Number(e.target.value))}
+              />
+            </div>
+            <div>
+              <label className="text-xs text-text-mute">Note (optional)</label>
+              <Input
+                placeholder="Admin refill"
+                value={refillNote}
+                onChange={(e) => setRefillNote(e.target.value)}
+                maxLength={200}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRefillTarget(null)} disabled={refilling}>
+              Cancel
+            </Button>
+            <Button onClick={submitRefill} disabled={refilling}>
+              {refilling ? "Granting…" : `Grant ${refillAmount} credits`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
