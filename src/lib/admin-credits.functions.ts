@@ -21,14 +21,32 @@ async function callGrant(
   grantedBy: string,
 ) {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { data, error } = await (supabaseAdmin as any).rpc("admin_grant_credits", {
-    _user_id: userId,
-    _amount: amount,
-    _note: note ?? null,
-    _granted_by: grantedBy,
+  const admin = supabaseAdmin as any;
+
+  const { data: profile, error: profileError } = await admin
+    .from("profiles")
+    .select("credits_remaining")
+    .eq("id", userId)
+    .maybeSingle();
+  if (profileError) throw new Error(profileError.message);
+  if (!profile) throw new Error("user_not_found");
+
+  const balanceAfter = Number(profile.credits_remaining ?? 0) + amount;
+  const { error: updateError } = await admin
+    .from("profiles")
+    .update({ credits_remaining: balanceAfter })
+    .eq("id", userId);
+  if (updateError) throw new Error(updateError.message);
+
+  const reason = `${note?.trim() || "Admin refill"} (admin_grant by ${grantedBy})`;
+  const { error: ledgerError } = await admin.from("credit_ledger").insert({
+    user_id: userId,
+    delta: amount,
+    reason,
   });
-  if (error) throw new Error(error.message);
-  return { balanceAfter: Number(data ?? 0) };
+  if (ledgerError) throw new Error(ledgerError.message);
+
+  return { balanceAfter };
 }
 
 export const adminGrantCredits = createServerFn({ method: "POST" })
